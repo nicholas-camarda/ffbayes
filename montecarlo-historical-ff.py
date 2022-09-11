@@ -12,7 +12,7 @@ from datetime import date
 todays_date = date.today()
 logging.basicConfig()
 
-### Use Monte Carlo simulation to project the score of my team ###
+### Use Monte Carlo simulation to project the score of my team, based on historical data ###
 ### https://srome.github.io/Making-Fantasy-Football-Projections-Via-A-Monte-Carlo-Simulation/ ###
 
 my_years = [2017, 2018, 2019, 2020, 2021]
