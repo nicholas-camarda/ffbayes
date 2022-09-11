@@ -1,5 +1,6 @@
 #!python
 # copied from https://stmorse.github.io/journal/pfr-scrape-python.html, added adjustments to get this to run + progress bar
+from types import NoneType
 import pandas as pd
 import numpy as np
 import os
