@@ -147,85 +147,88 @@ def bayesian_hierarchical_ff(cores):
                         return_inferencedata=False, # return a MultiTrace obj
                         cores=cores)
         
-    tr=trace[-5000::3]
-    
-    # save the tracings into 'plots' directory
-    os.mkdir("plots")
-    trarr = pm.plot_trace(tr)
-    fig = plt.gcf() # to get the current figure...
-    fig.savefig("plots/training_traces.png", dpi = 300) # and save it directly
-    
-    # evaluate the model
-    print("Evaluating the model...")
-    player_home.set_value(np.asarray(test['is_home'].values, dtype = int))
-    player_avg.set_value(np.asarray((test['7_game_avg']).values, dtype = float))
-    player_opp.set_value(np.asarray((test['opp_team']).values, dtype = int))
-    player_rank.set_value(np.asarray((test['rank']-1).values, dtype = int))
-    pos_id.set_value(np.asarray((test['pos_id']).values, dtype = int))
-    player_team.set_value(np.asarray((test['team']).values, dtype = int))
-    qb.set_value(np.asarray((test['position_QB']).values.astype(int), dtype = int))
-    wr.set_value(np.asarray((test['position_WR']).values.astype(int), dtype = int))
-    rb.set_value(np.asarray((test['position_RB']).values.astype(int), dtype = int))
-    te.set_value(np.asarray((test['position_TE']).values.astype(int), dtype = int))
+        tr=trace[-5000::3]
+        
+        # save the tracings into 'plots' directory
+        os.makedirs("plots", exist_ok=True)
+        trarr = pm.plot_trace(tr)
+        fig = plt.gcf() # to get the current figure...
+        fig.savefig("plots/training_traces.png", dpi = 300) # and save it directly
+        
+        # TODO: mabye define a class to save these results into??
+        
+        # evaluate the model
+        print("Evaluating the model...")
+        player_home.set_value(np.asarray(test['is_home'].values, dtype = int))
+        player_avg.set_value(np.asarray((test['7_game_avg']).values, dtype = float))
+        player_opp.set_value(np.asarray((test['opp_team']).values, dtype = int))
+        player_rank.set_value(np.asarray((test['rank']-1).values, dtype = int))
+        pos_id.set_value(np.asarray((test['pos_id']).values, dtype = int))
+        player_team.set_value(np.asarray((test['team']).values, dtype = int))
+        qb.set_value(np.asarray((test['position_QB']).values.astype(int), dtype = int))
+        wr.set_value(np.asarray((test['position_WR']).values.astype(int), dtype = int))
+        rb.set_value(np.asarray((test['position_RB']).values.astype(int), dtype = int))
+        te.set_value(np.asarray((test['position_TE']).values.astype(int), dtype = int))
 
-    print("Sampling from the posterior...")
-    ppc=pm.sample_ppc(tr, samples=1000, model= mdl)
-    
-    print('Projection Mean Absolute Error:', mean_absolute_error(test.loc[:,'score'].values, ppc['Score'].mean(axis=0)))
-    print('7 Day Average Mean Absolute Error:', mean_absolute_error(test.loc[:,'score'].values, test.loc[:,'7_game_avg'].values))
+        print("Sampling from the posterior...")
+        ppc=pm.sample_posterior_predictive(tr, samples=1000, model= mdl)
+        
+        print('Projection Mean Absolute Error:', mean_absolute_error(test.loc[:,'FantPt'].values, ppc['FantPt'].mean(axis=0)))
+        print('7 Day Average Mean Absolute Error:', mean_absolute_error(test.loc[:,'FantPt'].values, test.loc[:,'7_game_avg'].values))
 
-    max_sd = d['sd'].max()
-    plt.figure(figsize=(8,5))
-    ax=plt.gca()
-    ax.plot(np.linspace(0,max_sd,30), np.array([d[d['sd'] <= k]['proj MAE'].mean() for k in np.linspace(0,max_sd,30)]))
-    ax.plot(np.linspace(0,max_sd,30), np.array([d[d['sd'] <= k]['historical avg MAE'].mean() for k in np.linspace(0,max_sd,30)]), color='r')
-    ax.set_ylabel('Mean Absolute Error')
-    ax.set_xlabel('Standard Deviation Cutoff')
-    ax.set_title('MAE for Projections w/ SDs Under Cutoff')
-    ax.legend(['Bayesian Mean Projection', 'Rolling 7 Game Mean'], loc=4)
-    fig = plt.gcf() # to get the current figure...
-    fig.savefig("plots/MAE_for_projections_w_sd_under_cutoff.png", dpi = 300) # and save it directly
-    
-    print("Drawing conclusions from the model...")
-    t = pd.DataFrame({'projection':  tr['defensive differential rb'].mean(axis=0), 'sd' : tr['defensive differential rb'].std(axis=0),'name': team_names})
-    f=plt.figure(figsize=(8,10))
-    plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
-    plt.title('Team Effect\'s on RB Point Average (2014)')
-    end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
-    plt.xlim([-6,8])
-    plt.xlabel('Change in opponent\'s RB\'s average')
-    fig = plt.gcf() # to get the current figure...
-    fig.savefig("plots/RB.png", dpi = 300) # and save it directly
-    
-    t = pd.DataFrame({'projection':  tr['defensive differential qb'].mean(axis=0), 'sd' : tr['defensive differential qb'].std(axis=0),'name': team_names})
-    f=plt.figure(figsize=(8,10))
-    plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
-    plt.title('Team\'s Effect on QB Point Average (2014)')
-    end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
-    plt.xlim([-11.5,10])
-    plt.xlabel('Change in opponent\'s QB\'s average')
-    fig = plt.gcf() # to get the current figure...
-    fig.savefig("plots/QB.png", dpi = 300) # and save it directly
-    
-    t = pd.DataFrame({'projection':  tr['defensive differential te'].mean(axis=0), 'sd' : tr['defensive differential te'].std(axis=0),'name': team_names})
-    f=plt.figure(figsize=(8,10))
-    plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
-    plt.title('Team Effect\'s on TE Point Average (2014)')
-    end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
-    plt.xlim([-8,8])
-    plt.xlabel('Change in opponent\'s TE\'s average')
-    fig = plt.gcf() # to get the current figure...
-    fig.savefig("plots/TE.png", dpi = 300) # and save it directly
-    
-    t = pd.DataFrame({'projection':  tr['defensive differential wr'].mean(axis=0), 'sd' : tr['defensive differential wr'].std(axis=0),'name': team_names})
-    f=plt.figure(figsize=(8,10))
-    plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
-    plt.title('Team\'s Effect on WR Point Average (2014)')
-    end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
-    plt.xlim([-4.5,3.1])
-    plt.xlabel('Change in opponent\'s WR\'s average')
-    fig = plt.gcf() # to get the current figure...
-    fig.savefig("plots/WR.png", dpi = 300) # and save it directly
+        # DEBUG: what is 'd' ?????
+        max_sd = d['sd'].max()
+        plt.figure(figsize=(8,5))
+        ax=plt.gca()
+        ax.plot(np.linspace(0,max_sd,30), np.array([d[d['sd'] <= k]['proj MAE'].mean() for k in np.linspace(0,max_sd,30)]))
+        ax.plot(np.linspace(0,max_sd,30), np.array([d[d['sd'] <= k]['historical avg MAE'].mean() for k in np.linspace(0,max_sd,30)]), color='r')
+        ax.set_ylabel('Mean Absolute Error')
+        ax.set_xlabel('Standard Deviation Cutoff')
+        ax.set_title('MAE for Projections w/ SDs Under Cutoff')
+        ax.legend(['Bayesian Mean Projection', 'Rolling 7 Game Mean'], loc=4)
+        fig = plt.gcf() # to get the current figure...
+        fig.savefig("plots/MAE_for_projections_w_sd_under_cutoff.png", dpi = 300) # and save it directly
+        
+        print("Drawing conclusions from the model...")
+        t = pd.DataFrame({'projection':  tr['defensive differential rb'].mean(axis=0), 'sd' : tr['defensive differential rb'].std(axis=0),'name': team_names})
+        f=plt.figure(figsize=(8,10))
+        plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
+        plt.title('Team Effect\'s on RB Point Average (2014)')
+        end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
+        plt.xlim([-6,8])
+        plt.xlabel('Change in opponent\'s RB\'s average')
+        fig = plt.gcf() # to get the current figure...
+        fig.savefig("plots/RB.png", dpi = 300) # and save it directly
+        
+        t = pd.DataFrame({'projection':  tr['defensive differential qb'].mean(axis=0), 'sd' : tr['defensive differential qb'].std(axis=0),'name': team_names})
+        f=plt.figure(figsize=(8,10))
+        plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
+        plt.title('Team\'s Effect on QB Point Average (2014)')
+        end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
+        plt.xlim([-11.5,10])
+        plt.xlabel('Change in opponent\'s QB\'s average')
+        fig = plt.gcf() # to get the current figure...
+        fig.savefig("plots/QB.png", dpi = 300) # and save it directly
+        
+        t = pd.DataFrame({'projection':  tr['defensive differential te'].mean(axis=0), 'sd' : tr['defensive differential te'].std(axis=0),'name': team_names})
+        f=plt.figure(figsize=(8,10))
+        plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
+        plt.title('Team Effect\'s on TE Point Average (2014)')
+        end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
+        plt.xlim([-8,8])
+        plt.xlabel('Change in opponent\'s TE\'s average')
+        fig = plt.gcf() # to get the current figure...
+        fig.savefig("plots/TE.png", dpi = 300) # and save it directly
+        
+        t = pd.DataFrame({'projection':  tr['defensive differential wr'].mean(axis=0), 'sd' : tr['defensive differential wr'].std(axis=0),'name': team_names})
+        f=plt.figure(figsize=(8,10))
+        plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
+        plt.title('Team\'s Effect on WR Point Average (2014)')
+        end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
+        plt.xlim([-4.5,3.1])
+        plt.xlabel('Change in opponent\'s WR\'s average')
+        fig = plt.gcf() # to get the current figure...
+        fig.savefig("plots/WR.png", dpi = 300) # and save it directly
 
     return(tr)
 
