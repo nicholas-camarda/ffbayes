@@ -177,6 +177,7 @@ def bayesian_hierarchical_ff(cores):
         print('7 Day Average Mean Absolute Error:', mean_absolute_error(test.loc[:,'FantPt'].values, test.loc[:,'7_game_avg'].values))
 
         # DEBUG: what is 'd' ?????
+        d = ppc
         max_sd = d['sd'].max()
         plt.figure(figsize=(8,5))
         ax=plt.gca()
