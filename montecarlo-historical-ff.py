@@ -125,4 +125,4 @@ print('Team projection: %s' % game_points.mean())
 print('Standard Deviations: %s' % (game_points.std()/np.sqrt(len(outcome.columns))))
 
 # player level stats
-outcome.to_csv("results/{current_year}_projections_from_years{years}.tsv".format(current_year = todays_date.year, years = my_years), sep = "\t")
+outcome.to_csv("results/montecarlo_results/{current_year}_projections_from_years{years}.tsv".format(current_year = todays_date.year, years = my_years), sep = "\t")
