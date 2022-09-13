@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error
 import multiprocessing
 
-cores = multiprocessing.cpu_count() - 1
+cores = 7 # multiprocessing.cpu_count() - 1
 print("Using %d cores" % cores)
 
 ### You'll need to enter a conda environemtn to run this.. 
@@ -180,10 +180,10 @@ def bayesian_hierarchical_ff(cores):
         print('Projection Mean Absolute Error:', mean_absolute_error(test.loc[:,'FantPt'].values, ppc['FantPt'].mean(axis=0)))
         print('7 Day Average Mean Absolute Error:', mean_absolute_error(test.loc[:,'FantPt'].values, test.loc[:,'7_game_avg'].values))
 
-        # i think i need to calculate on ppc, the mean of each sample and the sd of each sample
+        # i think i need to calculate on ppc, the MAE of each sample and the sd of each sample
         # i need to do something similar for the historical average, but not sure what counts as a sample
         # DEBUG: what is 'd' ?????
-        # max_sd = d['sd'].max()
+        # max_sd = d['sd'].max()m
         # plt.figure(figsize=(8,5))
         # ax=plt.gca()
         # ax.plot(np.linspace(0,max_sd,30), np.array([d[d['sd'] <= k]['proj MAE'].mean() for k in np.linspace(0,max_sd,30)]))
@@ -199,7 +199,7 @@ def bayesian_hierarchical_ff(cores):
         t = pd.DataFrame({'projection':  tr['defensive differential rb'].mean(axis=0), 'sd' : tr['defensive differential rb'].std(axis=0),'name': team_names})
         f=plt.figure(figsize=(8,10))
         plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
-        plt.title('Team Effect\'s on RB Point Average (2014)')
+        plt.title('Team Effect\'s on RB Point Average (2021)')
         end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
         plt.xlim([-6,8])
         plt.xlabel('Change in opponent\'s RB\'s average')
@@ -209,7 +209,7 @@ def bayesian_hierarchical_ff(cores):
         t = pd.DataFrame({'projection':  tr['defensive differential qb'].mean(axis=0), 'sd' : tr['defensive differential qb'].std(axis=0),'name': team_names})
         f=plt.figure(figsize=(8,10))
         plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
-        plt.title('Team\'s Effect on QB Point Average (2014)')
+        plt.title('Team\'s Effect on QB Point Average (2021)')
         end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
         plt.xlim([-11.5,10])
         plt.xlabel('Change in opponent\'s QB\'s average')
@@ -219,7 +219,7 @@ def bayesian_hierarchical_ff(cores):
         t = pd.DataFrame({'projection':  tr['defensive differential te'].mean(axis=0), 'sd' : tr['defensive differential te'].std(axis=0),'name': team_names})
         f=plt.figure(figsize=(8,10))
         plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
-        plt.title('Team Effect\'s on TE Point Average (2014)')
+        plt.title('Team Effect\'s on TE Point Average (2021)')
         end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
         plt.xlim([-8,8])
         plt.xlabel('Change in opponent\'s TE\'s average')
@@ -229,13 +229,13 @@ def bayesian_hierarchical_ff(cores):
         t = pd.DataFrame({'projection':  tr['defensive differential wr'].mean(axis=0), 'sd' : tr['defensive differential wr'].std(axis=0),'name': team_names})
         f=plt.figure(figsize=(8,10))
         plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
-        plt.title('Team\'s Effect on WR Point Average (2014)')
+        plt.title('Team\'s Effect on WR Point Average (2021)')
         end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
         plt.xlim([-4.5,3.1])
         plt.xlabel('Change in opponent\'s WR\'s average')
         fig = plt.gcf() # to get the current figure...
         fig.savefig("plots/WR.png", dpi = 300) # and save it directly
-
+    print("Done!")
     return(tr)
 
 if __name__ == "__main__":
