@@ -79,7 +79,6 @@ def bayesian_hierarchical_ff(cores):
     data = data.astype({'rank':int})
 
     data.to_csv("combined_datasets/2017-2021season.csv")
-    
     # We are using a single year for the analysis
     explore = data[data.apply(lambda x : x['Season'] == ["2017", "2018", "2019"], axis=1)]
     train = data[data.apply(lambda x : x['Season'] == 2020, axis=1)]

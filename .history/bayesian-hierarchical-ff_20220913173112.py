@@ -20,10 +20,10 @@ print("Using %d cores" % cores)
 ### bayesian hierarchical model to predict fantasy league performance over the next year ###
 ### https://srome.github.io/Bayesian-Hierarchical-Modeling-Applied-to-Fantasy-Football-Projections-for-Increased-Insight-and-Confidence/ ###
 
-def pickle_model(output_path: str, model, trace, ppc, test):
+def pickle_model(output_path: str, model, trace):
         """Pickles PyMC3 model and trace"""
         with open(output_path, "wb") as buff:
-            pickle.dump({"model": model, "trace": trace, "ppc": ppc, "test": test}, buff)
+            pickle.dump({"model": model, "trace": trace}, buff)
         
 def bayesian_hierarchical_ff(cores):
     # read in the datasets and combine
@@ -78,13 +78,11 @@ def bayesian_hierarchical_ff(cores):
     # convert rank column to integer
     data = data.astype({'rank':int})
 
-    data.to_csv("combined_datasets/2017-2021season.csv")
-    
     # We are using a single year for the analysis
     explore = data[data.apply(lambda x : x['Season'] == ["2017", "2018", "2019"], axis=1)]
     train = data[data.apply(lambda x : x['Season'] == 2020, axis=1)]
     test = data[data.apply(lambda x : x['Season'] == 2021, axis=1)]
-        
+
     print("Running Model...")
 
     num_positions=4
@@ -182,16 +180,13 @@ def bayesian_hierarchical_ff(cores):
         print('Projection Mean Absolute Error:', mean_absolute_error(test.loc[:,'FantPt'].values, ppc['FantPt'].mean(axis=0)))
         print('7 Day Average Mean Absolute Error:', mean_absolute_error(test.loc[:,'FantPt'].values, test.loc[:,'7_game_avg'].values))
 
-        # save it to test
-        # pickle_model("model.pickle", model = mdl, trace = tr, ppc = ppc, test = test)
-        
         # i think i need to calculate on ppc, the MAE of each sample and the sd of each sample
         # i need to do something similar for the historical average, but not sure what counts as a sample
         # DEBUG: what is 'd' ?????
-        # d = pd.DataFrame({'proj MAE':  mean_absolute_error(test.loc[:,'FantPt'].values, ppc['FantPt'], multioutput='raw_values'), 
-        #                 'historical avg MAE': mean_absolute_error(test.loc[:,'FantPt'].values, test.loc[:,'7_game_avg'].values, multioutput='raw_values'),
-        #                 'sd' : })
-        # max_sd = d['sd'].max()
+        d = pd.DataFrame({'proj MAE':  mean_absolute_error(test.loc[:,'FantPt'].values, ppc['FantPt'], multioutput='raw_values'), 
+                        'historical av MAE':mean_absolute_error(test.loc[:,'FantPt'].values, ppc['FantPt'], multioutput='raw_values'),
+                        'sd' : tr['defensive differential rb'].std(axis=0)})
+        # max_sd = d['sd'].max()m
         # plt.figure(figsize=(8,5))
         # ax=plt.gca()
         # ax.plot(np.linspace(0,max_sd,30), np.array([d[d['sd'] <= k]['proj MAE'].mean() for k in np.linspace(0,max_sd,30)]))

@@ -78,8 +78,6 @@ def bayesian_hierarchical_ff(cores):
     # convert rank column to integer
     data = data.astype({'rank':int})
 
-    data.to_csv("combined_datasets/2017-2021season.csv")
-    
     # We are using a single year for the analysis
     explore = data[data.apply(lambda x : x['Season'] == ["2017", "2018", "2019"], axis=1)]
     train = data[data.apply(lambda x : x['Season'] == 2020, axis=1)]
@@ -183,7 +181,7 @@ def bayesian_hierarchical_ff(cores):
         print('7 Day Average Mean Absolute Error:', mean_absolute_error(test.loc[:,'FantPt'].values, test.loc[:,'7_game_avg'].values))
 
         # save it to test
-        # pickle_model("model.pickle", model = mdl, trace = tr, ppc = ppc, test = test)
+        pickle_model("model.pickle", model = mdl, trace = tr, ppc = ppc, test = test)
         
         # i think i need to calculate on ppc, the MAE of each sample and the sd of each sample
         # i need to do something similar for the historical average, but not sure what counts as a sample
