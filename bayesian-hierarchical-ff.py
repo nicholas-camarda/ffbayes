@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error
 import multiprocessing
 
-cores = multiprocessing.cpu_count() - 1
+cores = 7 # multiprocessing.cpu_count() - 1
 print("Using %d cores" % cores)
 
 ### You'll need to enter a conda environemtn to run this.. 
@@ -20,10 +20,10 @@ print("Using %d cores" % cores)
 ### bayesian hierarchical model to predict fantasy league performance over the next year ###
 ### https://srome.github.io/Bayesian-Hierarchical-Modeling-Applied-to-Fantasy-Football-Projections-for-Increased-Insight-and-Confidence/ ###
 
-def pickle_model(output_path: str, model, trace):
+def pickle_model(output_path: str, model, trace, ppc, test):
         """Pickles PyMC3 model and trace"""
         with open(output_path, "wb") as buff:
-            pickle.dump({"model": model, "trace": trace}, buff)
+            pickle.dump({"model": model, "trace": trace, "ppc": ppc, "test": test}, buff)
         
 def bayesian_hierarchical_ff(cores):
     # read in the datasets and combine
@@ -78,11 +78,13 @@ def bayesian_hierarchical_ff(cores):
     # convert rank column to integer
     data = data.astype({'rank':int})
 
+    data.to_csv("combined_datasets/2017-2021season.csv")
+    
     # We are using a single year for the analysis
     explore = data[data.apply(lambda x : x['Season'] == ["2017", "2018", "2019"], axis=1)]
     train = data[data.apply(lambda x : x['Season'] == 2020, axis=1)]
     test = data[data.apply(lambda x : x['Season'] == 2021, axis=1)]
-
+        
     print("Running Model...")
 
     num_positions=4
@@ -182,13 +184,17 @@ def bayesian_hierarchical_ff(cores):
         print('Projection Mean Absolute Error:', mean_absolute_error(test.loc[:,'FantPt'].values, ppc['FantPt'].mean(axis=0)))
         print('7 Day Average Mean Absolute Error:', mean_absolute_error(test.loc[:,'FantPt'].values, test.loc[:,'7_game_avg'].values))
 
-        # i think i need to calculate on ppc, the mean of each sample and the sd of each sample
+        # save it to test
+        # pickle_model("model.pickle", model = mdl, trace = tr, ppc = ppc, test = test)
+        
+        # i think i need to calculate on ppc, the MAE of each sample and the sd of each sample
         # i need to do something similar for the historical average, but not sure what counts as a sample
         print(test.loc[:,'FantPt'])
         print(ppc['FantPt'])
         print(test.loc[:,'7_game_avg'])
         
         # DEBUG: what is 'd' ?????
+<<<<<<< HEAD
         
         max_sd = d['sd'].max()
         plt.figure(figsize=(8,5))
@@ -201,12 +207,28 @@ def bayesian_hierarchical_ff(cores):
         ax.legend(['Bayesian Mean Projection', 'Rolling 7 Game Mean'], loc=4)
         fig = plt.gcf() # to get the current figure...
         fig.savefig("plots/MAE_for_projections_w_sd_under_cutoff.png", dpi = 300) # and save it directly
+=======
+        # d = pd.DataFrame({'proj MAE':  mean_absolute_error(test.loc[:,'FantPt'].values, ppc['FantPt'], multioutput='raw_values'), 
+        #                 'historical avg MAE': mean_absolute_error(test.loc[:,'FantPt'].values, test.loc[:,'7_game_avg'].values, multioutput='raw_values'),
+        #                 'sd' : })
+        # max_sd = d['sd'].max()
+        # plt.figure(figsize=(8,5))
+        # ax=plt.gca()
+        # ax.plot(np.linspace(0,max_sd,30), np.array([d[d['sd'] <= k]['proj MAE'].mean() for k in np.linspace(0,max_sd,30)]))
+        # ax.plot(np.linspace(0,max_sd,30), np.array([d[d['sd'] <= k]['historical avg MAE'].mean() for k in np.linspace(0,max_sd,30)]), color='r')
+        # ax.set_ylabel('Mean Absolute Error')
+        # ax.set_xlabel('Standard Deviation Cutoff')
+        # ax.set_title('MAE for Projections w/ SDs Under Cutoff')
+        # ax.legend(['Bayesian Mean Projection', 'Rolling 7 Game Mean'], loc=4)
+        # fig = plt.gcf() # to get the current figure...
+        # fig.savefig("plots/MAE_for_projections_w_sd_under_cutoff.png", dpi = 300) # and save it directly
+>>>>>>> e5a6b8f20bf3953cc792e587926cd4791973d38b
         
         print("Drawing conclusions from the model...")
         t = pd.DataFrame({'projection':  tr['defensive differential rb'].mean(axis=0), 'sd' : tr['defensive differential rb'].std(axis=0),'name': team_names})
         f=plt.figure(figsize=(8,10))
         plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
-        plt.title('Team Effect\'s on RB Point Average (2014)')
+        plt.title('Team Effect\'s on RB Point Average (2021)')
         end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
         plt.xlim([-6,8])
         plt.xlabel('Change in opponent\'s RB\'s average')
@@ -216,7 +238,7 @@ def bayesian_hierarchical_ff(cores):
         t = pd.DataFrame({'projection':  tr['defensive differential qb'].mean(axis=0), 'sd' : tr['defensive differential qb'].std(axis=0),'name': team_names})
         f=plt.figure(figsize=(8,10))
         plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
-        plt.title('Team\'s Effect on QB Point Average (2014)')
+        plt.title('Team\'s Effect on QB Point Average (2021)')
         end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
         plt.xlim([-11.5,10])
         plt.xlabel('Change in opponent\'s QB\'s average')
@@ -226,7 +248,7 @@ def bayesian_hierarchical_ff(cores):
         t = pd.DataFrame({'projection':  tr['defensive differential te'].mean(axis=0), 'sd' : tr['defensive differential te'].std(axis=0),'name': team_names})
         f=plt.figure(figsize=(8,10))
         plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
-        plt.title('Team Effect\'s on TE Point Average (2014)')
+        plt.title('Team Effect\'s on TE Point Average (2021)')
         end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
         plt.xlim([-8,8])
         plt.xlabel('Change in opponent\'s TE\'s average')
@@ -236,13 +258,13 @@ def bayesian_hierarchical_ff(cores):
         t = pd.DataFrame({'projection':  tr['defensive differential wr'].mean(axis=0), 'sd' : tr['defensive differential wr'].std(axis=0),'name': team_names})
         f=plt.figure(figsize=(8,10))
         plt.errorbar(x=t['projection'],y=range(1,len(t)+1),xerr=t['sd'], lw=3, fmt='|')
-        plt.title('Team\'s Effect on WR Point Average (2014)')
+        plt.title('Team\'s Effect on WR Point Average (2021)')
         end=plt.yticks(range(1,len(t)+1), [name for name in t['name']])
         plt.xlim([-4.5,3.1])
         plt.xlabel('Change in opponent\'s WR\'s average')
         fig = plt.gcf() # to get the current figure...
         fig.savefig("plots/WR.png", dpi = 300) # and save it directly
-
+    print("Done!")
     return(tr)
 
 if __name__ == "__main__":
