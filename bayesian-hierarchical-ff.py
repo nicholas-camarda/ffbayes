@@ -148,6 +148,7 @@ def bayesian_hierarchical_ff(cores):
         # Training!
         trace=pm.sample(draws=10000, step=pm.Metropolis(), 
                         progressbar=True, 
+                        # need to determine whether i shoudl return the Idata - seems like i should since this is updated...
                         return_inferencedata=False, # return a MultiTrace obj
                         cores=cores)
         
@@ -177,23 +178,29 @@ def bayesian_hierarchical_ff(cores):
         print("Sampling from the posterior...")
         ppc=pm.sample_posterior_predictive(tr, samples=1000, model= mdl)
         
+        
         print('Projection Mean Absolute Error:', mean_absolute_error(test.loc[:,'FantPt'].values, ppc['FantPt'].mean(axis=0)))
         print('7 Day Average Mean Absolute Error:', mean_absolute_error(test.loc[:,'FantPt'].values, test.loc[:,'7_game_avg'].values))
 
         # i think i need to calculate on ppc, the mean of each sample and the sd of each sample
         # i need to do something similar for the historical average, but not sure what counts as a sample
+        print(test.loc[:,'FantPt'])
+        print(ppc['FantPt'])
+        print(test.loc[:,'7_game_avg'])
+        
         # DEBUG: what is 'd' ?????
-        # max_sd = d['sd'].max()
-        # plt.figure(figsize=(8,5))
-        # ax=plt.gca()
-        # ax.plot(np.linspace(0,max_sd,30), np.array([d[d['sd'] <= k]['proj MAE'].mean() for k in np.linspace(0,max_sd,30)]))
-        # ax.plot(np.linspace(0,max_sd,30), np.array([d[d['sd'] <= k]['historical avg MAE'].mean() for k in np.linspace(0,max_sd,30)]), color='r')
-        # ax.set_ylabel('Mean Absolute Error')
-        # ax.set_xlabel('Standard Deviation Cutoff')
-        # ax.set_title('MAE for Projections w/ SDs Under Cutoff')
-        # ax.legend(['Bayesian Mean Projection', 'Rolling 7 Game Mean'], loc=4)
-        # fig = plt.gcf() # to get the current figure...
-        # fig.savefig("plots/MAE_for_projections_w_sd_under_cutoff.png", dpi = 300) # and save it directly
+        
+        max_sd = d['sd'].max()
+        plt.figure(figsize=(8,5))
+        ax=plt.gca()
+        ax.plot(np.linspace(0,max_sd,30), np.array([d[d['sd'] <= k]['proj MAE'].mean() for k in np.linspace(0,max_sd,30)]))
+        ax.plot(np.linspace(0,max_sd,30), np.array([d[d['sd'] <= k]['historical avg MAE'].mean() for k in np.linspace(0,max_sd,30)]), color='r')
+        ax.set_ylabel('Mean Absolute Error')
+        ax.set_xlabel('Standard Deviation Cutoff')
+        ax.set_title('MAE for Projections w/ SDs Under Cutoff')
+        ax.legend(['Bayesian Mean Projection', 'Rolling 7 Game Mean'], loc=4)
+        fig = plt.gcf() # to get the current figure...
+        fig.savefig("plots/MAE_for_projections_w_sd_under_cutoff.png", dpi = 300) # and save it directly
         
         print("Drawing conclusions from the model...")
         t = pd.DataFrame({'projection':  tr['defensive differential rb'].mean(axis=0), 'sd' : tr['defensive differential rb'].std(axis=0),'name': team_names})
