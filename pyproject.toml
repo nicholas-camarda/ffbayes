@@ -9,6 +9,7 @@ select = [
   "I",  # isort
 ]
 ignore = [
+  "F841",  # no unused variable
   "E501",  # line length handled by formatter
 ]
 
