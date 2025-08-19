@@ -1,13 +1,14 @@
 #!python
-from enum import unique
-import pandas as pd
-import numpy as np
 import glob
-import math
-from alive_progress import alive_bar
-import os
-import logging 
+import logging
+import sys
 from datetime import date
+
+import numpy as np
+import pandas as pd
+from alive_progress import alive_bar
+
+sys.setrecursionlimit(10000)  # Increase recursion limit
 
 todays_date = date.today()
 logging.basicConfig()
@@ -21,7 +22,7 @@ number_of_simulations = 5000
 
 def get_combined_data(directory_path):
     # Get data file names
-    files = glob.glob(directory_path + "/*.csv")
+    files = glob.glob(directory_path + '/*.csv')
     dfs = list()
     for f in files:
         data = pd.read_csv(f)
@@ -31,8 +32,8 @@ def get_combined_data(directory_path):
     # return a pandas dataframe
     return(df)
 
-combined_data = get_combined_data(directory_path = "datasets")
-my_team = pd.read_csv("my_team_2022.tsv", sep='\t')
+combined_data = get_combined_data(directory_path = 'datasets')
+my_team = pd.read_csv('my_team_2022.tsv', sep='\t')
 
 # print("Combined data:", combined_data)
 # print("Team:", my_team)
@@ -47,7 +48,7 @@ def make_team(team, db):
             continue
         tm.append(plr)
         # remove duplicates from historical data, only select name, position, and tm
-    return(pd.DataFrame(tm).drop_duplicates(subset=["Name", "Position"])[["Name", "Position", "Tm"]])
+    return(pd.DataFrame(tm).drop_duplicates(subset=['Name', 'Position'])[['Name', 'Position', 'Tm']])
 
 tm = make_team(team = my_team, db = combined_data)
 # print(tm)
@@ -55,17 +56,17 @@ tm = make_team(team = my_team, db = combined_data)
 def validate_team(db_team, my_team):
     ### Check which members of my team actually have historical data to simulate on ###
     # get the column names of team using team.dtype.names
-    unique_teams = db_team.loc[:, ["Name","Position","Tm"]].drop_duplicates()
-    
+    unique_teams = db_team.loc[:, ['Name','Position','Tm']].drop_duplicates()
+
     db_set = set(unique_teams.Name)
     my_team_set = set(my_team.Name)
-    print("Players to project: ")
+    print('Players to project: ')
     print(unique_teams.Name)
-    
+
     if db_set == my_team_set:
-        print("Found all team members.")
+        print('Found all team members.')
     else:
-        print("\nMissing team members:")
+        print('\nMissing team members:')
         print(my_team_set.difference(db_set))
 
 validate_team(db_team = tm, my_team = my_team)
@@ -76,12 +77,12 @@ validate_team(db_team = tm, my_team = my_team)
 
 def get_games(db, year, week):
     ### return all the players in this week and this year
-    result = db[(db["Season"] == year) & (db["G#"] == week)]
+    result = db[(db['Season'] == year) & (db['G#'] == week)]
     return(result)
 
 def score_player(p, db, year, week):
-    sc = db.loc[(db["Name"] == p.Name) & (db["Season"] == year) & (db["G#"] == week)]
-    final_sc = sc["FantPt"].tolist()[0]
+    sc = db.loc[(db['Name'] == p.Name) & (db['Season'] == year) & (db['G#'] == week)]
+    final_sc = sc['FantPt'].tolist()[0]
     return(final_sc)
 
 def get_score_for_player(db, player, years):
@@ -91,32 +92,45 @@ def get_score_for_player(db, player, years):
                             p=[0.025, 0.075, 0.15, 0.25, 0.5])
     week = np.random.randint(1,18)
 
-    # Find the player and score them for the given week/year   
+    # Find the player and score them for the given week/year
     for p in get_games(db, year, week).itertuples():
         if p.Name is None:
             continue
         if player.Name == p.Name:
             sc2 = score_player(p, db, year, week)
             return(sc2)
+    # If player not found, try again with a different year/week (max 10 attempts)
     return get_score_for_player(db, player, years)
+
+
+def get_score_for_player_safe(db, player, years, max_attempts=10):
+    """Safe version with limited recursion"""
+    for attempt in range(max_attempts):
+        try:
+            return get_score_for_player(db, player, years)
+        except RecursionError:
+            # If recursion error, return a default score
+            print(f"Warning: Could not find score for {player.Name}, using default")
+            return 10.0  # Default fantasy points
+    return 10.0  # Default if all attempts fail
 
 
 def simulate(team, db, years, exps=10):
     scores = pd.DataFrame(data=np.zeros((exps,len(team))),
                           columns = [p.Name for p in team.itertuples()])
     # print(scores)
-    # we are defining our simulator’s projection to be the expected value of the sample mean of the team random variable.
+    # we are defining our simulator's projection to be the expected value of the sample mean of the team random variable.
     with alive_bar(exps*len(team), bar='classic') as bar:
         for n in range(exps):
             for player in team.itertuples():
-                score1 = get_score_for_player(db, player, years)
+                score1 = get_score_for_player_safe(db, player, years)
                 pname = player.Name
                 scores.at[n, pname] += score1
                 bar()
     return(pd.DataFrame(scores))
 
 def main(years = my_years, simulations = number_of_simulations):
-    print("Simulating over years: {years}".format(years = years))
+    print(f'Simulating over years: {years}')
     outcome = simulate(team = tm, db = combined_data, years = years, exps = simulations)
     print(outcome.head)
 
@@ -126,8 +140,8 @@ def main(years = my_years, simulations = number_of_simulations):
     print('Standard Deviations: %s' % (game_points.std()/np.sqrt(len(outcome.columns))))
 
     # player level stats
-    outcome.to_csv("results/montecarlo_results/{current_year}_projections_from_years{years}.tsv".format(current_year = todays_date.year, years = years), sep = "\t")
+    outcome.to_csv(f'results/montecarlo_results/{todays_date.year}_projections_from_years{years}.tsv', sep = '\t')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

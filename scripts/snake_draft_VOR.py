@@ -2,16 +2,14 @@
 # Took this from the internet - this is not mine!! Made some small changes just for me.
 # ctrl + alt + R to run this -- alternatively, use Run Python File (drop down from the playbutton on the right in VSCode)
 
+from datetime import date
 from io import StringIO
 
 import pandas as pd
-
-pd.set_option('display.max_rows', None)
-from datetime import date
-
 import requests
 from bs4 import BeautifulSoup as BS
 
+pd.set_option('display.max_rows', None)
 pd.options.mode.chained_assignment = None
 
 # examples and learning

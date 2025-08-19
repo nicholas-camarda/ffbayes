@@ -8,7 +8,7 @@ import nfl_data_py as nfl
 import pandas as pd
 from alive_progress import alive_bar
 
-years_to_process = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022]
+years_to_process = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
 
 
 def create_dataset(year):
