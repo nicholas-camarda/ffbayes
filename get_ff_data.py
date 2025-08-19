@@ -1,144 +1,277 @@
 #!python
 # copied from https://stmorse.github.io/journal/pfr-scrape-python.html, added adjustments to get this to run + progress bar
 import os
-import time
-from datetime import datetime
-from pathlib import Path
-from sys import argv
 
-import numpy as np
+# from pro_football_reference_web_scraper import player_game_log as p
+# from pro_football_reference_web_scraper import team_game_log as t
+import nfl_data_py as nfl
 import pandas as pd
-import requests  # HTTP requests straight from Python.
 from alive_progress import alive_bar
-from bs4 import BeautifulSoup  # parse the raw html
-from pro_football_reference_web_scraper import player_game_log as p
-from requests.exceptions import HTTPError
 
-years_to_process = [2017, 2018, 2019, 2020, 2021, 2022, 2023]
+years_to_process = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022]
 
 
-def scrape_ff_data_by_year(year=2018):
-    url = "https://www.pro-football-reference.com"
-    full_url = url + "/years/" + str(year) + "/fantasy.htm"
-    print(full_url)
-    # grab fantasy players
-    try:
-        r = requests.get(full_url)
-        r.raise_for_status()
-    except HTTPError as e:
-        if e.response.status_code == 429:
-            print("HTTP 429 error received. Retrying in 10 seconds...")
-            time.sleep(10)
-            r = requests.get(full_url)
-        else:
-            raise
+def create_dataset(year):
+    players = nfl.import_weekly_data([year])
+    # full_players = players
+    # print(full_players.columns)
+    # player_id player_display_name position recent_team  season  week season_type  fantasy_points  fantasy_points_ppr
+    players_df = players[
+        [
+            'player_id',
+            'player_display_name',
+            'position',
+            'recent_team',
+            'season',
+            'week',
+            'season_type',
+            'fantasy_points',
+            'fantasy_points_ppr',
+        ]
+    ]
+    players = players.rename(
+        columns={'recent_team': 'player_team', 'season_type': 'game_type'},
+    )
 
-    soup = BeautifulSoup(r.content, "html.parser")
-    tables = soup.find_all("table")
-    if len(tables) == 0:
-        print(f"No tables found for year {year}. Skipping...")
-        return
-    parsed_table = tables[0]  # .find_all("table")[0]
-    print(parsed_table)
-    lst_to_iterate = parsed_table.find_all("tr")[2:]
+    schedules = nfl.import_schedules([year])
+    # full_schedules = schedules
+    #  game_id  week game_type home_team away_team  away_score  home_score
+    schedules_df = schedules[
+        [
+            'game_id',
+            'week',
+            'season',
+            'gameday',
+            'game_type',
+            'home_team',
+            'away_team',
+            'away_score',
+            'home_score',
+        ]
+    ]
+    # schedules = schedules.rename(columns={"gsis":"gsis_id"})
+    # full_players.to_csv("~/Downloads/players.csv")
+    # full_schedules.to_csv("~/Downloads/schedules.csv")
 
-    maxp = len(lst_to_iterate)
+    # Step 2: Merge the dataframes
 
-    # first 2 rows are col headers
-    print("Processing scraped table...")
-    df = []
-    with alive_bar(len(lst_to_iterate)) as bar:
-        for i, row in enumerate(lst_to_iterate):
-            # if i % 25 == 0: print(i)
-            if i >= maxp:
-                print("\nComplete.")
-                break
+    # Merging considering players as part of the home team
+    home_merge = players_df.merge(
+        schedules_df,
+        left_on=['season', 'week', 'recent_team'],
+        right_on=['season', 'week', 'home_team'],
+        how='left',
+    )
 
-            try:
-                dat = row.find("td", attrs={"data-stat": "player"})
+    # Merging considering players as part of the away team
+    away_merge = players_df.merge(
+        schedules_df,
+        left_on=['season', 'week', 'recent_team'],
+        right_on=['season', 'week', 'away_team'],
+        how='left',
+    )
 
-                name = dat.a.get_text()  # hyperlink
-                stub = dat.a.get("href")
-                # hyperlink's destination for the player, which contains all their stats
-                # - these both may fail, which is why the catch is in place
-                stub = stub[:-4] + "/fantasy/" + str(year)
-                pos = row.find("td", attrs={"data-stat": "fantasy_pos"}).get_text()
+    # Step 3: Create columns to identify home and away players
+    home_merge['is_home_team'] = home_merge['home_team'].notna()
+    away_merge['is_away_team'] = away_merge['away_team'].notna()
 
-            except AttributeError as ae:
-                print("Link anchor does not exist.")
-                pass
+    # Step 4: Concatenate the dataframes
+    merged_df = pd.concat([home_merge, away_merge])
 
-            # grab this players stats
-            try:
-                tdf = pd.read_html(url + stub)[0]
-            except HTTPError as e:
-                if e.response.status_code == 429:
-                    print("HTTP 429 error received. Retrying in 10 seconds...")
-                    time.sleep(10)
-                    tdf = pd.read_html(url + stub)[0]
-                else:
-                    raise
-            copy_tdf = tdf.copy(
-                deep=True
-            )  # must deep copy before replacing these values, so as to not chain link
+    # Step 5: Retain specific columns
+    final_columns1 = [
+        'player_id',
+        'player_display_name',
+        'position',
+        'recent_team',
+        'home_team',
+        'season',
+        'week',
+        'game_type',
+        'fantasy_points',
+        'fantasy_points_ppr',
+        'game_id',
+        'gameday',
+        'away_team',
+        'away_score',
+        'home_score',
+    ]
+    final_df1 = merged_df[final_columns1]
 
-            # there are some players that got entries but never played, so filter out all player data tables with 1 or less rows
-            if not copy_tdf.empty and len(copy_tdf) > 1:
-                # get rid of MultiIndex, just keep last row
-                copy_tdf.columns = copy_tdf.columns.get_level_values(-1)
+    # Step 6: Remove rows with NaN game_id and filter rows
+    final_df1 = final_df1[final_df1['game_id'].notna()]
+    final_df1['player_team'] = final_df1['recent_team']
+    final_df1 = final_df1[
+        (
+            (final_df1['player_team'] == final_df1['home_team'])
+            | (final_df1['player_team'] == final_df1['away_team'])
+        )
+    ]
 
-                # adjust the away/home column
-                copy_tdf_renamed = copy_tdf.rename(
-                    columns={"Unnamed: 4_level_2": "Away"}
-                )
-                # print(tdf.columns)
+    # Step 7: Deduplication
+    final_df1 = final_df1.drop_duplicates()
+    final_df1
 
-                away_fix = []
-                for r in copy_tdf_renamed.loc[:, "Away"]:
-                    if r == "@":
-                        # away
-                        away_fix.append(1)
-                    else:
-                        # home
-                        away_fix.append(0)
+    # Step 8: Get injuries and merge
+    injuries = nfl.import_injuries([year])
+    # full_injuries = injuries
+    # full_injuries.to_csv("~/Downloads/injuries.csv")
+    injuries = injuries[
+        [
+            'full_name',
+            'position',
+            'week',
+            'season',
+            'team',
+            'game_type',
+            'report_status',
+            'practice_status',
+        ]
+    ]
+    injuries = injuries.rename(
+        columns={'full_name': 'player_display_name', 'team': 'home_team'},
+    )
 
-                copy_tdf_renamed.loc[:, "Away"] = away_fix
+    # Merge the merged data with the injuries data
+    final_df = pd.merge(
+        final_df1,
+        injuries,
+        on=[
+            'player_display_name',
+            'position',
+            'season',
+            'week',
+            'game_type',
+            'home_team',
+        ],
+        how='left',
+    )
+    final_df = final_df.rename(
+        columns={
+            'report_status': 'game_injury_report_status',
+            'practice_status': 'practice_injury_report_status',
+        },
+    )
 
-                # drop all intermediate stats
-                copy_tdf_renamed_dropped_1 = copy_tdf_renamed.iloc[
-                    :, [1, 2, 3, 4, 5, -3]
-                ]
+    return final_df
 
-                # drop "Total" row
-                copy_tdf_final = copy_tdf_renamed_dropped_1.query('Date != "Total"')
 
-                copy2_tdf_final = copy_tdf_final.copy(deep=True)
-                # add other info
-                copy2_tdf_final.loc[:, "Name"] = name
-                copy2_tdf_final.loc[:, "Position"] = pos
-                copy2_tdf_final.loc[:, "Season"] = year
+def scrape_ff_data_by_year(year=[2018, 2019]):
+    print('Processing year...')
 
-                df.append(copy2_tdf_final)
-            else:
-                pass
+    final_df = create_dataset(year)
+    maxp = len(final_df)
+    data_list = []
+
+    with alive_bar(maxp) as bar:
+        for i, row in final_df.iterrows():
+            # Get the player details
+            player_id = row['player_id']
+            player_name = row['player_display_name']
+            season = row['season']
+            position = row['position']
+            week = row['week']
+            fantasy_points_ppr = row['fantasy_points_ppr']
+            fantasy_points = row['fantasy_points']
+
+            game_date = row['gameday']
+            team = row[
+                'recent_team'
+            ]  # Assuming 'recent_team' contains the team information
+            home = row['home_team']
+            away = row[
+                'away_team'
+            ]  # Assuming 'away_team' contains the away team information
+            opponent = away if team == away else home  # Get the opponent team
+            game_injury_report_status = row['game_injury_report_status']
+            practice_injury_report_status = row['practice_injury_report_status']
+            # Append the data to the data_list
+            data_list.append(
+                [
+                    week,
+                    game_date,
+                    team,
+                    away,
+                    opponent,
+                    fantasy_points,
+                    fantasy_points_ppr,
+                    player_name,
+                    player_id,
+                    position,
+                    season,
+                    game_injury_report_status,
+                    practice_injury_report_status,
+                ],
+            )
             bar()
 
-    df = pd.concat(df)
-    print("Final dataframe has dimensions: {shape}".format(shape=df.shape))
-    print("Saving df...")
-    df.to_csv("datasets/{yr}season.csv".format(yr=year))
-    print("Done.")
+    df = pd.DataFrame(
+        data_list,
+        columns=[
+            'G#',
+            'Date',
+            'Tm',
+            'Away',
+            'Opp',
+            'FantPt',
+            'FantPtPPR',
+            'Name',
+            'PlayerID',
+            'Position',
+            'Season',
+            'GameInjuryStatus',
+            'PracticeInjuryStatus',
+        ],
+    )
+    # print("Final dataframe has dimensions: {shape}".format(shape=df.shape))
+    print('Saving df...')
+    df.to_csv(f'datasets/{year}season.csv')
+    print('Done.')
+
+    return df
 
 
-existing_files = os.listdir(
-    "datasets"
-)  # Replace with the actual path to your directory
+def combine_datasets(directory_path, output_directory_path, years_to_process):
+    # Step 1: Specify the directory containing the CSV files
 
-for yr in years_to_process:
-    if any(file.startswith(str(yr)) for file in existing_files):
-        print(f"Skipping year {yr} as file already exists")
-        continue
-    print(f"Processing year {yr}")
-    scrape_ff_data_by_year(year=yr)
+    # Step 2: Get a list of all CSV files in the directory
+    csv_files = [f for f in os.listdir(directory_path) if f.endswith('.csv')]
 
-print("Done with everything!")
+    # Step 3: Initialize an empty list to hold dataframes
+    dataframes = []
+
+    # Step 4: Loop through each CSV file and append its data to the dataframes list
+    for csv_file in csv_files:
+        file_path = os.path.join(directory_path, csv_file)
+        dataframes.append(pd.read_csv(file_path))
+
+    # Step 5: Combine all dataframes
+    combined_df = pd.concat(dataframes, ignore_index=True).sort_values(by = 'Season')
+
+    # Step 6: Save the combined dataframe to a new CSV file
+    combined_df.to_csv(
+        f'{output_directory_path}/{years_to_process[0]}-{years_to_process[-1]}combined_data.csv',
+        index=False,
+    )
+    print(f'Check {output_directory_path} for combined dataset')
+
+
+def main(process_years = years_to_process):
+    # make the directory structure
+    os.makedirs('datasets', exist_ok=True)
+    existing_files = os.listdir('datasets')
+
+    # RUN
+    for yr in process_years:
+        if any(file.startswith(str(yr)) for file in existing_files):
+            print(f'Skipping year {yr} as file already exists')
+            continue
+        print(f'Processing year {yr}')
+        scrape_ff_data_by_year(year=yr)
+
+    combine_datasets('datasets', 'combined_datasets', process_years)
+    print('Done with everything!')
+
+
+if __name__ == '__main__':
+    main(years_to_process)

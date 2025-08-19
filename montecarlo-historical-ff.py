@@ -115,14 +115,19 @@ def simulate(team, db, years, exps=10):
                 bar()
     return(pd.DataFrame(scores))
 
-print("Simulating over years: {years}".format(years = my_years))
-outcome = simulate(team = tm, db = combined_data, years = my_years, exps = number_of_simulations)
-print(outcome.head)
+def main(years = my_years, simulations = number_of_simulations):
+    print("Simulating over years: {years}".format(years = years))
+    outcome = simulate(team = tm, db = combined_data, years = years, exps = simulations)
+    print(outcome.head)
 
-game_points = outcome.sum(axis=1, skipna=True) # Sum the player scores together
+    game_points = outcome.sum(axis=1, skipna=True) # Sum the player scores together
 
-print('Team projection: %s' % game_points.mean())
-print('Standard Deviations: %s' % (game_points.std()/np.sqrt(len(outcome.columns))))
+    print('Team projection: %s' % game_points.mean())
+    print('Standard Deviations: %s' % (game_points.std()/np.sqrt(len(outcome.columns))))
 
-# player level stats
-outcome.to_csv("results/montecarlo_results/{current_year}_projections_from_years{years}.tsv".format(current_year = todays_date.year, years = my_years), sep = "\t")
+    # player level stats
+    outcome.to_csv("results/montecarlo_results/{current_year}_projections_from_years{years}.tsv".format(current_year = todays_date.year, years = years), sep = "\t")
+
+
+if __name__ == "__main__":
+    main()

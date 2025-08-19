@@ -2,6 +2,8 @@
 # Took this from the internet - this is not mine!! Made some small changes just for me.
 # ctrl + alt + R to run this -- alternatively, use Run Python File (drop down from the playbutton on the right in VSCode)
 
+from io import StringIO
+
 import pandas as pd
 
 pd.set_option("display.max_rows", None)
@@ -83,7 +85,7 @@ def make_adp_df():
         table = soup.find(
             "table", {"id": "data"}
         )  # found this by looking at the table using "inspect" on the webpage
-        df = pd.read_html(str(table))[0]
+        df = pd.read_html(StringIO(str(table)))[0]  # pd.read_html(str(table))[0]
         print(
             "Output after reading the html:\n\n", df.head(), "\n"
         )  # so you can see the output at this point
@@ -136,7 +138,7 @@ def make_projection_df(ppr):
         if res.ok:
             soup = BS(res.content, "html.parser")
             table = soup.find("table", {"id": "data"})
-            df = pd.read_html(str(table))[0]
+            df = pd.read_html(StringIO(str(table)))[0]  # pd.read_html(str(table))[0]
 
             df.columns = df.columns.droplevel(
                 level=0
@@ -167,11 +169,12 @@ def make_projection_df(ppr):
     return final_df
 
 
-print("\nScraping projections dataset...")
-df = make_projection_df(ppr=ppr)
-print("Saving...")
-df.to_csv("datasets/current_projections.csv")
-print(len(df), df.head())
+def run_pipeline(ppr_value = ppr, top_rank = TOP_RNK):
+    print("\nScraping projections dataset...")
+    df = make_projection_df(ppr=ppr_value)
+    print("Saving...")
+    df.to_csv("misc-datasets/current_projections.csv")
+    print(len(df), df.head())
 
 
 replacement_values = {"RB": 0, "WR": 0, "QB": 0, "TE": 0}
@@ -181,25 +184,156 @@ for position, player in replacement_players.items():
     if position in replacement_values.keys():
         replacement_values[position] = df.loc[df["PLAYER"] == player].values[0, -1]
 
-print("\nReplacement values: ", replacement_values)
+    print("\nReplacement values: ", replacement_values)
 
-df["VOR"] = df.apply(
-    lambda row: row["FPTS"] - replacement_values.get(row["POS"]), axis=1
-)
+    df["VOR"] = df.apply(
+        lambda row: row["FPTS"] - replacement_values.get(row["POS"]), axis=1
+    )
 
-print("VOR df: ", df.head())
+    print("VOR df: ", df.head())
 
-df = df.sort_values(by="VOR", ascending=False)
-df["VALUERANK"] = df["VOR"].rank(ascending=False)
-print("\nFinal df: \n", df.head(TOP_RNK))
+    df = df.sort_values(by="VOR", ascending=False)
+    df["VALUERANK"] = df["VOR"].rank(ascending=False)
+    print("\nFinal df: \n", df.head(top_rank))
 
-today = date.today()
-this_year = today.strftime("%Y")
+    today = date.today()
+    this_year = today.strftime("%Y")
 
-fn_to_save = "datasets/snake-draft_ppr-{ppr}_vor_top-{TOP_RNK}_{YEAR}.csv".format(
-    ppr=ppr, TOP_RNK=TOP_RNK, YEAR=this_year
-)
-print(fn_to_save)
-df.to_csv(fn_to_save)
+    fn_to_save = (
+        "snake_draft_datasets/snake-draft_ppr-{ppr}_vor_top-{TOP_RNK}_{YEAR}.csv".format(
+            ppr=ppr_value, TOP_RNK=top_rank, YEAR=this_year
+        )
+    )
+    print(fn_to_save)
+    df.to_csv(fn_to_save)
 
-print("Done!")
+    print("Done!")
+    return df, fn_to_save
+
+
+import pandas as pd
+
+
+def generate_draft_strategy(dataframe, output_file_path):
+    # Function to categorize players into early, mid, and late draft phases based on their VALUERANK
+    def categorize_draft_phase(row):
+        if row["VALUERANK"] <= 70:
+            return "Early Draft"
+        elif 70 < row["VALUERANK"] <= 140:
+            return "Mid Draft"
+        else:
+            return "Late Draft"
+
+    # Applying the function to create a new column 'Draft Phase'
+    dataframe["Draft_Phase"] = dataframe.apply(categorize_draft_phase, axis=1)
+
+    # Creating lists of players to target in each draft phase
+    early_draft_targets = dataframe[
+        dataframe["Draft_Phase"] == "Early Draft"
+    ].sort_values(by="VOR", ascending=False)
+    mid_draft_targets = dataframe[dataframe["Draft_Phase"] == "Mid Draft"].sort_values(
+        by="VOR", ascending=False
+    )
+    late_draft_targets = dataframe[
+        dataframe["Draft_Phase"] == "Late Draft"
+    ].sort_values(by="VOR", ascending=False)
+
+    # Draft strategy for each round
+    draft_strategy = {
+        "Round": list(range(1, 17)),
+        "Primary Target": [
+            "Top-tier RB or WR (whichever has the highest VOR available)",
+            "Another top-tier RB or WR (focus on filling the position not filled in Round 1)",
+            "RB or WR (focus on acquiring high VOR players)",
+            "RB or WR (aim to have at least two strong players in both positions by the end of this round)",
+            "RB or WR (continue to build depth at these positions)",
+            "Mid-tier QBs and TEs if not selected in earlier rounds",
+            "Mid-tier QBs and TEs if not selected in earlier rounds",
+            "Focus on building depth at RB and WR positions",
+            "Focus on building depth at RB and WR positions",
+            "Top Defense/Special Teams unit",
+            "Draft high-upside players (potential breakout candidates) at RB and WR positions",
+            "Draft high-upside players (potential breakout candidates) at RB and WR positions",
+            "Draft high-upside players (potential breakout candidates) at RB and WR positions",
+            "Defense/Special Teams (if not selected in middle rounds)",
+            "Kicker",
+            "Kicker (if not selected in Round 15)",
+        ],
+        "Backup Plan": [
+            "If top-tier RBs and WRs are taken, consider a top-tier TE",
+            "If a top-tier TE is still available, this might be a good time to secure that position",
+            "Consider drafting a top-tier QB if available",
+            "QB (if not already selected in previous rounds)",
+            "TE (if not already selected in previous rounds)",
+            "Continue to build depth at RB and WR positions",
+            "Continue to build depth at RB and WR positions",
+            "Consider drafting a top Defense/Special Teams unit",
+            "Consider drafting a top Defense/Special Teams unit",
+            "Focus on building depth at RB and WR positions",
+            "Consider drafting a backup QB or TE for bench depth",
+            "Consider drafting a backup QB or TE for bench depth",
+            "Consider drafting a backup QB or TE for bench depth",
+            "High-upside players to fill out bench depth",
+            "High-upside players at RB and WR positions",
+            "High-upside players at RB and WR positions",
+        ],
+    }
+
+    draft_strategy_df = pd.DataFrame(draft_strategy)
+
+    # Creating an Excel writer object
+    with pd.ExcelWriter(output_file_path) as writer:
+        # Writing data to different sheets based on the draft phase
+        early_draft_targets.to_excel(
+            writer, sheet_name="Early Draft (Rounds 1-5)", index=False
+        )
+        mid_draft_targets.to_excel(
+            writer, sheet_name="Mid Draft (Rounds 6-10)", index=False
+        )
+        late_draft_targets.to_excel(
+            writer, sheet_name="Late Draft (Rounds 11-16)", index=False
+        )
+
+        # Writing the draft strategy for each round
+        draft_strategy_df.to_excel(
+            writer, sheet_name="Round-by-Round Draft Strategy", index=False
+        )
+
+        # Writing a summary sheet with the strategy
+        summary_data = {
+            "Draft Phase": [
+                "Early Draft (Rounds 1-5)",
+                "Mid Draft (Rounds 6-10)",
+                "Late Draft (Rounds 11-16)",
+            ],
+            "Primary Focus": [
+                "Top WRs and RBs with the highest VOR values.",
+                "Mid-tier WRs and RBs who still offer good value.",
+                "High-upside players who could potentially break out.",
+            ],
+            "Secondary Focus": [
+                "A top QB or TE if available.",
+                "Start filling out other positions like QB and TE if not already picked in early rounds.",
+                "Backup players and streaming options for positions like defense and kicker.",
+            ],
+        }
+
+        summary_df = pd.DataFrame(summary_data)
+        summary_df.to_excel(writer, sheet_name="Draft Strategy Summary", index=False)
+
+
+def main():
+    df, fn_to_save = run_pipeline()
+    today = date.today()
+    this_year = today.strftime("%Y")
+    dataframe = pd.read_csv(fn_to_save)
+    generate_draft_strategy(
+        dataframe,
+        "snake_draft_datasets/DRAFTING STRATEGY -- snake-draft_ppr-{ppr}_vor_top-{TOP_RNK}_{YEAR}.xlsx".format(
+            ppr=ppr, TOP_RNK=TOP_RNK, YEAR=this_year
+        ),
+    )
+
+
+if __name__ == "__main__":
+    main()
