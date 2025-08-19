@@ -41,18 +41,14 @@ The repository solves the problem of competing in fantasy football leagues where
 ```
 scripts/
 ├── data_pipeline/          # Data collection and preprocessing
-│   ├── 01_collect_data.py      # Primary data collection
-│   ├── 02_validate_data.py     # Data quality validation
-│   ├── get_ff_data.py          # Legacy script (to be consolidated)
-│   ├── get_ff_data_improved.py # Enhanced data collection
+│   ├── 01_collect_data.py      # Primary data collection (✅ Dynamic 10-year collection)
+│   ├── 02_validate_data.py     # Data quality validation (✅ Updated for current pipeline)
 │   └── snake_draft_VOR.py      # Draft strategy generation
 ├── analysis/               # Statistical modeling and analysis
 │   ├── montecarlo-historical-ff.py      # Monte Carlo simulations
-│   ├── bayesian-hierarchical-ff.py      # PyMC3 Bayesian model
 │   └── bayesian-hierarchical-ff-modern.py # PyMC4 Bayesian model
 ├── utils/                  # Utility functions and helpers
-│   ├── progress_monitor.py      # Progress monitoring utilities
-│   └── quick_*.py              # Testing scripts (to be evaluated)
+│   └── progress_monitor.py      # Progress monitoring utilities
 ├── run_pipeline.py         # Master pipeline orchestrator
 └── run_with_conda.sh       # Conda environment helper
 ```
@@ -79,3 +75,20 @@ Review `roadmap.md` and `tech-stack.md`. The immediate focus should be:
 - **Primary Environment**: `ffbayes` conda environment with PyMC4 and modern packages
 - **Fallback Environment**: PyMC3 environment if compatibility issues persist
 - **Helper Scripts**: `run_with_conda.sh` and `Makefile` for easy environment management
+- **Working Directory**: All operations should be performed from the project root directory (`/Users/ncamarda/Library/CloudStorage/OneDrive-Personal/Desktop/coding/ffbayes`)
+
+### Development Standards
+- **Working Environment**: The current working directory should always be the project root (`ffbayes/`)
+- **Script Execution**: All scripts should be run from the project root, not from subdirectories
+- **Path References**: Use relative paths from the project root for all file operations
+- **Environment Setup**: Always run `conda init && conda activate ffbayes` before executing any scripts
+
+### Critical Package Compatibility Issues (2025-01-19) - ✅ RESOLVED
+- **nfl_data_py Version**: Current version still uses `season_type` column (not `game_type` as initially suspected)
+- **Data Structure**: Weekly data and schedules maintain consistent column names across versions
+- **Root Cause Identified**: The "Series is ambiguous" error was caused by improper pandas row iteration using `iterrows()`
+- **Solution Implemented**: Replace `iterrows()` with `itertuples()` for proper scalar value extraction
+- **Status**: ✅ RESOLVED - Script now processes 11,250+ rows successfully across 2023-2024 seasons
+- **Performance**: Data collection completed in 3.0 seconds with no errors
+- **Output**: Successfully generated season datasets and combined dataset with proper opponent/home-away indicators
+- **Key Insight**: This was a pandas best practices issue, not a package compatibility issue

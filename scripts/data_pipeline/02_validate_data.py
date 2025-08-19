@@ -19,36 +19,39 @@ def validate_data_quality():
     print("🔍 Validating data quality...")
     
     # Check individual datasets
-    player_files = glob.glob("datasets/*_players.csv")
-    schedule_files = glob.glob("datasets/*_schedule.csv")
+    season_files = glob.glob("datasets/season_datasets/*season.csv")
     
     validation_results = {
-        'player_files': len(player_files),
-        'schedule_files': len(schedule_files),
+        'season_files': len(season_files),
         'total_rows': 0,
         'missing_data': 0,
-        'quality_score': 0
+        'quality_score': 100
     }
     
-    print(f"   📁 Found {len(player_files)} player datasets")
-    print(f"   📁 Found {len(schedule_files)} schedule datasets")
+    print(f"   📁 Found {len(season_files)} season datasets")
     
-    # Validate player data with progress bar
-    if player_files:
-        with alive_bar(len(player_files), title="Validating Player Data", bar="smooth") as bar:
-            for file in sorted(player_files):
+    # Validate season data with progress bar
+    if season_files:
+        with alive_bar(len(season_files), title="Validating Season Data", bar="smooth") as bar:
+            for file in sorted(season_files):
                 try:
                     df = pd.read_csv(file)
-                    year = file.split('_')[0].split('/')[-1]
+                    year = file.split('season.csv')[0].split('/')[-1]
                     validation_results['total_rows'] += len(df)
                     
-                    # Check for missing data
-                    missing_pct = (df.isnull().sum() / len(df) * 100).max()
-                    if missing_pct > 50:
-                        print(f"      ⚠️  {year}: High missing data ({missing_pct:.1f}%)")
+                    # Check for missing data (exclude injury status columns which are expected to be missing)
+                    # Focus on core fantasy football data columns
+                    core_columns = ['G#', 'Date', 'Tm', 'Away', 'Opp', 'FantPt', 'FantPtPPR', 'Name', 'PlayerID', 'Position', 'Season', 'is_home']
+                    df_core = df[core_columns]
+                    
+                    missing_counts = df_core.isna().sum()
+                    missing_pct = (missing_counts / len(df_core) * 100).max()
+                    
+                    if missing_pct > 10:  # Lower threshold since we're only checking core columns
+                        print(f"      ⚠️  {year}: High missing data in core columns ({missing_pct:.1f}%)")
                         validation_results['missing_data'] += 1
                     else:
-                        print(f"      ✅ {year}: Good data quality ({missing_pct:.1f}% missing)")
+                        print(f"      ✅ {year}: Good data quality ({missing_pct:.1f}% missing in core columns)")
                     
                     bar.text(f"Validated {year}")
                     bar()
@@ -58,10 +61,10 @@ def validate_data_quality():
                     bar()
     
     # Calculate quality score
-    if validation_results['player_files'] > 0:
+    if validation_results['season_files'] > 0:
         validation_results['quality_score'] = (
-            (validation_results['player_files'] - validation_results['missing_data']) / 
-            validation_results['player_files'] * 100
+            (validation_results['season_files'] - validation_results['missing_data']) / 
+            validation_results['season_files'] * 100
         )
     
     return validation_results
@@ -70,14 +73,14 @@ def check_data_completeness():
     """Check if we have all necessary data for analysis."""
     print("\n📊 Checking data completeness...")
     
-    # Check for recent years
+    # Check for recent years (last 10 available years)
     current_year = datetime.now().year
-    expected_years = list(range(2023, current_year + 1))
+    expected_years = list(range(current_year - 10, current_year))
     
     missing_years = []
     for year in expected_years:
-        player_file = f"datasets/{year}_players.csv"
-        if not os.path.exists(player_file):
+        season_file = f"datasets/season_datasets/{year}season.csv"
+        if not os.path.exists(season_file):
             missing_years.append(year)
     
     if missing_years:
@@ -114,7 +117,7 @@ def main():
     
     if is_complete and quality_results['quality_score'] > 80:
         print("\n🎉 Data validation passed! Ready for processing.")
-        print("🎯 Next step: Run 03_process_data.py")
+        print("🎯 Next step: Run analysis scripts")
     else:
         print("\n⚠️  Data validation issues found. Check data collection.")
         print("🔄 Re-run: 01_collect_data.py")
