@@ -5,7 +5,6 @@
 .DS_Store
 ._*
 .history/
-.vscode/
 .idea/
 
 # Python
@@ -35,3 +34,6 @@ plots/
 
 # Outputs
 *.tsv
+
+# Track Agent OS product docs
+!.agent-os/product/
