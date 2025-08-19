@@ -5,14 +5,16 @@ Tests existing data collection implementations and their capabilities.
 """
 
 import os
-import tempfile
-import unittest
-from unittest.mock import patch, MagicMock
-import pandas as pd
-import numpy as np
 
 # Import the modules we're testing
 import sys
+import tempfile
+import unittest
+from unittest.mock import patch
+
+import numpy as np
+import pandas as pd
+
 sys.path.append('scripts/data_pipeline')
 
 # We'll import these as they exist
@@ -172,6 +174,7 @@ class TestDataCollectionFunctionality(unittest.TestCase):
         """Test that progress monitoring can be integrated with data collection."""
         try:
             from alive_progress import alive_bar
+
             # Test that alive_progress can be used
             with alive_bar(10, title="Test Progress") as bar:
                 for i in range(10):

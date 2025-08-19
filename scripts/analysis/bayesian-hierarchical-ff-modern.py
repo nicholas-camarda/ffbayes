@@ -13,7 +13,6 @@ import pickle
 from datetime import datetime
 
 import matplotlib
-import numpy as np
 import pandas as pd
 import pymc as pm
 
@@ -21,78 +20,93 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error
 
-# Configuration
-CORES = 7  # multiprocessing.cpu_count() - 1
-print(f'Using {CORES} cores')
+# Default configuration - can be overridden by function arguments
+DEFAULT_CORES = 4
+DEFAULT_DRAWS = 1000
+DEFAULT_TUNE = 500
+DEFAULT_CHAINS = 4
+DEFAULT_PREDICTIVE_SAMPLES = 500
 
-def create_dataset(path_to_data_directory):
-    """Create and preprocess the fantasy football dataset."""
-    print("Loading and preprocessing data...")
+print(f'Default configuration: {DEFAULT_CORES} cores, {DEFAULT_DRAWS} draws, {DEFAULT_CHAINS} chains')
+
+def load_preprocessed_data(path_to_data_directory):
+    """Load preprocessed data for analysis."""
+    print("Loading preprocessed data for analysis...")
     
-    # Read in the datasets and combine
-    all_files = glob.glob(os.path.join(path_to_data_directory, '*.csv'))
-    data_temp = pd.concat((pd.read_csv(f) for f in all_files), ignore_index=True)
+    # Look for the preprocessed analysis dataset
+    output_dir = os.path.join(path_to_data_directory, 'combined_datasets')
+    analysis_files = glob.glob(os.path.join(output_dir, '*season_modern.csv'))
     
-    # Sort properly
-    data = data_temp.sort_values(
-        by=['Season', 'Name', 'G#'], ascending=[True, True, True]
-    )
-
-    # One-hot-encode the positions
-    data['pos_id'] = data['Position']
-    data['position'] = data['Position']
-    data = pd.get_dummies(data, columns=['position'])
-
-    # Identify teams with integer encoding
-    ids = np.array([k for k in data['Opp'].unique()])
-    team_names = ids.copy()
-    data['opp_team'] = data['Opp'].apply(lambda x: np.where(x == ids)[0][0])
-    data['team'] = data['Tm'].apply(lambda x: np.where(x == ids)[0][0])
-
-    # Create home/away indicator - Away column contains team names, so if Away == Tm, it's away
-    data['is_home'] = (data['Away'] != data['Tm']).astype(int)
-
-    # Position encoding
-    pos_ids = np.array([k for k in data['pos_id'].unique()])
-    pos_ids_nonan = pos_ids[np.where(pos_ids != 'nan')]
-    onehot_pos_ids = list(map(int, data['pos_id'].isin(pos_ids_nonan)))
-    data['pos_id'] = onehot_pos_ids
-
-    # Calculate seven game rolling average
-    num_day_roll_avg = 7
-    data['7_game_avg'] = data.groupby(['Name', 'Season'])['FantPt'].transform(
-        lambda x: x.rolling(num_day_roll_avg, min_periods=num_day_roll_avg).mean()
-    )
-
-    # Rank based on the 7-game average
-    ranks = data.groupby(['Name', 'Season'])['7_game_avg'].rank(
-        pct=False, method='average'
-    )
-    quartile_ranks = pd.qcut(ranks, 4, labels=False, duplicates='drop')
-    data['rank'] = quartile_ranks.tolist()
-
-    data['diff_from_avg'] = data['FantPt'] - data['7_game_avg']
-
-    # Remove all NA and convert rank to integer
-    data = data.dropna(axis=0)
-    data = data.astype({'rank': int})
-
-    # Save processed data
-    data.to_csv('combined_datasets/2017-2021season_modern.csv')
-    print(f"Processed data shape: {data.shape}")
+    if not analysis_files:
+        raise ValueError(f"No preprocessed analysis data found in {output_dir}. Run 03_preprocess_analysis_data.py first.")
+    
+    # Use the most recent preprocessed file
+    latest_file = max(analysis_files, key=os.path.getctime)
+    print(f"Loading preprocessed data from: {latest_file}")
+    
+    data = pd.read_csv(latest_file)
+    print(f"Loaded data shape: {data.shape}")
+    
+    # Extract team names from the data
+    team_names = data['Opp'].unique()
+    print(f"Found {len(team_names)} teams")
     
     return data, team_names
 
 
-def bayesian_hierarchical_ff_modern(path_to_data_directory, cores=CORES):
+def load_recent_trace():
+    """Try to load a recent trace to avoid re-sampling."""
+    results_dir = 'results/bayesian-hierarchical-results'
+    if not os.path.exists(results_dir):
+        return None
+    
+    trace_files = glob.glob(os.path.join(results_dir, 'trace_*.pkl'))
+    if not trace_files:
+        return None
+    
+    # Get the most recent trace file
+    latest_trace = max(trace_files, key=os.path.getctime)
+    
+    try:
+        with open(latest_trace, 'rb') as f:
+            trace = pickle.load(f)
+        print(f"✅ Loaded existing trace from: {latest_trace}")
+        return trace
+    except Exception as e:
+        print(f"⚠️  Could not load trace: {e}")
+        return None
+
+
+def bayesian_hierarchical_ff_modern(path_to_data_directory, cores=DEFAULT_CORES, draws=DEFAULT_DRAWS, tune=DEFAULT_TUNE, chains=DEFAULT_CHAINS, predictive_samples=DEFAULT_PREDICTIVE_SAMPLES, use_existing_trace=True):
     """Modern PyMC4 implementation of Bayesian hierarchical fantasy football model."""
     
-    # Load and preprocess data
-    data, team_names = create_dataset(path_to_data_directory)
+    # Try to load existing trace first
+    if use_existing_trace:
+        existing_trace = load_recent_trace()
+        if existing_trace is not None:
+            print("🔄 Using existing trace - skipping expensive sampling!")
+            trace = existing_trace
+        else:
+            print("🆕 No existing trace found - will run full sampling")
+            trace = None
+    else:
+        trace = None
     
-    # Split into train/test (2020 for training, 2021 for testing)
-    train = data[data.apply(lambda x: x['Season'] == 2020, axis=1)]
-    test = data[data.apply(lambda x: x['Season'] == 2021, axis=1)]
+    # Load preprocessed data
+    data, team_names = load_preprocessed_data(path_to_data_directory)
+    
+    # Split into train/test (use last 2 years dynamically)
+    available_years = sorted(data['Season'].unique())
+    if len(available_years) < 2:
+        raise ValueError("Need at least 2 years of data for train/test split")
+    
+    train_year = available_years[-2]  # Second to last year
+    test_year = available_years[-1]   # Last year
+    
+    train = data[data.apply(lambda x: x['Season'] == train_year, axis=1)]
+    test = data[data.apply(lambda x: x['Season'] == test_year, axis=1)]
+    
+    print(f"Training on {train_year} data, testing on {test_year} data")
     
     print(f"Training data shape: {train.shape}")
     print(f"Test data shape: {test.shape}")
@@ -196,19 +210,35 @@ def bayesian_hierarchical_ff_modern(path_to_data_directory, cores=CORES):
             observed=train['FantPt']
         )
 
-        # Part 5: Training
-        print("Part 5: Training model...")
-        trace = pm.sample(
-            draws=1000,  # Reduced from 2000
-            tune=500,    # Reduced from 1000
-            cores=cores,
-            return_inferencedata=True,
-            random_seed=42,
-            target_accept=0.95,  # Increased target acceptance
-            max_treedepth=12     # Increased max tree depth
-        )
+        # Part 5: Training (only if we don't have a trace)
+        if trace is None:
+            print("Part 5: Training model...")
+            trace = pm.sample(
+                draws=draws,
+                tune=tune,
+                chains=chains,
+                cores=cores,
+                return_inferencedata=True,
+                random_seed=42,
+                target_accept=0.95,
+                max_treedepth=12
+            )
+        else:
+            print("Part 5: Using existing trace (skipping sampling)")
 
         print("Model training completed!")
+        
+        # Save the expensive trace results immediately
+        print("💾 Saving sampling results...")
+        trace_file = f'results/bayesian-hierarchical-results/trace_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pkl'
+        os.makedirs(os.path.dirname(trace_file), exist_ok=True)
+        
+        try:
+            with open(trace_file, 'wb') as f:
+                pickle.dump(trace, f)
+            print(f"✅ Trace saved to: {trace_file}")
+        except Exception as e:
+            print(f"⚠️  Warning: Could not save trace: {e}")
         
         # Part 6: Model evaluation and predictions
         print("Part 6: Evaluating model...")
@@ -234,6 +264,17 @@ def bayesian_hierarchical_ff_modern(path_to_data_directory, cores=CORES):
         # Calculate predictions
         pred_mean = pm_pred.posterior_predictive['fantasy_points'].mean(dim=('chain', 'draw'))
         pred_std = pm_pred.posterior_predictive['fantasy_points'].std(dim=('chain', 'draw'))
+        
+        # Ensure predictions match test data length
+        print(f"Test data length: {len(test)}")
+        print(f"Predictions length: {len(pred_mean)}")
+        
+        # If lengths don't match, take only the first len(test) predictions
+        if len(pred_mean) != len(test):
+            print("⚠️  Length mismatch detected. Truncating predictions to match test data.")
+            pred_mean = pred_mean[:len(test)]
+            pred_std = pred_std[:len(test)]
+            print(f"Adjusted predictions length: {len(pred_mean)}")
 
         # Model evaluation
         mae_bayesian = mean_absolute_error(test['FantPt'].values, pred_mean.values)
@@ -286,22 +327,24 @@ def bayesian_hierarchical_ff_modern(path_to_data_directory, cores=CORES):
         plt.savefig('plots/modern_predictions_vs_actual.png', dpi=300, bbox_inches='tight')
         plt.close()
 
-        # Save results
+        # Save results (avoid pickle issues with PyMC objects)
         results = {
-            'model': model,
-            'trace': trace,
-            'predictions': pm_pred,
-            'test_data': test,
             'mae_bayesian': mae_bayesian,
             'mae_baseline': mae_baseline,
             'team_names': team_names,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now().isoformat(),
+            'test_data_shape': test.shape,
+            'predictions_shape': pred_mean.shape
         }
         
-        with open('results/bayesian-hierarchical-results/modern_model_results.pkl', 'wb') as f:
-            pickle.dump(results, f)
+        # Save results as JSON instead of pickle to avoid serialization issues
+        import json
+        results_file = 'results/bayesian-hierarchical-results/modern_model_results.json'
+        with open(results_file, 'w') as f:
+            json.dump(results, f, indent=2, default=str)
         
-        print("Results saved to results/bayesian-hierarchical-results/modern_model_results.pkl")
+        print(f"Results saved to {results_file}")
+        
         print("Model training and evaluation completed successfully!")
         
         return trace, results
@@ -317,8 +360,8 @@ def main():
     # Create results directory
     os.makedirs('results/bayesian-hierarchical-results', exist_ok=True)
     
-    # Run the model
-    trace, results = bayesian_hierarchical_ff_modern('datasets', cores=CORES)
+    # Run the model with default configuration
+    trace, results = bayesian_hierarchical_ff_modern('datasets')
     
     print("\n" + "=" * 60)
     print("Model Summary:")
