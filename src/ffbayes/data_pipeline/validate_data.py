@@ -370,68 +370,74 @@ def check_data_completeness():
         print("   ✅ All expected recent years available")
         return True
 
-def main():
-    """Main data validation function."""
-    print("=" * 60)
-    print("DATA VALIDATION PIPELINE")
-    print("=" * 60)
+def main(args=None):
+    """Main data validation function with standardized interface."""
+    from ffbayes.utils.script_interface import create_standardized_interface
+    
+    interface = create_standardized_interface(
+        "ffbayes-validate",
+        "Data validation pipeline with standardized interface"
+    )
+    
+    # Parse arguments
+    if args is None:
+        args = interface.parse_arguments()
+    
+    # Set up logging
+    logger = interface.setup_logging(args)
     
     start_time = time.time()
     
     # Validate data quality
-    quality_results = validate_data_quality()
+    quality_results = interface.handle_errors(validate_data_quality)
     
     # Check completeness
-    is_complete = check_data_completeness()
+    is_complete = interface.handle_errors(check_data_completeness)
     
     elapsed_time = time.time() - start_time
     
-    # Summary
-    print("\n" + "=" * 60)
-    print("VALIDATION SUMMARY")
-    print("=" * 60)
-    print(f"⏱️  Validation completed in {elapsed_time:.1f} seconds")
-    print(f"📊 Total rows: {quality_results['total_rows']:,}")
-    print(f"🎯 Quality score: {quality_results['quality_score']:.1f}%")
-    print(f"✅ Data complete: {is_complete}")
+    # Log summary
+    logger.info(f"Validation completed in {elapsed_time:.1f} seconds")
+    logger.info(f"Total rows: {quality_results['total_rows']:,}")
+    logger.info(f"Quality score: {quality_results['quality_score']:.1f}%")
+    logger.info(f"Data complete: {is_complete}")
     
-    # Enhanced error and warning reporting
+    # Log errors and warnings
     if quality_results['errors']:
-        print(f"\n❌ ERRORS FOUND ({len(quality_results['errors'])}):")
+        logger.error(f"Errors found ({len(quality_results['errors'])}):")
         for error in quality_results['errors']:
-            print(f"   • {error}")
+            logger.error(f"  • {error}")
     
     if quality_results['warnings']:
-        print(f"\n⚠️  WARNINGS ({len(quality_results['warnings'])}):")
+        logger.warning(f"Warnings ({len(quality_results['warnings'])}):")
         for warning in quality_results['warnings']:
-            print(f"   • {warning}")
+            logger.warning(f"  • {warning}")
     
-    # Enhanced validation results
+    # Log validation results
     if quality_results['data_consistency']:
-        print(f"\n🔍 DATA CONSISTENCY ISSUES ({len(quality_results['data_consistency'])}):")
+        logger.info(f"Data consistency issues ({len(quality_results['data_consistency'])}):")
         for issue in quality_results['data_consistency']:
-            print(f"   • {issue}")
+            logger.info(f"  • {issue}")
     
     if quality_results['statistical_checks']:
-        print(f"\n📊 STATISTICAL VALIDATION ISSUES ({len(quality_results['statistical_checks'])}):")
+        logger.info(f"Statistical validation issues ({len(quality_results['statistical_checks'])}):")
         for issue in quality_results['statistical_checks']:
-            print(f"   • {issue}")
+            logger.info(f"  • {issue}")
     
     if quality_results['outlier_detection']:
-        print(f"\n📈 OUTLIER DETECTION ({len(quality_results['outlier_detection'])}):")
+        logger.info(f"Outlier detection ({len(quality_results['outlier_detection'])}):")
         for issue in quality_results['outlier_detection']:
-            print(f"   • {issue}")
+            logger.info(f"  • {issue}")
     
-    # Final status
+    # Determine final status
     if is_complete and quality_results['quality_score'] > 80 and not quality_results['errors']:
-        print("\n🎉 Data validation passed! Ready for processing.")
-        print("🎯 Next step: Run analysis scripts")
+        interface.log_completion("Data validation passed! Ready for processing.")
     elif quality_results['errors']:
-        print("\n❌ Critical validation errors found. Fix data collection issues first.")
-        print("🔄 Re-run: 01_collect_data.py")
+        interface.log_error("Critical validation errors found. Fix data collection issues first.", interface.EXIT_DATA_ERROR)
     else:
-        print("\n⚠️  Data validation issues found. Check data collection.")
-        print("🔄 Re-run: 01_collect_data.py")
+        interface.log_completion("Data validation completed with warnings. Check data collection.")
+    
+    return quality_results
 
 if __name__ == "__main__":
     main()

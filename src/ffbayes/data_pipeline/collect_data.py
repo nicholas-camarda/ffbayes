@@ -445,28 +445,61 @@ def collect_nfl_data(years=None):
     return successful_years
 
 
-def main():
-    """Main data collection function."""
-    print("=" * 60)
-    print("ENHANCED NFL DATA COLLECTION PIPELINE")
-    print("=" * 60)
-    print("Merged functionality from get_ff_data.py and get_ff_data_improved.py")
-    print("=" * 60)
+def main(args=None):
+    """Main data collection function with standardized interface."""
+    from ffbayes.utils.script_interface import create_standardized_interface
+    
+    interface = create_standardized_interface(
+        "ffbayes-collect",
+        "Enhanced NFL data collection pipeline with standardized interface"
+    )
+    
+    # Parse arguments
+    if args is None:
+        args = interface.parse_arguments()
+    
+    # Add data-specific arguments
+    parser = interface.setup_argument_parser()
+    parser = interface.add_data_arguments(parser)
+    args = parser.parse_args()
+    
+    # Set up logging
+    logger = interface.setup_logging(args)
+    
+    # Parse years if provided
+    years = None
+    if args.years:
+        years = interface.parse_years(args.years)
+        logger.info(f"Processing specified years: {years}")
+    else:
+        years = DEFAULT_YEARS
+        logger.info(f"Processing default years: {years}")
+    
+    # Check for quick test mode
+    if args.quick_test:
+        logger.info("Running in QUICK_TEST mode - processing limited data")
+        years = years[:2]  # Only process first 2 years in quick test mode
+    
+    # Check for force refresh
+    if args.force_refresh:
+        logger.info("Force refresh enabled - will overwrite existing data")
     
     start_time = time.time()
     
-    # Collect data for the last 10 years
-    successful_years = collect_nfl_data()  # Uses DEFAULT_YEARS (2015-2024)
+    # Collect data for specified years
+    successful_years = interface.handle_errors(collect_nfl_data, years)
     
     # Combine datasets
     if successful_years:
-        combine_datasets(SEASON_DATASETS_DIR, COMBINED_DATASETS_DIR, successful_years)
+        interface.handle_errors(combine_datasets, SEASON_DATASETS_DIR, COMBINED_DATASETS_DIR, successful_years)
     
     elapsed_time = time.time() - start_time
-    print(f"\n⏱️  Collection completed in {elapsed_time:.1f} seconds")
-    print(f"✅ Successfully processed {len(successful_years)} years: {successful_years}")
+    logger.info(f"Collection completed in {elapsed_time:.1f} seconds")
+    logger.info(f"Successfully processed {len(successful_years)} years: {successful_years}")
     
-    print("\n🎯 Next step: Run 02_validate_data.py")
+    interface.log_completion("Data collection completed successfully")
+    
+    return successful_years
 
 
 if __name__ == "__main__":

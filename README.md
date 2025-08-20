@@ -26,10 +26,14 @@ This pipeline combines statistical modeling with fantasy football data to:
 - **Advanced draft strategy** based on statistical insights
 
 ### Technical Features
-- **Comprehensive testing** with 40+ unit tests
+- **Comprehensive testing** with 142+ unit tests
 - **Progress monitoring** for long-running operations
 - **Flexible configuration** for different analysis scenarios
 - **Reproducible results** with proper seed management
+- **Standardized script interfaces** with consistent argument parsing
+- **Console scripts** for easy command-line usage
+- **Model validation** with convergence checking and quality assessment
+- **Enhanced pipeline orchestration** with dependency management
 
 ## Installation
 
@@ -46,12 +50,15 @@ This pipeline combines statistical modeling with fantasy football data to:
    cd ffbayes
    ```
 
-2. **Install dependencies:**
+2. **Create and activate the conda environment:**
    ```bash
-   pip install pandas numpy matplotlib seaborn
-   pip install nfl_data_py alive_progress
-   pip install pymc scikit-learn
-   pip install pytest  # for testing
+   conda env create -f environment.yml
+   conda activate ffbayes
+   ```
+
+3. **Install the package in development mode:**
+   ```bash
+   pip install -e .
    ```
 
 That's it! The pipeline will automatically create all required directories when you first run it.
@@ -63,9 +70,9 @@ That's it! The pipeline will automatically create all required directories when 
 #### Quick Test Mode (Recommended for Development)
 For fast testing and development, use quick test mode:
 ```bash
-QUICK_TEST=true python scripts/run_pipeline.py
+QUICK_TEST=true ffbayes-pipeline
 # Or for just Monte Carlo:
-QUICK_TEST=true python scripts/analysis/montecarlo-historical-ff.py
+QUICK_TEST=true ffbayes-mc
 ```
 
 Quick test mode automatically:
@@ -77,22 +84,22 @@ Quick test mode automatically:
 The pipeline automatically uses all CPU cores for faster execution:
 ```bash
 # Use all cores (default)
-python scripts/run_pipeline.py
+ffbayes-pipeline
 
 # Disable multiprocessing (single-threaded)
-USE_MULTIPROCESSING=false python scripts/run_pipeline.py
+USE_MULTIPROCESSING=false ffbayes-pipeline
 
 # Limit to specific number of cores
-MAX_CORES=4 python scripts/run_pipeline.py
+MAX_CORES=4 ffbayes-pipeline
 ```
 
 #### Full Configuration Example
 ```bash
 # Fast testing with 4 cores
-QUICK_TEST=true MAX_CORES=4 python scripts/run_pipeline.py
+QUICK_TEST=true MAX_CORES=4 ffbayes-pipeline
 
 # Production run with all cores
-USE_MULTIPROCESSING=true python scripts/run_pipeline.py
+USE_MULTIPROCESSING=true ffbayes-pipeline
 ```
 
 ### Monte Carlo Simulation
@@ -100,15 +107,15 @@ Manual simulation configuration (if not using environment variables):
 
 - **Default**: 5,000 simulations (high accuracy, ~20 minutes)
 - **Quick Test**: 200 simulations (fast, ~3 minutes)
-- **Custom**: Edit `scripts/analysis/montecarlo-historical-ff.py`:
-  ```python
-  number_of_simulations = 1000  # Change this value
+- **Custom**: Use command-line arguments:
+  ```bash
+  ffbayes-mc --simulations 1000
   ```
 
 ### Data Years
-By default, the pipeline uses the last 5 years of data (2020-2024). You can modify this in the scripts:
-```python
-my_years = [2020, 2021, 2022, 2023, 2024]  # Adjust year range
+By default, the pipeline uses the last 5 years of data (2020-2024). You can specify custom years:
+```bash
+ffbayes-collect --years 2020,2021,2022,2023,2024
 ```
 
 ## 🚀 Quick Start
@@ -120,7 +127,7 @@ The pipeline automatically creates all necessary directories. Simply run:
 conda activate ffbayes
 
 # Run the complete pipeline
-python scripts/run_pipeline.py
+ffbayes-pipeline
 ```
 
 ## 📦 Environment Setup
@@ -134,6 +141,9 @@ conda env create -f environment.yml
 # Activate the environment
 conda activate ffbayes
 
+# Install the package in development mode
+pip install -e .
+
 # Verify PyMC4 is installed
 python -c "import pymc; print(f'PyMC version: {pymc.__version__}')"
 ```
@@ -145,6 +155,8 @@ python -c "import pymc; print(f'PyMC version: {pymc.__version__}')"
 - **scikit-learn**: Machine learning utilities
 - **nfl-data-py**: NFL data collection
 - **matplotlib**: Plotting and visualization
+- **pytest**: Testing framework
+- **jupyter**: Interactive development
 
 ## Quick Start
 
@@ -153,7 +165,13 @@ python -c "import pymc; print(f'PyMC version: {pymc.__version__}')"
 The simplest way to get started:
 
 ```bash
-python scripts/run_pipeline.py
+ffbayes-pipeline
+```
+
+Or using the module directly:
+
+```bash
+python -m ffbayes.run_pipeline
 ```
 
 This will:
@@ -169,28 +187,74 @@ For more control, run individual pipeline stages:
 
 #### Collect Data
 ```bash
-python scripts/data_pipeline/01_collect_data.py
+ffbayes-collect
 ```
 
 #### Validate Data
 ```bash
-python scripts/data_pipeline/02_validate_data.py
+ffbayes-validate
 ```
 
 #### Preprocess for Analysis
 ```bash
-python scripts/data_pipeline/03_preprocess_analysis_data.py
+ffbayes-preprocess
 ```
 
 #### Run Monte Carlo Simulation
 ```bash
-python scripts/analysis/montecarlo-historical-ff.py
+ffbayes-mc
 ```
 
 #### Run Bayesian Analysis
 ```bash
-python scripts/analysis/bayesian-hierarchical-ff-modern.py
+ffbayes-bayes
 ```
+
+#### Run Team Aggregation
+```bash
+ffbayes-agg
+```
+
+#### Run Model Comparison
+```bash
+ffbayes-compare
+```
+
+#### Generate Visualizations
+```bash
+ffbayes-viz
+```
+
+#### Generate Advanced Draft Strategy
+```bash
+ffbayes-draft-strategy --draft-position 3 --league-size 12 --risk-tolerance medium
+```
+
+### 3. Console Scripts Overview
+
+The package provides standardized console scripts for all major operations:
+
+| Script | Purpose | Key Arguments |
+|--------|---------|---------------|
+| `ffbayes-pipeline` | Run complete pipeline | `--quick-test`, `--verbose` |
+| `ffbayes-collect` | Collect NFL data | `--years`, `--force-refresh` |
+| `ffbayes-validate` | Validate data quality | `--data-dir`, `--output-dir` |
+| `ffbayes-preprocess` | Preprocess data | `--data-dir`, `--quick-test` |
+| `ffbayes-mc` | Monte Carlo simulation | `--simulations`, `--cores` |
+| `ffbayes-bayes` | Bayesian analysis | `--draws`, `--tune`, `--chains` |
+| `ffbayes-agg` | Team aggregation | `--data-dir`, `--output-dir` |
+| `ffbayes-compare` | Model comparison | `--data-dir`, `--output-dir` |
+| `ffbayes-viz` | Generate visualizations | `--data-dir`, `--output-dir` |
+| `ffbayes-draft-strategy` | Advanced draft strategy | `--draft-position`, `--league-size`, `--risk-tolerance` |
+
+All scripts support standardized arguments:
+- `--help`: Show help information
+- `--verbose`: Enable verbose logging
+- `--quiet`: Suppress output
+- `--log-level`: Set logging level (DEBUG, INFO, WARNING, ERROR)
+- `--quick-test`: Enable quick test mode
+- `--config`: Specify configuration file
+- `--output-dir`: Specify output directory
 
 ## Using Your Own Team
 
@@ -220,7 +284,7 @@ The pipeline will automatically find and use your most recent team file.
 
 ### Monte Carlo Simulation
 
-Key parameters in `montecarlo-historical-ff.py`:
+Key parameters in `ffbayes-mc`:
 
 ```python
 # Simulation settings
@@ -228,12 +292,12 @@ number_of_simulations = 5000  # Number of simulations to run
 my_years = [2019, 2020, 2021, 2022, 2023]  # Years for historical sampling
 
 # Run with custom settings
-python scripts/analysis/montecarlo-historical-ff.py
+ffbayes-mc --draws 2000 --cores 8
 ```
 
 ### Bayesian Model
 
-Key parameters in `bayesian-hierarchical-ff-modern.py`:
+Key parameters in `ffbayes-bayes`:
 
 ```python
 # MCMC settings
@@ -243,12 +307,7 @@ DEFAULT_CHAINS = 4       # Parallel chains
 DEFAULT_CORES = 4        # CPU cores to use
 
 # Run with custom settings
-trace, results = bayesian_hierarchical_ff_modern(
-    'datasets', 
-    draws=2000, 
-    tune=1000, 
-    chains=4
-)
+ffbayes-bayes --draws 2000 --tune 1000 --chains 6 --cores 8
 ```
 
 ## Understanding the Results
@@ -286,18 +345,31 @@ Improvement: 16.6%
 
 ```
 ffbayes/
-├── scripts/
-│   ├── run_pipeline.py              # Main pipeline orchestrator
-│   ├── data_pipeline/
-│   │   ├── 01_collect_data.py       # Data collection from nfl_data_py
-│   │   ├── 02_validate_data.py      # Data quality validation
-│   │   └── 03_preprocess_analysis_data.py  # Analysis preprocessing
-│   └── analysis/
-│       ├── montecarlo-historical-ff.py     # Monte Carlo simulation
-│       └── bayesian-hierarchical-ff-modern.py  # Bayesian modeling
-├── tests/                           # Comprehensive test suite
-├── datasets/                        # Raw and processed data
-├── results/                         # Analysis outputs
+├── src/ffbayes/                    # Main package source
+│   ├── run_pipeline.py             # Main pipeline orchestrator
+│   ├── data_pipeline/              # Data processing modules
+│   │   ├── collect_data.py         # Data collection from nfl_data_py
+│   │   ├── validate_data.py        # Data quality validation
+│   │   └── preprocess_analysis_data.py  # Analysis preprocessing
+│   ├── draft_strategy/             # Draft strategy modules
+│   │   ├── bayesian_draft_strategy.py   # Advanced Bayesian draft strategy
+│   │   └── snake_draft_VOR.py      # Traditional VOR-based draft strategy
+│   ├── analysis/                   # Analysis modules
+│   │   ├── montecarlo_historical_ff.py     # Monte Carlo simulation
+│   │   ├── bayesian_hierarchical_ff_modern.py  # Bayesian modeling
+│   │   ├── bayesian_team_aggregation.py    # Team aggregation
+│   │   ├── model_comparison_framework.py   # Model comparison
+│   │   └── create_team_aggregation_visualizations.py  # Visualizations
+│   └── utils/                      # Utility modules
+│       ├── interface_standards.py  # Standard interfaces
+│       ├── progress_monitor.py     # Progress monitoring
+│       ├── script_interface.py     # Script standardization
+│       ├── model_validation.py     # Model validation
+│       └── enhanced_pipeline_orchestrator.py  # Pipeline orchestration
+├── tests/                          # Comprehensive test suite
+├── config/                         # Configuration files
+├── datasets/                       # Raw and processed data
+├── results/                        # Analysis outputs
 ├── plots/                          # Generated visualizations
 └── my_ff_teams/                    # Your team configurations
 ```
@@ -308,13 +380,12 @@ Verify everything works correctly:
 
 ```bash
 # Run all tests
-pytest tests/
+pytest
 
 # Run specific test suites
-pytest tests/test_monte_carlo_simulation.py
-pytest tests/test_pymc4_bayesian_model.py
-pytest tests/test_consolidated_data_collection.py
-pytest tests/test_enhanced_data_validation.py
+pytest tests/test_utility_integration.py
+pytest tests/test_script_standardization.py
+pytest tests/test_standardized_interfaces.py
 ```
 
 ## Common Issues

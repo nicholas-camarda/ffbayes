@@ -446,50 +446,90 @@ def simulate(team, db, years, exps=10):
     return outcome
 
 
-def main(years=my_years, simulations=number_of_simulations):
+def main(args=None):
     """
-    Main function with enhanced progress monitoring and logging.
+    Main function with standardized interface.
     """
-    print("🚀 Fantasy Football Monte Carlo Simulation")
-    print(f"   Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("   Simulation parameters:")
-    print(f"     Years: {years}")
-    print(f"     Number of simulations: {simulations:,}")
+    from ffbayes.utils.script_interface import create_standardized_interface
     
-    if QUICK_TEST:
-        print("   🚀 QUICK TEST MODE: Using reduced parameters for faster execution")
+    interface = create_standardized_interface(
+        "ffbayes-mc",
+        "Fantasy Football Monte Carlo Simulation with standardized interface"
+    )
     
-    print()
+    # Parse arguments
+    if args is None:
+        args = interface.parse_arguments()
+    
+    # Add model-specific arguments
+    parser = interface.setup_argument_parser()
+    parser = interface.add_model_arguments(parser)
+    parser = interface.add_data_arguments(parser)
+    args = parser.parse_args()
+    
+    # Set up logging
+    logger = interface.setup_logging(args)
+    
+    # Parse years if provided
+    years = my_years
+    if args.years:
+        years = interface.parse_years(args.years)
+        logger.info(f"Processing specified years: {years}")
+    else:
+        logger.info(f"Processing default years: {years}")
+    
+    # Get simulations count
+    simulations = number_of_simulations
+    if args.quick_test:
+        logger.info("Running in QUICK_TEST mode - using reduced simulations")
+        simulations = min(simulations, 1000)  # Limit simulations in quick test mode
+    
+    # Override with command line arguments if provided
+    if args.cores:
+        global MAX_CORES
+        MAX_CORES = args.cores
+        logger.info(f"Using {MAX_CORES} CPU cores")
+    
+    logger.info(f"Simulation parameters: Years={years}, Simulations={simulations:,}")
     
     # Load team locally for this execution
-    print("\n📋 Loading team data...")
-    my_team = load_team()
-    print(f"   Loaded {len(my_team)} players")
+    logger.info("Loading team data...")
+    my_team = interface.handle_errors(load_team)
+    logger.info(f"Loaded {len(my_team)} players")
     
     # Create team locally for this execution
-    print("\n🔍 Processing team against historical database...")
+    logger.info("Processing team against historical database...")
     # Load combined data here to avoid module-level I/O during import
     global combined_data
-    combined_data = get_combined_data(directory_path='datasets')
-    team = make_team(team=my_team, db=combined_data)
-    print(f"   Found {len(team)} players with historical data")
+    data_dir = interface.get_data_directory(args)
+    combined_data = interface.handle_errors(get_combined_data, directory_path=str(data_dir))
+    team = interface.handle_errors(make_team, team=my_team, db=combined_data)
+    logger.info(f"Found {len(team)} players with historical data")
     
     if len(team) == 0:
-        print("❌ No players found in historical database. Cannot run simulation.")
+        interface.log_error("No players found in historical database. Cannot run simulation.", interface.EXIT_DATA_ERROR)
         return
     
     # Display team roster
-    print("\n👥 Final team roster:")
+    logger.info("Final team roster:")
     for idx, player in team.iterrows():
-        print(f"   {player['Position']}: {player['Name']} ({player['Tm']})")
+        logger.info(f"  {player['Position']}: {player['Name']} ({player['Tm']})")
     
     # Run simulation with parallel processing
     start_time = datetime.now()
-    outcome = simulate_parallel(team, combined_data, years, simulations)
+    outcome = interface.handle_errors(simulate_parallel, team, combined_data, years, simulations)
     total_time = (datetime.now() - start_time).total_seconds()
     
+    # Validate Monte Carlo results
+    logger.info("Validating Monte Carlo simulation results...")
+    validation_results = interface.validate_monte_carlo_model(outcome)
+    if not validation_results.get('valid', True):
+        logger.warning("Monte Carlo validation issues detected")
+    else:
+        logger.info("Monte Carlo results validated successfully")
+    
     # Generate comprehensive results summary
-    print("\n📈 Simulation Results:")
+    logger.info("Simulation Results:")
     
     # Calculate statistics for the Total column (team scores)
     if 'Total' in outcome.columns:
@@ -504,29 +544,31 @@ def main(years=my_years, simulations=number_of_simulations):
         ci_lower = mean_score - 1.96 * se_score
         ci_upper = mean_score + 1.96 * se_score
         
-        print(f"   Team projection: {mean_score:.2f} points")
-        print(f"   Standard deviation: {std_score:.2f} points")
-        print(f"   Standard error: {se_score:.2f}")
-        print(f"   Min score: {min_score:.2f} points")
-        print(f"   Max score: {max_score:.2f} points")
-        print(f"   95% confidence interval: [{ci_lower:.2f}, {ci_upper:.2f}]")
+        logger.info(f"  Team projection: {mean_score:.2f} points")
+        logger.info(f"  Standard deviation: {std_score:.2f} points")
+        logger.info(f"  Standard error: {se_score:.2f}")
+        logger.info(f"  Min score: {min_score:.2f} points")
+        logger.info(f"  Max score: {max_score:.2f} points")
+        logger.info(f"  95% confidence interval: [{ci_lower:.2f}, {ci_upper:.2f}]")
     
-    print("\n🏆 Player Performance Summary:")
+    logger.info("Player Performance Summary:")
     for col in outcome.columns:
         if col != 'Total':  # Skip the total column
             player_scores = outcome[col]
-            print(f"   {col}: {player_scores.mean():.1f} ± {player_scores.std():.1f} points")
+            logger.info(f"  {col}: {player_scores.mean():.1f} ± {player_scores.std():.1f} points")
     
     # Save results
-    print("\n💾 Saving results...")
-    output_file = f'results/montecarlo_results/{todays_date.year}_projections_from_years{years}.tsv'
+    logger.info("Saving results...")
+    output_dir = interface.get_output_directory(args)
+    output_file = output_dir / f'{todays_date.year}_projections_from_years{years}.tsv'
     
     outcome.to_csv(output_file, sep='\t')
-    print(f"   Results saved to: {output_file}")
+    logger.info(f"Results saved to: {output_file}")
     
-    print(f"\n⏱️  Total execution time: {total_time:.1f} seconds")
-    print(f"   Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("✅ Monte Carlo simulation completed successfully!")
+    logger.info(f"Total execution time: {total_time:.1f} seconds")
+    interface.log_completion("Monte Carlo simulation completed successfully")
+    
+    return outcome
 
 
 if __name__ == '__main__':

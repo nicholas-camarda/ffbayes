@@ -1,143 +1,97 @@
 {
-  "pipeline_steps": [
+  "pipeline": {
+    "name": "Fantasy Football Analytics Pipeline",
+    "version": "1.0.0",
+    "description": "Comprehensive fantasy football analytics pipeline with Monte Carlo and Bayesian analysis"
+  },
+  "stages": [
     {
-      "name": "Data Collection",
-      "script": "scripts/data_pipeline/01_collect_data.py",
-      "description": "Collect raw NFL data from multiple sources",
-      "dependencies": [],
+      "name": "data_collection",
+      "script": "ffbayes.data_pipeline.collect_data",
+      "description": "Collect NFL fantasy football data",
       "timeout": 300,
-      "retry_count": 3,
-      "critical": true,
-      "parallel_group": "data"
+      "retries": 3,
+      "dependencies": []
     },
     {
-      "name": "Data Validation",
-      "script": "scripts/data_pipeline/02_validate_data.py",
-      "description": "Validate data quality and completeness",
-      "dependencies": ["Data Collection"],
-      "timeout": 180,
-      "retry_count": 2,
-      "critical": true,
-      "parallel_group": "data"
-    },
-    {
-      "name": "Data Preprocessing",
-      "script": "scripts/data_pipeline/03_preprocess_analysis_data.py",
-      "description": "Preprocess data for analysis pipeline",
-      "dependencies": ["Data Validation"],
+      "name": "data_validation",
+      "script": "ffbayes.data_pipeline.validate_data",
+      "description": "Validate collected data quality",
       "timeout": 120,
-      "retry_count": 2,
-      "critical": false,
-      "parallel_group": "data"
+      "retries": 2,
+      "dependencies": ["data_collection"]
     },
     {
-      "name": "Monte Carlo Simulation",
-      "script": "scripts/analysis/montecarlo-historical-ff.py",
-      "description": "Generate team-level projections using historical data",
-      "dependencies": ["Data Preprocessing"],
-      "timeout": 600,
-      "retry_count": 1,
-      "critical": false,
-      "parallel_group": "analysis"
-    },
-    {
-      "name": "Bayesian Predictions",
-      "script": "scripts/analysis/bayesian-hierarchical-ff-modern.py",
-      "description": "Generate player-level predictions with uncertainty using PyMC4",
-      "dependencies": ["Data Preprocessing"],
-      "timeout": 900,
-      "retry_count": 1,
-      "critical": false,
-      "parallel_group": "analysis"
-    },
-    {
-      "name": "Team Aggregation",
-      "script": "scripts/analysis/bayesian-team-aggregation.py",
-      "description": "Aggregate individual predictions into team-level projections",
-      "dependencies": ["Monte Carlo Simulation", "Bayesian Predictions"],
-      "timeout": 300,
-      "retry_count": 2,
-      "critical": false,
-      "parallel_group": "aggregation"
-    },
-    {
-      "name": "Model Comparison",
-      "script": "scripts/analysis/model_comparison_framework.py",
-      "description": "Compare Monte Carlo vs Bayesian model performance",
-      "dependencies": ["Team Aggregation"],
-      "timeout": 240,
-      "retry_count": 1,
-      "critical": false,
-      "parallel_group": "comparison"
-    },
-    {
-      "name": "Visualization Generation",
-      "script": "scripts/analysis/create_team_aggregation_visualizations.py",
-      "description": "Generate comprehensive visualization charts",
-      "dependencies": ["Team Aggregation"],
+      "name": "data_preprocessing",
+      "script": "ffbayes.data_pipeline.preprocess_analysis_data",
+      "description": "Preprocess data for analysis",
       "timeout": 180,
-      "retry_count": 1,
-      "critical": false,
-      "parallel_group": "visualization"
+      "retries": 2,
+      "dependencies": ["data_validation"]
+    },
+    {
+      "name": "monte_carlo_analysis",
+      "script": "ffbayes.analysis.montecarlo_historical_ff",
+      "description": "Run Monte Carlo simulation analysis",
+      "timeout": 600,
+      "retries": 2,
+      "dependencies": ["data_preprocessing"]
+    },
+    {
+      "name": "bayesian_analysis",
+      "script": "ffbayes.analysis.bayesian_hierarchical_ff_modern",
+      "description": "Run Bayesian hierarchical analysis",
+      "timeout": 900,
+      "retries": 2,
+      "dependencies": ["data_preprocessing"]
+    },
+    {
+      "name": "team_aggregation",
+      "script": "ffbayes.analysis.bayesian_team_aggregation",
+      "description": "Aggregate individual predictions to team totals",
+      "timeout": 300,
+      "retries": 2,
+      "dependencies": ["bayesian_analysis"]
+    },
+    {
+      "name": "model_comparison",
+      "script": "ffbayes.analysis.model_comparison_framework",
+      "description": "Compare Monte Carlo and Bayesian results",
+      "timeout": 240,
+      "retries": 2,
+      "dependencies": ["monte_carlo_analysis", "team_aggregation"]
+    },
+    {
+      "name": "visualization",
+      "script": "ffbayes.analysis.create_team_aggregation_visualizations",
+      "description": "Generate comprehensive visualizations",
+      "timeout": 180,
+      "retries": 2,
+      "dependencies": ["model_comparison"]
     }
   ],
-  "global_config": {
-    "max_parallel_steps": 1,
+  "execution": {
+    "parallel_stages": ["monte_carlo_analysis", "bayesian_analysis"],
+    "max_parallel_jobs": 2,
     "default_timeout": 300,
-    "retry_delay": 30,
-    "enable_progress_monitoring": true,
-    "log_level": "INFO",
-    "enable_parallel_execution": false,
-    "enable_error_recovery": true,
-    "enable_graceful_degradation": true,
-    "max_total_retries": 10,
-    "pipeline_timeout": 7200
+    "default_retries": 2,
+    "progress_monitoring": true,
+    "error_recovery": true
   },
-      "parallel_groups": {
-        "data": {
-            "max_concurrent": 1,
-            "description": "Data pipeline steps (must run sequentially)"
-        },
-        "analysis": {
-            "max_concurrent": 1,
-            "description": "Analysis steps (run sequentially, but each can use multiple cores internally)"
-        },
-        "aggregation": {
-            "max_concurrent": 1,
-            "description": "Aggregation steps (must run sequentially)"
-        },
-        "comparison": {
-            "max_concurrent": 1,
-            "description": "Comparison and visualization steps"
-        },
-        "visualization": {
-            "max_concurrent": 1,
-            "description": "Visualization generation"
-        }
-    },
-  "error_handling": {
-    "critical_failure_action": "stop_pipeline",
-    "non_critical_failure_action": "continue_with_warnings",
-    "retry_strategies": {
-      "exponential_backoff": true,
-      "max_backoff_multiplier": 4,
-      "jitter": true
-    },
-    "fallback_actions": {
-      "data_collection": "use_cached_data",
-      "validation": "skip_validation",
-      "analysis": "use_simplified_models"
-    }
+  "output": {
+    "results_directory": "results",
+    "plots_directory": "plots",
+    "logs_directory": "logs",
+    "cleanup_old_files": true
   },
-  "monitoring": {
-    "progress_update_interval": 30,
-    "detailed_logging": true,
-    "performance_metrics": true,
-    "resource_usage_tracking": true,
-    "alert_thresholds": {
-      "step_timeout_warning": 0.8,
-      "memory_usage_warning": 0.85,
-      "cpu_usage_warning": 0.9
+  "environment": {
+    "python_path": "python",
+    "conda_environment": "ffbayes",
+    "working_directory": ".",
+    "environment_variables": {
+      "QUICK_TEST": "false",
+      "MAX_CORES": "4",
+      "USE_MULTIPROCESSING": "true"
     }
   }
 }

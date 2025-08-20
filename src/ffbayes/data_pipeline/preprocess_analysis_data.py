@@ -96,19 +96,45 @@ def create_analysis_dataset(path_to_data_directory):
     return data, team_names
 
 
-def main():
-    """Main preprocessing function."""
-    print("=" * 60)
-    print("DATA PREPROCESSING FOR ANALYSIS")
-    print("=" * 60)
+def main(args=None):
+    """Main preprocessing function with standardized interface."""
+    from ffbayes.utils.script_interface import create_standardized_interface
+    
+    interface = create_standardized_interface(
+        "ffbayes-preprocess",
+        "Data preprocessing for analysis with standardized interface"
+    )
+    
+    # Parse arguments
+    if args is None:
+        args = interface.parse_arguments()
+    
+    # Add data-specific arguments
+    parser = interface.setup_argument_parser()
+    parser = interface.add_data_arguments(parser)
+    args = parser.parse_args()
+    
+    # Set up logging
+    logger = interface.setup_logging(args)
+    
+    # Get data directory
+    data_dir = interface.get_data_directory(args)
+    logger.info(f"Using data directory: {data_dir}")
+    
+    # Check for quick test mode
+    if args.quick_test:
+        logger.info("Running in QUICK_TEST mode - processing limited data")
     
     # Preprocess data for analysis
-    data, team_names = create_analysis_dataset('datasets')
+    data, team_names = interface.handle_errors(create_analysis_dataset, str(data_dir))
     
-    print("\n✅ Preprocessing completed!")
-    print(f"📊 Final dataset: {data.shape}")
-    print(f"🏈 Teams: {len(team_names)}")
-    print("🎯 Next step: Run analysis scripts")
+    logger.info("Preprocessing completed!")
+    logger.info(f"Final dataset: {data.shape}")
+    logger.info(f"Teams: {len(team_names)}")
+    
+    interface.log_completion("Data preprocessing completed successfully")
+    
+    return data, team_names
 
 
 if __name__ == "__main__":
