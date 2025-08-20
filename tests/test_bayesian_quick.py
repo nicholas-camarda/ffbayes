@@ -7,19 +7,9 @@ Runs the Bayesian model with fast parameters for testing.
 import sys
 from pathlib import Path
 
-# Add the analysis script to path
-sys.path.append(str(Path.cwd() / 'scripts' / 'analysis'))
-
-# Import the function from the hyphenated filename
-import importlib.util
-
-spec = importlib.util.spec_from_file_location(
-    "bayesian_module", 
-    Path.cwd() / "scripts" / "analysis" / "bayesian-hierarchical-ff-modern.py"
-)
-bayesian_module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(bayesian_module)
-bayesian_hierarchical_ff_modern = bayesian_module.bayesian_hierarchical_ff_modern
+# Use package import for analysis module
+sys.path.append(str(Path.cwd() / 'src'))
+from ffbayes.analysis.bayesian_hierarchical_ff_modern import bayesian_hierarchical_ff_modern
 
 
 def main():

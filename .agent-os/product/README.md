@@ -78,6 +78,9 @@ Review `roadmap.md` and `tech-stack.md`. The immediate focus should be:
 
 **Current Status**: Phase 1 & 2 COMPLETE - Ready for Phase 3: Testing and Validation
 
+### Additional Documentation
+- `plots-organization.md`: Documentation of visualization outputs and plots directory structure
+
 ### Environment Management
 - **Primary Environment**: PyMC4 environment for modern Bayesian modeling
 - **Working Directory**: All operations should be performed from the project root directory (`/Users/ncamarda/Library/CloudStorage/OneDrive-Personal/Desktop/coding/ffbayes`)

@@ -15,12 +15,12 @@ import numpy as np
 import pandas as pd
 
 # Add scripts to path for testing
-sys.path.append('scripts')
-sys.path.append('scripts/utils')
+# Ensure src is on the path for package imports
+sys.path.append(str(Path.cwd() / 'src'))
 
 try:
-    from data_pipeline.validate_data import check_data_completeness, validate_data_quality
-    from utils.progress_monitor import ProgressMonitor
+    from ffbayes.data_pipeline.validate_data import check_data_completeness, validate_data_quality
+    from ffbayes.utils.progress_monitor import ProgressMonitor
     VALIDATE_DATA_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Could not import validate_data module: {e}")
@@ -129,7 +129,7 @@ class TestEnhancedDataValidation(unittest.TestCase):
         self.sample_data_2023.to_csv(file_2023, index=False)
         
         # Mock the glob.glob to return our test files
-        with patch('data_pipeline.validate_data.glob.glob') as mock_glob:
+        with patch('ffbayes.data_pipeline.validate_data.glob.glob') as mock_glob:
             mock_glob.return_value = [str(file_2022), str(file_2023)]
             
             result = validate_data_quality()
@@ -149,7 +149,7 @@ class TestEnhancedDataValidation(unittest.TestCase):
         self.sample_data_missing.to_csv(file_2023_missing, index=False)
         
         # Mock the glob.glob to return our test file
-        with patch('data_pipeline.validate_data.glob.glob') as mock_glob:
+        with patch('ffbayes.data_pipeline.validate_data.glob.glob') as mock_glob:
             mock_glob.return_value = [str(file_2023_missing)]
             
             result = validate_data_quality()
@@ -169,7 +169,7 @@ class TestEnhancedDataValidation(unittest.TestCase):
         self.sample_data_missing_columns.to_csv(file_2023_missing_cols, index=False)
         
         # Mock the glob.glob to return our test file
-        with patch('data_pipeline.validate_data.glob.glob') as mock_glob:
+        with patch('ffbayes.data_pipeline.validate_data.glob.glob') as mock_glob:
             mock_glob.return_value = [str(file_2023_missing_cols)]
             
             result = validate_data_quality()
@@ -185,7 +185,7 @@ class TestEnhancedDataValidation(unittest.TestCase):
     def test_validate_data_quality_with_no_files(self):
         """Test validate_data_quality when no season files exist."""
         # Mock the glob.glob to return no files
-        with patch('data_pipeline.validate_data.glob.glob') as mock_glob:
+        with patch('ffbayes.data_pipeline.validate_data.glob.glob') as mock_glob:
             mock_glob.return_value = []
             
             result = validate_data_quality()
@@ -205,7 +205,7 @@ class TestEnhancedDataValidation(unittest.TestCase):
         self.sample_data_2023.to_csv(file_2023, index=False)
         
         # Mock the glob.glob to return our test file
-        with patch('data_pipeline.validate_data.glob.glob') as mock_glob:
+        with patch('ffbayes.data_pipeline.validate_data.glob.glob') as mock_glob:
             mock_glob.return_value = [str(file_2023)]
             
             # Mock pd.read_csv to raise an exception
@@ -233,7 +233,7 @@ class TestEnhancedDataValidation(unittest.TestCase):
             sample_data.to_csv(file_path, index=False)
         
         # Mock the os.path.exists to return True for our test files
-        with patch('data_pipeline.validate_data.os.path.exists') as mock_exists:
+        with patch('ffbayes.data_pipeline.validate_data.os.path.exists') as mock_exists:
             def mock_exists_side_effect(path):
                 if 'season_datasets' in str(path) and 'season.csv' in str(path):
                     return True
@@ -258,7 +258,7 @@ class TestEnhancedDataValidation(unittest.TestCase):
             sample_data.to_csv(file_path, index=False)
         
         # Mock the os.path.exists to return True only for existing files
-        with patch('data_pipeline.validate_data.os.path.exists') as mock_exists:
+        with patch('ffbayes.data_pipeline.validate_data.os.path.exists') as mock_exists:
             def mock_exists_side_effect(path):
                 if 'season_datasets' in str(path) and 'season.csv' in str(path):
                     year = str(path).split('season.csv')[0].split('/')[-1]
@@ -295,7 +295,7 @@ class TestEnhancedDataValidation(unittest.TestCase):
         test_data.to_csv(file_path, index=False)
         
         # Mock the glob.glob to return our test file
-        with patch('data_pipeline.validate_data.glob.glob') as mock_glob:
+        with patch('ffbayes.data_pipeline.validate_data.glob.glob') as mock_glob:
             mock_glob.return_value = [str(file_path)]
             
             result = validate_data_quality()
@@ -327,7 +327,7 @@ class TestEnhancedDataValidation(unittest.TestCase):
         test_data.to_csv(file_path, index=False)
         
         # Mock the glob.glob to return our test file
-        with patch('data_pipeline.validate_data.glob.glob') as mock_glob:
+        with patch('ffbayes.data_pipeline.validate_data.glob.glob') as mock_glob:
             mock_glob.return_value = [str(file_path)]
             
             result = validate_data_quality()
@@ -348,8 +348,8 @@ class TestEnhancedDataValidation(unittest.TestCase):
     def test_directory_structure_requirements(self):
         """Test that required directory structure exists."""
         required_dirs = [
-            'scripts/data_pipeline',
-            'scripts/utils',
+            'src/ffbayes/data_pipeline',
+            'src/ffbayes/utils',
             'datasets',
             'tests'
         ]
@@ -364,8 +364,8 @@ class TestEnhancedDataValidation(unittest.TestCase):
     def test_file_requirements(self):
         """Test that required files exist."""
         required_files = [
-            'scripts/data_pipeline/02_validate_data.py',
-            'scripts/utils/progress_monitor.py',
+            'src/ffbayes/data_pipeline/validate_data.py',
+            'src/ffbayes/utils/progress_monitor.py',
             'tests/test_enhanced_data_validation.py'
         ]
         

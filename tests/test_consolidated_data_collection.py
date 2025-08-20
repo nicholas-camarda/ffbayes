@@ -5,6 +5,7 @@ Tests the merged functionality from get_ff_data.py and get_ff_data_improved.py
 into the organized 01_collect_data.py pipeline.
 """
 
+import importlib
 import os
 import sys
 import tempfile
@@ -14,13 +15,20 @@ from unittest.mock import patch
 
 import pandas as pd
 
-# Add scripts to path for testing
-sys.path.append('scripts')
-sys.path.append('scripts/utils')
+# Add src package to path for testing
+sys.path.append(str(Path.cwd() / 'src'))
 
 try:
-    from data_pipeline import check_data_availability, collect_data_by_year, collect_nfl_data, combine_datasets, create_dataset, process_dataset
-    from utils.progress_monitor import ProgressMonitor
+    importlib.util.find_spec('ffbayes.data_pipeline')
+    from ffbayes.data_pipeline.collect_data import (
+        check_data_availability,
+        collect_data_by_year,
+        collect_nfl_data,
+        combine_datasets,
+        create_dataset,
+        process_dataset,
+    )
+    from ffbayes.utils.progress_monitor import ProgressMonitor
     COLLECT_DATA_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Could not import collect_data module: {e}")
@@ -215,9 +223,9 @@ class TestConsolidatedDataCollection(unittest.TestCase):
         self.assertIsNone(result)
     
     @unittest.skipUnless(COLLECT_DATA_AVAILABLE, "collect_data module not available")
-    @patch('test_consolidated_data_collection.check_data_availability')
-    @patch('test_consolidated_data_collection.create_dataset')
-    @patch('test_consolidated_data_collection.process_dataset')
+    @patch('ffbayes.data_pipeline.collect_data.check_data_availability')
+    @patch('ffbayes.data_pipeline.collect_data.create_dataset')
+    @patch('ffbayes.data_pipeline.collect_data.process_dataset')
     def test_collect_data_by_year_success(self, mock_process, mock_create, mock_check):
         """Test collect_data_by_year successfully processes a year."""
         # Mock successful operations
@@ -237,7 +245,7 @@ class TestConsolidatedDataCollection(unittest.TestCase):
             mock_process.assert_called_once()
     
     @unittest.skipUnless(COLLECT_DATA_AVAILABLE, "collect_data module not available")
-    @patch('test_consolidated_data_collection.check_data_availability')
+    @patch('ffbayes.data_pipeline.collect_data.check_data_availability')
     def test_collect_data_by_year_data_unavailable(self, mock_check):
         """Test collect_data_by_year handles unavailable data gracefully."""
         # Mock data unavailable
@@ -275,8 +283,8 @@ class TestConsolidatedDataCollection(unittest.TestCase):
         self.assertIsNone(result)
     
     @unittest.skipUnless(COLLECT_DATA_AVAILABLE, "collect_data module not available")
-    @patch('test_consolidated_data_collection.check_data_availability')
-    @patch('test_consolidated_data_collection.collect_data_by_year')
+    @patch('ffbayes.data_pipeline.collect_data.check_data_availability')
+    @patch('ffbayes.data_pipeline.collect_data.collect_data_by_year')
     def test_collect_nfl_data_success(self, mock_collect_year, mock_check):
         """Test collect_nfl_data successfully processes multiple years."""
         # Mock successful operations
@@ -331,8 +339,8 @@ class TestConsolidatedDataCollection(unittest.TestCase):
     def test_directory_structure_requirements(self):
         """Test that required directory structure exists."""
         required_dirs = [
-            'scripts/data_pipeline',
-            'scripts/utils',
+            'src/ffbayes/data_pipeline',
+            'src/ffbayes/utils',
             'datasets',
             'tests'
         ]
@@ -347,8 +355,8 @@ class TestConsolidatedDataCollection(unittest.TestCase):
     def test_file_requirements(self):
         """Test that required files exist."""
         required_files = [
-            'scripts/data_pipeline/01_collect_data.py',
-            'scripts/utils/progress_monitor.py',
+            'src/ffbayes/data_pipeline/collect_data.py',
+            'src/ffbayes/utils/progress_monitor.py',
             'tests/test_consolidated_data_collection.py'
         ]
         
