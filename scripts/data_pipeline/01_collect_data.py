@@ -7,6 +7,7 @@ Collects raw NFL data from multiple sources with sophisticated processing.
 
 
 # Import progress monitoring utilities
+import signal
 import sys
 import time
 from datetime import datetime
@@ -37,25 +38,61 @@ CURRENT_YEAR = datetime.now().year
 # Note: Data is typically only available up to the previous year
 DEFAULT_YEARS = list(range(CURRENT_YEAR - 10, CURRENT_YEAR))
 
+# Timeout configuration
+API_TIMEOUT = 30  # seconds
+
+
+class TimeoutError(Exception):
+    """Custom timeout exception."""
+    pass
+
+
+def timeout_handler(signum, frame):
+    """Signal handler for timeout."""
+    raise TimeoutError("API call timed out")
+
 
 def check_data_availability(year):
-    """Check if data is available for a given year with error handling."""
+    """Check if data is available for a given year with timeout and error handling."""
     try:
+        # Set timeout for this function
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(API_TIMEOUT)
+        
         # Test if we can get a small sample of data
         test_data = nfl.import_weekly_data([year])
+        
+        # Clear the alarm
+        signal.alarm(0)
+        
         return True, len(test_data)
+    except TimeoutError:
+        print(f"      ⏰ Timeout checking data availability for {year}")
+        return False, "API timeout"
     except Exception as e:
+        # Clear the alarm in case of other errors
+        try:
+            signal.alarm(0)
+        except:
+            pass
         return False, str(e)
 
 
 def create_dataset(year):
-    """Create comprehensive dataset for a given year with proper error handling."""
+    """Create comprehensive dataset for a given year with proper error handling and timeout."""
     print(f"   🔄 Creating dataset for {year}...")
     
     try:
+        # Set timeout for this function
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(API_TIMEOUT)
+        
         # Get player weekly data
         players = nfl.import_weekly_data([year])
         print(f"      ✅ Players: {len(players):,} rows")
+        
+        # Clear the alarm
+        signal.alarm(0)
         
         # Select relevant columns
         players_df = players[[
@@ -70,8 +107,10 @@ def create_dataset(year):
             'fantasy_points_ppr',
         ]]
 
-        # Get schedule data
+        # Get schedule data with timeout
+        signal.alarm(API_TIMEOUT)
         schedules = nfl.import_schedules([year])
+        signal.alarm(0)
         print(f"      ✅ Schedule: {len(schedules):,} rows")
         
         schedules_df = schedules[[
@@ -165,7 +204,10 @@ def create_dataset(year):
         # Add injury data if available
         try:
             print("      🔄 Adding injury data...")
+            signal.alarm(API_TIMEOUT)
             injuries = nfl.import_injuries([year])
+            signal.alarm(0)
+            
             injuries = injuries[[
                 'full_name',
                 'position',

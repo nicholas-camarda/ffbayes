@@ -20,12 +20,21 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.metrics import mean_absolute_error
 
-# Default configuration - can be overridden by function arguments
-DEFAULT_CORES = 4
+# Configuration
+DEFAULT_CORES = 7
 DEFAULT_DRAWS = 1000
-DEFAULT_TUNE = 500
+DEFAULT_TUNE = 1000
 DEFAULT_CHAINS = 4
 DEFAULT_PREDICTIVE_SAMPLES = 500
+
+# Quick test mode support
+QUICK_TEST = os.getenv('QUICK_TEST', 'false').lower() == 'true'
+if QUICK_TEST:
+    print("🚀 QUICK TEST MODE ENABLED for Bayesian model")
+    DEFAULT_CORES = 2
+    DEFAULT_DRAWS = 100
+    DEFAULT_TUNE = 100
+    DEFAULT_CHAINS = 2
 
 print(f'Default configuration: {DEFAULT_CORES} cores, {DEFAULT_DRAWS} draws, {DEFAULT_CHAINS} chains')
 
@@ -95,10 +104,21 @@ def bayesian_hierarchical_ff_modern(path_to_data_directory, cores=DEFAULT_CORES,
     # Load preprocessed data
     data, team_names = load_preprocessed_data(path_to_data_directory)
     
+    # Enhanced data validation
+    print(f"Loaded data shape: {data.shape}")
+    print(f"Found {len(team_names)} teams")
+    
+    # Check data requirements
+    if len(data) < 10:
+        raise ValueError(f"Insufficient data: only {len(data)} rows available. Need at least 10 rows for meaningful modeling.")
+    
+    if len(team_names) < 2:
+        raise ValueError(f"Insufficient teams: only {len(team_names)} teams available. Need at least 2 teams for defensive modeling.")
+    
     # Split into train/test (use last 2 years dynamically)
     available_years = sorted(data['Season'].unique())
     if len(available_years) < 2:
-        raise ValueError("Need at least 2 years of data for train/test split")
+        raise ValueError(f"Need at least 2 years of data for train/test split. Available years: {available_years}")
     
     train_year = available_years[-2]  # Second to last year
     test_year = available_years[-1]   # Last year
@@ -106,8 +126,14 @@ def bayesian_hierarchical_ff_modern(path_to_data_directory, cores=DEFAULT_CORES,
     train = data[data.apply(lambda x: x['Season'] == train_year, axis=1)]
     test = data[data.apply(lambda x: x['Season'] == test_year, axis=1)]
     
-    print(f"Training on {train_year} data, testing on {test_year} data")
+    # Validate train/test splits
+    if len(train) < 5:
+        raise ValueError(f"Training data too small: {len(train)} rows for {train_year}. Need at least 5 rows.")
     
+    if len(test) < 3:
+        raise ValueError(f"Test data too small: {len(test)} rows for {test_year}. Need at least 3 rows.")
+    
+    print(f"Training on {train_year} data, testing on {test_year} data")
     print(f"Training data shape: {train.shape}")
     print(f"Test data shape: {test.shape}")
 
@@ -116,238 +142,252 @@ def bayesian_hierarchical_ff_modern(path_to_data_directory, cores=DEFAULT_CORES,
     ranks = 4
     team_number = len(team_names)
     
+    # Validate model parameters
+    if team_number > 50:
+        print(f"⚠️  Warning: Large number of teams ({team_number}) may cause memory issues")
+    
+    if len(train) < team_number * 2:
+        print(f"⚠️  Warning: Training data may be sparse for {team_number} teams")
+    
     print('Building modern PyMC4 model...')
+    
+    try:
+        with pm.Model() as model:
+            # Part 1: Define observables
+            print("Part 1: Defining observables...")
+            
+            # Degrees of freedom for Student's t distributions
+            nu = pm.Exponential('nu_minus_one', 1 / 29.0, shape=2) + 1
+            
+            # Standard deviations based on rank
+            err = pm.Uniform('std_dev_rank', 0, 100, shape=ranks)
+            err_b = pm.Uniform('std_dev_rank_b', 0, 100, shape=ranks)
 
-    with pm.Model() as model:
-        # Part 1: Define observables
-        print("Part 1: Defining observables...")
-        
-        # Degrees of freedom for Student's t distributions
-        nu = pm.Exponential('nu_minus_one', 1 / 29.0, shape=2) + 1
-        
-        # Standard deviations based on rank
-        err = pm.Uniform('std_dev_rank', 0, 100, shape=ranks)
-        err_b = pm.Uniform('std_dev_rank_b', 0, 100, shape=ranks)
+            # Part 2: Defensive ability of opposing teams vs each position
+            print("Part 2: Modeling defensive effects...")
+            
+            # Global defensive priors for each position
+            opp_def = pm.Normal('opp_team_prior', 0, 100**2, shape=num_positions)
+            
+            # Team-specific defensive effects
+            opp_qb = pm.Normal('defensive_differential_qb', opp_def[0], 100**2, shape=team_number)
+            opp_wr = pm.Normal('defensive_differential_wr', opp_def[1], 100**2, shape=team_number)
+            opp_rb = pm.Normal('defensive_differential_rb', opp_def[2], 100**2, shape=team_number)
+            opp_te = pm.Normal('defensive_differential_te', opp_def[3], 100**2, shape=team_number)
 
-        # Part 2: Defensive ability of opposing teams vs each position
-        print("Part 2: Modeling defensive effects...")
-        
-        # Global defensive priors for each position
-        opp_def = pm.Normal('opp_team_prior', 0, 100**2, shape=num_positions)
-        
-        # Team-specific defensive effects
-        opp_qb = pm.Normal('defensive_differential_qb', opp_def[0], 100**2, shape=team_number)
-        opp_wr = pm.Normal('defensive_differential_wr', opp_def[1], 100**2, shape=team_number)
-        opp_rb = pm.Normal('defensive_differential_rb', opp_def[2], 100**2, shape=team_number)
-        opp_te = pm.Normal('defensive_differential_te', opp_def[3], 100**2, shape=team_number)
+            # Part 3: Home/away advantages by position and rank
+            print("Part 3: Modeling home/away effects...")
+            
+            home_adv = pm.Normal('home_additive_prior', 0, 100**2, shape=num_positions)
+            away_adv = pm.Normal('away_additive_prior', 0, 100**2, shape=num_positions)
+            
+            # Position-specific home/away effects by rank
+            pos_home_qb = pm.Normal('home_differential_qb', home_adv[0], 10**2, shape=ranks)
+            pos_home_rb = pm.Normal('home_differential_rb', home_adv[1], 10**2, shape=ranks)
+            pos_home_te = pm.Normal('home_differential_te', home_adv[2], 10**2, shape=ranks)
+            pos_home_wr = pm.Normal('home_differential_wr', home_adv[3], 10**2, shape=ranks)
+            
+            pos_away_qb = pm.Normal('away_differential_qb', away_adv[0], 10**2, shape=ranks)
+            pos_away_rb = pm.Normal('away_differential_rb', away_adv[1], 10**2, shape=ranks)
+            pos_away_wr = pm.Normal('away_differential_wr', away_adv[2], 10**2, shape=ranks)
+            pos_away_te = pm.Normal('away_differential_te', away_adv[3], 10**2, shape=ranks)
 
-        # Part 3: Home/away advantages by position and rank
-        print("Part 3: Modeling home/away effects...")
-        
-        home_adv = pm.Normal('home_additive_prior', 0, 100**2, shape=num_positions)
-        away_adv = pm.Normal('away_additive_prior', 0, 100**2, shape=num_positions)
-        
-        # Position-specific home/away effects by rank
-        pos_home_qb = pm.Normal('home_differential_qb', home_adv[0], 10**2, shape=ranks)
-        pos_home_rb = pm.Normal('home_differential_rb', home_adv[1], 10**2, shape=ranks)
-        pos_home_te = pm.Normal('home_differential_te', home_adv[2], 10**2, shape=ranks)
-        pos_home_wr = pm.Normal('home_differential_wr', home_adv[3], 10**2, shape=ranks)
-        
-        pos_away_qb = pm.Normal('away_differential_qb', away_adv[0], 10**2, shape=ranks)
-        pos_away_rb = pm.Normal('away_differential_rb', away_adv[1], 10**2, shape=ranks)
-        pos_away_wr = pm.Normal('away_differential_wr', away_adv[2], 10**2, shape=ranks)
-        pos_away_te = pm.Normal('away_differential_te', away_adv[3], 10**2, shape=ranks)
+            # Part 4: Likelihood models
+            print("Part 4: Building likelihood models...")
+            
+            # Data arrays for training
+            player_home = train['is_home'].values
+            player_avg = train['7_game_avg'].values
+            player_opp = train['opp_team'].values
+            player_rank = train['rank'] - 1
+            qb_indicator = train['position_QB'].values.astype(int)
+            wr_indicator = train['position_WR'].values.astype(int)
+            rb_indicator = train['position_RB'].values.astype(int)
+            te_indicator = train['position_TE'].values.astype(int)
 
-        # Part 4: Likelihood models
-        print("Part 4: Building likelihood models...")
-        
-        # Data arrays for training
-        player_home = train['is_home'].values
-        player_avg = train['7_game_avg'].values
-        player_opp = train['opp_team'].values
-        player_rank = train['rank'] - 1
-        qb_indicator = train['position_QB'].values.astype(int)
-        wr_indicator = train['position_WR'].values.astype(int)
-        rb_indicator = train['position_RB'].values.astype(int)
-        te_indicator = train['position_TE'].values.astype(int)
-
-        # Defensive effect calculation
-        def_effect = (
-            qb_indicator * opp_qb[player_opp] +
-            wr_indicator * opp_wr[player_opp] +
-            rb_indicator * opp_rb[player_opp] +
-            te_indicator * opp_te[player_opp]
-        )
-
-        # First likelihood: difference from average explained by defensive ability
-        like1 = pm.StudentT(
-            'diff_from_avg',
-            mu=def_effect,
-            sigma=err_b[player_rank],
-            nu=nu[1],
-            observed=train['diff_from_avg']
-        )
-
-        # Second likelihood: total score prediction
-        mu = player_avg + def_effect
-        
-        # Add home/away effects
-        mu += (rb_indicator * pos_home_rb[player_rank] * player_home + 
-               wr_indicator * pos_home_wr[player_rank] * player_home +
-               qb_indicator * pos_home_qb[player_rank] * player_home + 
-               te_indicator * pos_home_te[player_rank] * player_home)
-        
-        mu += (rb_indicator * pos_away_rb[player_rank] * (1 - player_home) + 
-               wr_indicator * pos_away_wr[player_rank] * (1 - player_home) +
-               qb_indicator * pos_away_qb[player_rank] * (1 - player_home) + 
-               te_indicator * pos_away_te[player_rank] * (1 - player_home))
-
-        like2 = pm.StudentT(
-            'fantasy_points',
-            mu=mu,
-            sigma=err[player_rank],
-            nu=nu[0],
-            observed=train['FantPt']
-        )
-
-        # Part 5: Training (only if we don't have a trace)
-        if trace is None:
-            print("Part 5: Training model...")
-            trace = pm.sample(
-                draws=draws,
-                tune=tune,
-                chains=chains,
-                cores=cores,
-                return_inferencedata=True,
-                random_seed=42,
-                target_accept=0.95,
-                max_treedepth=12
+            # Defensive effect calculation
+            def_effect = (
+                qb_indicator * opp_qb[player_opp] +
+                wr_indicator * opp_wr[player_opp] +
+                rb_indicator * opp_rb[player_opp] +
+                te_indicator * opp_te[player_opp]
             )
-        else:
-            print("Part 5: Using existing trace (skipping sampling)")
 
-        print("Model training completed!")
-        
-        # Save the expensive trace results immediately
-        print("💾 Saving sampling results...")
-        trace_file = f'results/bayesian-hierarchical-results/trace_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pkl'
-        os.makedirs(os.path.dirname(trace_file), exist_ok=True)
-        
-        try:
+            # First likelihood: difference from average explained by defensive ability
+            like1 = pm.StudentT(
+                'diff_from_avg',
+                mu=def_effect,
+                sigma=err_b[player_rank],
+                nu=nu[1],
+                observed=train['diff_from_avg']
+            )
+
+            # Second likelihood: total score prediction
+            mu = player_avg + def_effect
+            
+            # Add home/away effects
+            mu += (rb_indicator * pos_home_rb[player_rank] * player_home + 
+                   wr_indicator * pos_home_wr[player_rank] * player_home +
+                   qb_indicator * pos_home_qb[player_rank] * player_home + 
+                   te_indicator * pos_home_te[player_rank] * player_home)
+            
+            mu += (rb_indicator * pos_away_rb[player_rank] * (1 - player_home) + 
+                   wr_indicator * pos_away_wr[player_rank] * (1 - player_home) +
+                   qb_indicator * pos_away_qb[player_rank] * (1 - player_home) + 
+                   te_indicator * pos_away_te[player_rank] * (1 - player_home))
+
+            like2 = pm.StudentT(
+                'fantasy_points',
+                mu=mu,
+                sigma=err[player_rank],
+                nu=nu[0],
+                observed=train['FantPt']
+            )
+
+            # Part 5: Training (only if we don't have a trace)
+            if trace is None:
+                print("Part 5: Training model...")
+                trace = pm.sample(
+                    draws=draws,
+                    tune=tune,
+                    chains=chains,
+                    cores=cores,
+                    return_inferencedata=True,
+                    random_seed=42,
+                    target_accept=0.95,
+                    max_treedepth=12
+                )
+            else:
+                print("Part 5: Using existing trace (skipping sampling)")
+
+            print("Model training completed!")
+            
+            # Save trace for future use
+            trace_file = f'results/bayesian-hierarchical-results/trace_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pkl'
             with open(trace_file, 'wb') as f:
                 pickle.dump(trace, f)
-            print(f"✅ Trace saved to: {trace_file}")
-        except Exception as e:
-            print(f"⚠️  Warning: Could not save trace: {e}")
-        
-        # Part 6: Model evaluation and predictions
-        print("Part 6: Evaluating model...")
-        
-        # Create test data arrays
-        test_home = test['is_home'].values
-        test_avg = test['7_game_avg'].values
-        test_opp = test['opp_team'].values
-        test_rank = test['rank'] - 1
-        test_qb = test['position_QB'].values.astype(int)
-        test_wr = test['position_WR'].values.astype(int)
-        test_rb = test['position_RB'].values.astype(int)
-        test_te = test['position_TE'].values.astype(int)
-
-        # Sample from posterior predictive - fixed API for PyMC4
-        print("Generating predictions...")
-        with model:
-            pm_pred = pm.sample_posterior_predictive(
-                trace, 
-                var_names=['fantasy_points']
-            )
-
-        # Calculate predictions
-        pred_mean = pm_pred.posterior_predictive['fantasy_points'].mean(dim=('chain', 'draw'))
-        pred_std = pm_pred.posterior_predictive['fantasy_points'].std(dim=('chain', 'draw'))
-        
-        # Ensure predictions match test data length
-        print(f"Test data length: {len(test)}")
-        print(f"Predictions length: {len(pred_mean)}")
-        
-        # If lengths don't match, take only the first len(test) predictions
-        if len(pred_mean) != len(test):
-            print("⚠️  Length mismatch detected. Truncating predictions to match test data.")
-            pred_mean = pred_mean[:len(test)]
-            pred_std = pred_std[:len(test)]
-            print(f"Adjusted predictions length: {len(pred_mean)}")
-
-        # Model evaluation
-        mae_bayesian = mean_absolute_error(test['FantPt'].values, pred_mean.values)
-        mae_baseline = mean_absolute_error(test['FantPt'].values, test['7_game_avg'].values)
-        
-        print(f"Bayesian Model MAE: {mae_bayesian:.2f}")
-        print(f"Baseline (7-game avg) MAE: {mae_baseline:.2f}")
-        print(f"Improvement: {((mae_baseline - mae_bayesian) / mae_baseline * 100):.1f}%")
-
-        # Part 7: Generate plots and save results
-        print("Part 7: Generating visualizations...")
-        
-        # Create plots directory
-        os.makedirs('plots', exist_ok=True)
-        
-        # Plot 1: Model diagnostics
-        pm.plot_trace(trace, var_names=['opp_team_prior', 'home_additive_prior'])
-        plt.savefig('plots/modern_training_traces.png', dpi=300, bbox_inches='tight')
-        plt.close()
-        
-        # Plot 2: Defensive effects by team
-        fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-        positions = ['QB', 'WR', 'RB', 'TE']
-        effects = [opp_qb, opp_wr, opp_rb, opp_te]
-        
-        for i, (pos, effect) in enumerate(zip(positions, effects)):
-            ax = axes[i//2, i%2]
-            effect_mean = trace.posterior[f'defensive_differential_{pos.lower()}'].mean(dim=('chain', 'draw'))
-            effect_std = trace.posterior[f'defensive_differential_{pos.lower()}'].std(dim=('chain', 'draw'))
+            print(f"Trace saved to: {trace_file}")
             
-            ax.errorbar(effect_mean, range(len(team_names)), xerr=effect_std, fmt='o', capsize=5)
-            ax.set_title(f'Team Effects on {pos} Point Average (2021)')
-            ax.set_yticks(range(len(team_names)))
-            ax.set_yticklabels(team_names)
-            ax.axvline(x=0, color='red', linestyle='--', alpha=0.5)
-            ax.set_xlabel(f'Change in opponent {pos} average')
-        
-        plt.tight_layout()
-        plt.savefig('plots/modern_team_effects.png', dpi=300, bbox_inches='tight')
-        plt.close()
-        
-        # Plot 3: Prediction vs Actual
-        plt.figure(figsize=(10, 6))
-        plt.scatter(test['FantPt'], pred_mean, alpha=0.6)
-        plt.plot([0, 50], [0, 50], 'r--', alpha=0.8)
-        plt.xlabel('Actual Fantasy Points')
-        plt.ylabel('Predicted Fantasy Points')
-        plt.title('Bayesian Model Predictions vs Actual')
-        plt.grid(True, alpha=0.3)
-        plt.savefig('plots/modern_predictions_vs_actual.png', dpi=300, bbox_inches='tight')
-        plt.close()
+            # Part 6: Model evaluation and predictions
+            print("Part 6: Evaluating model...")
+            
+            # Create test data arrays
+            test_home = test['is_home'].values
+            test_avg = test['7_game_avg'].values
+            test_opp = test['opp_team'].values
+            test_rank = test['rank'] - 1
+            test_qb = test['position_QB'].values.astype(int)
+            test_wr = test['position_WR'].values.astype(int)
+            test_rb = test['position_RB'].values.astype(int)
+            test_te = test['position_TE'].values.astype(int)
 
-        # Save results (avoid pickle issues with PyMC objects)
-        results = {
-            'mae_bayesian': mae_bayesian,
-            'mae_baseline': mae_baseline,
-            'team_names': team_names,
-            'timestamp': datetime.now().isoformat(),
-            'test_data_shape': test.shape,
-            'predictions_shape': pred_mean.shape
-        }
-        
-        # Save results as JSON instead of pickle to avoid serialization issues
-        import json
-        results_file = 'results/bayesian-hierarchical-results/modern_model_results.json'
-        with open(results_file, 'w') as f:
-            json.dump(results, f, indent=2, default=str)
-        
-        print(f"Results saved to {results_file}")
-        
-        print("Model training and evaluation completed successfully!")
-        
-        return trace, results
+            # Sample from posterior predictive - fixed API for PyMC4
+            print("Generating predictions...")
+            with model:
+                pm_pred = pm.sample_posterior_predictive(
+                    trace, 
+                    var_names=['fantasy_points']
+                )
+
+            # Calculate predictions
+            pred_mean = pm_pred.posterior_predictive['fantasy_points'].mean(dim=('chain', 'draw'))
+            pred_std = pm_pred.posterior_predictive['fantasy_points'].std(dim=('chain', 'draw'))
+            
+            # Ensure predictions match test data length
+            print(f"Test data length: {len(test)}")
+            print(f"Predictions length: {len(pred_mean)}")
+            
+            # If lengths don't match, take only the first len(test) predictions
+            if len(pred_mean) != len(test):
+                print("⚠️  Length mismatch detected. Truncating predictions to match test data.")
+                pred_mean = pred_mean[:len(test)]
+                pred_std = pred_std[:len(test)]
+                print(f"Adjusted predictions length: {len(pred_mean)}")
+
+            # Model evaluation
+            mae_bayesian = mean_absolute_error(test['FantPt'].values, pred_mean.values)
+            mae_baseline = mean_absolute_error(test['FantPt'].values, test['7_game_avg'].values)
+            
+            print(f"Bayesian Model MAE: {mae_bayesian:.2f}")
+            print(f"Baseline (7-game avg) MAE: {mae_baseline:.2f}")
+            print(f"Improvement: {((mae_baseline - mae_bayesian) / mae_baseline * 100):.1f}%")
+
+            # Part 7: Generate plots and save results
+            print("Part 7: Generating visualizations...")
+            
+            # Plot training traces
+            fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+            axes = axes.ravel()
+            
+            # Plot traces for key parameters
+            for i, param in enumerate(['mu_player', 'sigma_player', 'mu_team', 'sigma_team']):
+                if param in trace.posterior:
+                    axes[i].plot(trace.posterior[param].values.reshape(-1, 100)[:50].T, alpha=0.1)
+                    axes[i].set_title(f'{param} Traces')
+                    axes[i].set_xlabel('Sample')
+                    axes[i].set_ylabel('Value')
+            
+            plt.tight_layout()
+            plt.savefig('plots/modern_training_traces.png', dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            # Plot 2: Defensive effects by team
+            fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+            positions = ['QB', 'WR', 'RB', 'TE']
+            effects = [opp_qb, opp_wr, opp_rb, opp_te]
+            
+            for i, (pos, effect) in enumerate(zip(positions, effects)):
+                ax = axes[i//2, i%2]
+                effect_mean = trace.posterior[f'defensive_differential_{pos.lower()}'].mean(dim=('chain', 'draw'))
+                effect_std = trace.posterior[f'defensive_differential_{pos.lower()}'].std(dim=('chain', 'draw'))
+                
+                ax.errorbar(effect_mean, range(len(team_names)), xerr=effect_std, fmt='o', capsize=5)
+                ax.set_title(f'Team Effects on {pos} Point Average (2021)')
+                ax.set_yticks(range(len(team_names)))
+                ax.set_yticklabels(team_names)
+                ax.axvline(x=0, color='red', linestyle='--', alpha=0.5)
+                ax.set_xlabel(f'Change in opponent {pos} average')
+            
+            plt.tight_layout()
+            plt.savefig('plots/modern_team_effects.png', dpi=300, bbox_inches='tight')
+            plt.close()
+            
+            # Plot 3: Prediction vs Actual
+            plt.figure(figsize=(10, 6))
+            plt.scatter(test['FantPt'], pred_mean, alpha=0.6)
+            plt.plot([0, 50], [0, 50], 'r--', alpha=0.8)
+            plt.xlabel('Actual Fantasy Points')
+            plt.ylabel('Predicted Fantasy Points')
+            plt.title('Bayesian Model Predictions vs Actual')
+            plt.grid(True, alpha=0.3)
+            plt.savefig('plots/modern_predictions_vs_actual.png', dpi=300, bbox_inches='tight')
+            plt.close()
+
+            # Save results (avoid pickle issues with PyMC objects)
+            results = {
+                'mae_bayesian': mae_bayesian,
+                'mae_baseline': mae_baseline,
+                'team_names': team_names,
+                'timestamp': datetime.now().isoformat(),
+                'test_data_shape': test.shape,
+                'predictions_shape': pred_mean.shape
+            }
+            
+            # Save results as JSON instead of pickle to avoid serialization issues
+            import json
+            results_file = 'results/bayesian-hierarchical-results/modern_model_results.json'
+            with open(results_file, 'w') as f:
+                json.dump(results, f, indent=2, default=str)
+            
+            print(f"Results saved to {results_file}")
+            
+            print("Model training and evaluation completed successfully!")
+            
+            return trace, results
+    except Exception as e:
+        print(f"An error occurred during model building: {e}")
+        print("Please check the model parameters and data.")
+        return None, None
 
 
 def main():
@@ -357,18 +397,20 @@ def main():
     print("Using PyMC4 for robust uncertainty quantification")
     print("=" * 60)
     
-    # Create results directory
-    os.makedirs('results/bayesian-hierarchical-results', exist_ok=True)
-    
     # Run the model with default configuration
     trace, results = bayesian_hierarchical_ff_modern('datasets')
     
-    print("\n" + "=" * 60)
-    print("Model Summary:")
-    print(f"- Bayesian Model MAE: {results['mae_bayesian']:.2f}")
-    print(f"- Baseline MAE: {results['mae_baseline']:.2f}")
-    print(f"- Improvement: {((results['mae_baseline'] - results['mae_bayesian']) / results['mae_baseline'] * 100):.1f}%")
-    print("=" * 60)
+    if trace is not None:
+        print("\n" + "=" * 60)
+        print("Model Summary:")
+        print(f"- Bayesian Model MAE: {results['mae_bayesian']:.2f}")
+        print(f"- Baseline MAE: {results['mae_baseline']:.2f}")
+        if QUICK_TEST:
+            print("Improvement is not reliable in quick test mode")    
+        print(f"- Improvement: {((results['mae_baseline'] - results['mae_bayesian']) / results['mae_baseline'] * 100):.1f}%")
+        print("=" * 60)
+    else:
+        print("Model training failed or no trace was generated.")
 
 
 if __name__ == '__main__':

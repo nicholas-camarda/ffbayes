@@ -18,7 +18,7 @@ The repository solves the problem of competing in fantasy football leagues where
   - `scripts/data_pipeline/02_validate_data.py`: Comprehensive data quality checks and validation
 - **Analysis Pipeline**: Statistical modeling and simulation components
   - `scripts/analysis/montecarlo-historical-ff.py`: Monte Carlo simulation for team outcome projections
-  - `scripts/analysis/bayesian-hierarchical-ff.py`: PyMC3-based Bayesian modeling for player predictions
+  - `scripts/analysis/bayesian-hierarchical-ff-modern.py`: PyMC4-based Bayesian modeling for player predictions
   - `scripts/analysis/bayesian-hierarchical-ff-modern.py`: PyMC4-based modern Bayesian modeling
   - `scripts/analysis/bayesian-team-aggregation.py`: Team projections from individual Bayesian predictions
 - **Draft Strategy Pipeline**: **Parallel execution of both traditional and advanced approaches**
@@ -79,9 +79,7 @@ Review `roadmap.md` and `tech-stack.md`. The immediate focus should be:
 **Current Status**: Phase 1 & 2 COMPLETE - Ready for Phase 3: Testing and Validation
 
 ### Environment Management
-- **Primary Environment**: `ffbayes` conda environment with PyMC4 and modern packages
-- **Fallback Environment**: PyMC3 environment if compatibility issues persist
-- **Helper Scripts**: `run_with_conda.sh` and `Makefile` for easy environment management
+- **Primary Environment**: PyMC4 environment for modern Bayesian modeling
 - **Working Directory**: All operations should be performed from the project root directory (`/Users/ncamarda/Library/CloudStorage/OneDrive-Personal/Desktop/coding/ffbayes`)
 
 ### Development Standards

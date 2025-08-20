@@ -1,29 +1,51 @@
 #!python
+import datetime
 import glob
 import logging
+import multiprocessing as mp
+import os
+
+# Add progress monitoring
 import sys
-from datetime import date
+from datetime import date, datetime
+from functools import partial
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 from alive_progress import alive_bar
 
-sys.setrecursionlimit(10000)  # Increase recursion limit
+PROJECT_ROOT = Path.cwd()
+sys.path.append(str(PROJECT_ROOT / 'scripts' / 'utils'))
+
+# Use dynamic years based on available data
+
+current_year = datetime.now().year
+
+# Configuration with environment variable support for testing
+QUICK_TEST = os.getenv('QUICK_TEST', 'false').lower() == 'true'
+USE_MULTIPROCESSING = os.getenv('USE_MULTIPROCESSING', 'true').lower() == 'true'
+MAX_CORES = int(os.getenv('MAX_CORES', str(mp.cpu_count())))
+
+if QUICK_TEST:
+    print("🚀 QUICK TEST MODE ENABLED")
+    my_years = [current_year - 2, current_year - 1]  # Only last 2 years
+    number_of_simulations = 200  # Much faster for testing
+    print(f"   Using {number_of_simulations} simulations with {len(my_years)} years")
+else:
+    my_years = list(range(current_year - 5, current_year))  # Last 5 years
+    number_of_simulations = 5000
+
+if USE_MULTIPROCESSING:
+    print(f"🔥 MULTIPROCESSING ENABLED: Using {MAX_CORES} cores")
+else:
+    print("🔄 Single-threaded execution")
 
 todays_date = date.today()
 logging.basicConfig()
 
 ### Use Monte Carlo simulation to project the score of my team, based on historical data ###
 ### From Scott Rome: https://srome.github.io/Making-Fantasy-Football-Projections-Via-A-Monte-Carlo-Simulation/ ###
-
-# Use dynamic years based on available data
-from datetime import datetime
-
-current_year = datetime.now().year
-my_years = list(range(current_year - 5, current_year))  # Last 5 years
-# at least great than 50
-number_of_simulations = 5000
-
 
 def get_combined_data(directory_path):
     # Get data file names - look for season.csv files in season_datasets subdirectory
@@ -44,7 +66,6 @@ def get_combined_data(directory_path):
 combined_data = get_combined_data(directory_path='datasets')
 
 # Try to load team file from my_ff_teams directory
-import os
 
 # Comment out module-level team loading for testing purposes
 # team_files = glob.glob('my_ff_teams/my_team_*.tsv')
@@ -138,7 +159,7 @@ def make_team(team, db):
     return pd.DataFrame(tm).drop_duplicates(subset=['Name', 'Position'])[['Name', 'Position', 'Tm']]
 
 
-# Comment out module-level execution for testing purposes
+# Comment out module-level execution for testing
 # tm = make_team(team=my_team, db=combined_data)
 
 
@@ -165,7 +186,7 @@ def validate_team(db_team, my_team):
         print(missing_players)
 
 
-# Comment out module-level execution for testing purposes
+# Comment out module-level execution for testing
 # validate_team(db_team=tm, my_team=my_team)
 
 # print(combined_data.columns)
@@ -275,120 +296,175 @@ def get_score_for_player_safe(db, player, years, max_attempts=10):
         return calculate_fallback_score(db, player, years)
 
 
-def simulate(team, db, years, exps=10):
+def simulate_batch(team, db, years, batch_size, batch_id=0):
     """
-    Run Monte Carlo simulation with enhanced progress monitoring.
+    Run a batch of simulations for multiprocessing.
+    Returns a DataFrame with simulation results.
     """
-    import time
-    from datetime import datetime
-
-    # Initialize progress tracking
-    start_time = time.time()
-    total_operations = exps * len(team)
+    results = []
     
-    print("\n🎯 Starting Monte Carlo Simulation")
+    for sim in range(batch_size):
+        team_score = 0
+        player_scores = {}
+        
+        for player in team.itertuples():
+            score = get_score_for_player_safe(db, player, years)
+            team_score += score
+            player_scores[player.Name] = score
+        
+        # Add total team score
+        player_scores['Total'] = team_score
+        results.append(player_scores)
+    
+    return pd.DataFrame(results)
+
+
+def simulate_parallel(team, db, years, exps=10):
+    """
+    Enhanced simulation function with multiprocessing support.
+    """
+    print("🎯 Starting Parallel Monte Carlo Simulation")
     print(f"   Team size: {len(team)} players")
     print(f"   Simulations: {exps:,}")
-    print(f"   Total operations: {total_operations:,}")
+    print(f"   Years: {years}")
+    print(f"   CPU cores: {MAX_CORES}")
+    print(f"   Started at: {datetime.now().strftime('%H:%M:%S')}")
+    
+    if USE_MULTIPROCESSING and exps >= 100:  # Only use multiprocessing for larger jobs
+        # Split simulations across cores
+        batch_size = exps // MAX_CORES
+        remainder = exps % MAX_CORES
+        
+        # Create batches
+        batches = [batch_size] * MAX_CORES
+        for i in range(remainder):
+            batches[i] += 1
+        
+        print(f"   Batch sizes: {batches}")
+        
+        # Create partial function with fixed arguments
+        simulate_func = partial(simulate_batch, team, db, years)
+        
+        # Run in parallel
+        with mp.Pool(MAX_CORES) as pool:
+            batch_args = [(batch_size, i) for i, batch_size in enumerate(batches) if batch_size > 0]
+            
+            with alive_bar(len(batch_args), title="Parallel Simulation Batches", bar="smooth") as bar:
+                results = []
+                for batch_size, batch_id in batch_args:
+                    result = pool.apply_async(simulate_func, (batch_size, batch_id))
+                    results.append(result)
+                
+                # Collect results
+                batch_results = []
+                for result in results:
+                    batch_df = result.get()
+                    batch_results.append(batch_df)
+                    bar()
+        
+        # Combine all batch results
+        outcome = pd.concat(batch_results, ignore_index=True)
+        
+    else:
+        # Fall back to single-threaded simulation
+        print("   Using single-threaded execution")
+        outcome = simulate(team, db, years, exps)
+    
+    return outcome
+
+
+def simulate(team, db, years, exps=10):
+    """
+    Original simulation function (single-threaded).
+    """
+    print("🎯 Starting Monte Carlo Simulation")
+    print(f"   Team size: {len(team)} players")
+    print(f"   Simulations: {exps:,}")
+    print(f"   Total operations: {exps * len(team):,}")
     print(f"   Years: {years}")
     print(f"   Started at: {datetime.now().strftime('%H:%M:%S')}")
     
-    scores = pd.DataFrame(data=np.zeros((exps, len(team))), columns=[p.Name for p in team.itertuples()])
+    # Initialize tracking variables
+    total_operations = exps * len(team)
+    successful_scores = 0
+    fallback_scores = 0
+    errors = 0
+    simulation_scores = []
     
-    # Enhanced progress bar with simulation statistics
-    with alive_bar(total_operations, bar='smooth', title='Monte Carlo Simulation', 
+    results = []
+    start_time = datetime.now()
+    
+    with alive_bar(total_operations, bar='smooth', title='Monte Carlo Simulation',
                    dual_line=True, manual=True) as bar:
         
-        simulation_stats = {
-            'successful_scores': 0,
-            'fallback_scores': 0,
-            'errors': 0,
-            'avg_score_per_sim': []
-        }
-        
-        for n in range(exps):
-            sim_start = time.time()
-            sim_total_score = 0
+        for exp in range(exps):
+            team_score = 0
+            player_scores = {}
             
-            for player_idx, player in enumerate(team.itertuples()):
+            for player in team.itertuples():
                 try:
-                    score1 = get_score_for_player_safe(db, player, years)
-                    pname = player.Name
-                    scores.at[n, pname] += score1
-                    sim_total_score += score1
+                    score = get_score_for_player_safe(db, player, years)
+                    team_score += score
+                    player_scores[player.Name] = score
                     
-                    # Track statistics
-                    if score1 > 0:
-                        simulation_stats['successful_scores'] += 1
+                    # Track success/fallback
+                    if score > 0:
+                        successful_scores += 1
                     else:
-                        simulation_stats['fallback_scores'] += 1
+                        fallback_scores += 1
                         
                 except Exception as e:
-                    print(f"Error in simulation {n+1}, player {player.Name}: {e}")
-                    simulation_stats['errors'] += 1
+                    logging.warning(f"Error scoring {player.Name}: {e}")
+                    player_scores[player.Name] = 0
+                    errors += 1
                 
-                # Update progress bar
-                completed = n * len(team) + player_idx + 1
-                progress = completed / total_operations
-                
-                # Update bar with current simulation info
-                elapsed = time.time() - start_time
-                if elapsed > 0:
-                    rate = completed / elapsed
-                    eta = (total_operations - completed) / rate if rate > 0 else 0
-                    
-                    bar.text(f'Sim {n+1}/{exps} | Player {player_idx+1}/{len(team)} | '
-                            f'Rate: {rate:.1f} ops/sec | ETA: {eta:.0f}s')
-                
-                bar(progress)
+                bar()
             
-            # Track simulation average
-            sim_avg = sim_total_score / len(team) if len(team) > 0 else 0
-            simulation_stats['avg_score_per_sim'].append(sim_avg)
+            # Add total team score
+            player_scores['Total'] = team_score
+            results.append(player_scores)
+            simulation_scores.append(team_score)
             
-            # Intermediate progress report every 10% of simulations
-            if (n + 1) % max(1, exps // 10) == 0:
-                elapsed = time.time() - start_time
-                progress_pct = ((n + 1) / exps) * 100
-                print(f"\n📊 Progress: {progress_pct:.0f}% complete ({n+1}/{exps} sims)")
-                print(f"   Elapsed time: {elapsed:.1f}s")
-                if simulation_stats['avg_score_per_sim']:
-                    recent_avg = sum(simulation_stats['avg_score_per_sim'][-5:]) / min(5, len(simulation_stats['avg_score_per_sim']))
-                    print(f"   Recent avg team score: {recent_avg:.1f}")
-        
-        bar(1.0)  # Complete the progress bar
+            # Progress reporting every 10%
+            if (exp + 1) % max(1, exps // 10) == 0:
+                progress_pct = ((exp + 1) / exps) * 100
+                elapsed = (datetime.now() - start_time).total_seconds()
+                recent_avg = np.mean(simulation_scores[-min(100, len(simulation_scores)):])
+                
+                print(f"\n         📊 Progress: {progress_pct:.0f}% complete ({exp + 1}/{exps} sims)")
+                print(f"    Elapsed time: {elapsed:.1f}s")
+                print(f"    Recent avg team score: {recent_avg:.1f}")
     
-    # Final simulation summary
-    total_time = time.time() - start_time
+    outcome = pd.DataFrame(results)
+    
+    # Final statistics
+    total_time = (datetime.now() - start_time).total_seconds()
+    avg_score = np.mean(simulation_scores) if simulation_scores else 0
+    
     print("\n✅ Simulation Complete!")
     print(f"   Total time: {total_time:.1f}s")
     print(f"   Average time per simulation: {total_time/exps:.2f}s")
-    print(f"   Successful scores: {simulation_stats['successful_scores']:,}")
-    print(f"   Fallback scores: {simulation_stats['fallback_scores']:,}")
-    if simulation_stats['errors'] > 0:
-        print(f"   Errors encountered: {simulation_stats['errors']:,}")
+    print(f"   Successful scores: {successful_scores:,}")
+    print(f"   Fallback scores: {fallback_scores:,}")
+    print(f"   Average team score: {avg_score:.1f}")
     
-    if simulation_stats['avg_score_per_sim']:
-        overall_avg = sum(simulation_stats['avg_score_per_sim']) / len(simulation_stats['avg_score_per_sim'])
-        print(f"   Average team score: {overall_avg:.1f}")
-    
-    return pd.DataFrame(scores)
+    return outcome
 
 
 def main(years=my_years, simulations=number_of_simulations):
     """
     Main function with enhanced progress monitoring and logging.
     """
-    import time
-    from datetime import datetime
-    
     print("🚀 Fantasy Football Monte Carlo Simulation")
     print(f"   Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("   Simulation parameters:")
     print(f"     Years: {years}")
     print(f"     Number of simulations: {simulations:,}")
     
-    start_time = time.time()
+    if QUICK_TEST:
+        print("   🚀 QUICK TEST MODE: Using reduced parameters for faster execution")
+    
+    print()
     
     # Load team locally for this execution
     print("\n📋 Loading team data...")
@@ -409,31 +485,44 @@ def main(years=my_years, simulations=number_of_simulations):
     for idx, player in team.iterrows():
         print(f"   {player['Position']}: {player['Name']} ({player['Tm']})")
     
-    # Run simulation
-    outcome = simulate(team=team, db=combined_data, years=years, exps=simulations)
+    # Run simulation with parallel processing
+    start_time = datetime.now()
+    outcome = simulate_parallel(team, combined_data, years, simulations)
+    total_time = (datetime.now() - start_time).total_seconds()
     
-    # Calculate results
-    game_points = outcome.sum(axis=1, skipna=True)  # Sum the player scores together
-    
-    total_time = time.time() - start_time
-    
+    # Generate comprehensive results summary
     print("\n📈 Simulation Results:")
-    print(f"   Team projection: {game_points.mean():.2f} points")
-    print(f"   Standard deviation: {game_points.std():.2f} points")
-    print(f"   Standard error: {(game_points.std() / np.sqrt(len(outcome.columns))):.2f}")
-    print(f"   Min score: {game_points.min():.2f} points")
-    print(f"   Max score: {game_points.max():.2f} points")
-    print(f"   95% confidence interval: [{game_points.quantile(0.025):.2f}, {game_points.quantile(0.975):.2f}]")
     
-    # Player-level statistics
+    # Calculate statistics for the Total column (team scores)
+    if 'Total' in outcome.columns:
+        team_scores = outcome['Total']
+        mean_score = team_scores.mean()
+        std_score = team_scores.std()
+        se_score = std_score / np.sqrt(len(team_scores))
+        min_score = team_scores.min()
+        max_score = team_scores.max()
+        
+        # 95% confidence interval
+        ci_lower = mean_score - 1.96 * se_score
+        ci_upper = mean_score + 1.96 * se_score
+        
+        print(f"   Team projection: {mean_score:.2f} points")
+        print(f"   Standard deviation: {std_score:.2f} points")
+        print(f"   Standard error: {se_score:.2f}")
+        print(f"   Min score: {min_score:.2f} points")
+        print(f"   Max score: {max_score:.2f} points")
+        print(f"   95% confidence interval: [{ci_lower:.2f}, {ci_upper:.2f}]")
+    
     print("\n🏆 Player Performance Summary:")
     for col in outcome.columns:
-        player_scores = outcome[col]
-        print(f"   {col}: {player_scores.mean():.1f} ± {player_scores.std():.1f} points")
+        if col != 'Total':  # Skip the total column
+            player_scores = outcome[col]
+            print(f"   {col}: {player_scores.mean():.1f} ± {player_scores.std():.1f} points")
     
     # Save results
     print("\n💾 Saving results...")
     output_file = f'results/montecarlo_results/{todays_date.year}_projections_from_years{years}.tsv'
+    
     outcome.to_csv(output_file, sep='\t')
     print(f"   Results saved to: {output_file}")
     

@@ -89,13 +89,13 @@ def create_analysis_dataset(path_to_data_directory):
     print(f"After cleaning, data shape: {data.shape}")
     print(f"Season range after cleaning: {data['Season'].min()} - {data['Season'].max()}")
 
-    # Save processed data
+    # Save combined dataset
     output_dir = 'datasets/combined_datasets'
-    os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, f'{min(data["Season"])}-{max(data["Season"])}season_modern.csv')
+    output_file = os.path.join(output_dir, 'combined_ff_data.csv')
+    
     data.to_csv(output_file, index=False)
-    print(f"Processed data shape: {data.shape}")
-    print(f"Saved to: {output_file}")
+    print(f"Combined dataset saved to: {output_file}")
+    print(f"Shape: {data.shape}")
     
     return data, team_names
 
