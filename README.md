@@ -141,6 +141,8 @@ For Bayesian model below, data is index as player $i$ in week $t$, positions in 
   ```math
   \beta^{p}_{\cdot} \sim \mathcal{N}(0, \tau^{p});\quad h^{p}_{r},\ a^{p}_{r} \sim \mathcal{N}(0, \tau^{p}_{r});\quad \sigma_{r} \sim \mathrm{HalfNormal}(\sigma_0);\quad \nu = 1 + \exp(\eta)
   ```
+  
+  Symbols used above: $\alpha$ (intercept), $\mu_{it}$ (latent mean), $\beta^{p}_{\mathrm{opp}(i,t)}$ (opponent-by-position effect), $h^{\mathrm{pos}(i)}_{r(i,t)}$ and $a^{\mathrm{pos}(i)}_{r(i,t)}$ (home/away offsets by position and rank), $\mathbb{I}\{\cdot\}$ (indicator), $\sigma_r$ (rank-specific scale), $\tau^p,\tau^p_r$ (prior scales), $\nu=1+\exp(\eta)$ (Student–$t$ df).
 
   Defense effect by position:
   ```math
