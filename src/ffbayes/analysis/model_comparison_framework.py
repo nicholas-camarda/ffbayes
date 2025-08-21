@@ -38,6 +38,9 @@ class ModelComparisonFramework:
         self.monte_carlo_data = None
         self.bayesian_data = None
         
+        # Simple adapter for our modern_model_results structure (MAE-based)
+        self.bayes_summary = None
+    
     def load_monte_carlo_results(self, file_path: Optional[str] = None) -> Dict[str, Any]:
         """Load Monte Carlo simulation results.
         
@@ -158,28 +161,29 @@ class ModelComparisonFramework:
         with open(file_path, 'r') as f:
             data = json.load(f)
         
-        # Validate Bayesian data structure or adapt
-        if 'team_projection' not in data and 'model_output' not in data:
-            # Adapt from modern_model_results.json structure
-            if 'results' in data and 'summary' in data:
-                # Build a minimal shim
-                team_mean = data['results'].get('bayesian_mae', 0)
-                # Create a placeholder team score block; downstream charts expect these keys
-                data = {
-                    'model_output': {
-                        'team_score': {
-                            'mean': data['results'].get('bayesian_mae', 0),
-                            'std': data['results'].get('baseline_mae', 0),
-                            'min': data['results'].get('bayesian_mae', 0),
-                            'max': data['results'].get('bayesian_mae', 0),
-                            'confidence_interval': [0, 0],
-                            'percentiles': {'p5': 0, 'p25': 0, 'p50': team_mean, 'p75': 0, 'p95': 0}
-                        },
-                        'player_contributions': {}
-                    },
-                    'model_metadata': {}
-                }
-            else:
+        # If this is our modern_model_results.json, capture MAEs for comparison
+        if 'mae_bayesian' in data and 'mae_baseline' in data:
+            self.bayes_summary = {
+                'bayesian_mae': float(data['mae_bayesian']),
+                'baseline_mae': float(data['mae_baseline'])
+            }
+            # Provide a minimal model_output block to satisfy downstream keys
+            data = {
+                'model_output': {
+                    'team_score': {
+                        'mean': data['mae_bayesian'],
+                        'std': data['mae_baseline'],
+                        'min': data['mae_bayesian'],
+                        'max': data['mae_bayesian'],
+                        'confidence_interval': [data['mae_bayesian'], data['mae_bayesian']],
+                        'percentiles': {'p5': 0, 'p25': 0, 'p50': data['mae_bayesian'], 'p75': 0, 'p95': 0}
+                    }
+                },
+                'model_metadata': {}
+            }
+        else:
+            # Validate Bayesian data structure or adapt; otherwise keep as is
+            if 'team_projection' not in data and 'model_output' not in data:
                 raise ValueError("Invalid Bayesian data structure: missing 'team_projection' or 'model_output'")
         
         self.bayesian_data = data
@@ -209,17 +213,36 @@ class ModelComparisonFramework:
         comparison_metrics = {
             'mean_difference': abs(mc_score['mean'] - bayes_score['mean']),
             'mean_difference_pct': abs(mc_score['mean'] - bayes_score['mean']) / mc_score['mean'] * 100,
-            'std_ratio': mc_score['std'] / bayes_score['std'],
-            'uncertainty_difference': abs(mc_score['std'] - bayes_score['std']),
+            'std_ratio': mc_score['std'] / max(bayes_score.get('std', 1e-6), 1e-6),
+            'uncertainty_difference': abs(mc_score['std'] - bayes_score.get('std', 0.0)),
             'confidence_interval_overlap': self._calculate_ci_overlap(
                 mc_score['confidence_interval'], 
-                bayes_score['confidence_interval']
+                bayes_score.get('confidence_interval', [0, 0])
             ),
             'percentile_correlation': self._calculate_percentile_correlation(
                 mc_score['percentiles'], 
-                bayes_score['percentiles']
+                bayes_score.get('percentiles', {'p5':0,'p25':0,'p50':0,'p75':0,'p95':0})
             )
         }
+        
+        # If we have MAEs, include them
+        if self.bayes_summary:
+            comparison_metrics['bayesian_mae'] = self.bayes_summary['bayesian_mae']
+            comparison_metrics['baseline_mae'] = self.bayes_summary['baseline_mae']
+            # Provide a simple overall recommendation driver
+            comparison_metrics['bayes_vs_baseline_improvement'] = (
+                (self.bayes_summary['baseline_mae'] - self.bayes_summary['bayesian_mae'])
+            )
+            self.comparison_results['model_comparison'] = {
+                'Bayesian': {'mae': self.bayes_summary['bayesian_mae']},
+                'Baseline': {'mae': self.bayes_summary['baseline_mae']},
+            }
+            self.comparison_results['model_selection'] = {
+                'recommendation': {
+                    'primary_recommendation': 'Bayesian model preferred' if self.bayes_summary['bayesian_mae'] <= self.bayes_summary['baseline_mae'] else 'Baseline preferred',
+                    'reasoning': f"MAE: Bayes {self.bayes_summary['bayesian_mae']:.2f} vs Baseline {self.bayes_summary['baseline_mae']:.2f}"
+                }
+            }
         
         # Store comparison results
         self.comparison_results = {

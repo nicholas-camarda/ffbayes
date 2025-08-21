@@ -55,6 +55,11 @@
 - [ ] **Playoff Strategy**: Specialized modeling for playoff scenarios
 - [ ] **Machine Learning**: Advanced ML models for player performance prediction
 
+## Phase 7: Advanced Real-time drafting
+
+- [ ] **Plug into online draft**: See all draft picks in realtime and make recommendations 
+- [ ] **Web interactive GUI**: to easily track my draft and the rest of the league's picks.  
+
 ## Current Focus: Testing and Validation
 
 The immediate priority is **Phase 3: Testing and Validation**. This involves:

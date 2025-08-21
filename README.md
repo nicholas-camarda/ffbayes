@@ -63,6 +63,20 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 - **Output:** Team performance validation and strategy effectiveness
 - **Visualization:** `plots/monte_carlo/` - Team performance distributions
 
+### Phases & metrics (cheat sheet)
+- **Monte Carlo team simulation (Phase B)**
+  - For your drafted team, we simulate weekly team scores by sampling historical player game scores from the last 5 seasons (with guardrails and fallbacks when history is sparse).
+  - For each simulation: sample a historical week for every rostered player, sum to a team total; repeat thousands of times.
+  - We summarize the distribution with mean, std, min/max, percentiles, and a 95% CI using mean ± 1.96 × SE.
+- **Draft strategy (Phase A)**
+  - Tiers are created from season‑level predicted points and uncertainty; risk tolerance tilts toward safer or higher‑variance options.
+  - For each pick, the strategy proposes primary/backup/fallback options factoring position scarcity and roster construction.
+  - Outputs saved to `results/draft_strategy/` as timestamped JSON.
+- **Metrics used in visuals**
+  - Coefficient of Variation (CV): std/mean per player; higher implies greater volatility.
+  - Contribution %: a player’s mean points divided by the sum of team means.
+  - Team CI: mean ± 1.96 × (std/√N_sims).
+
 ## 📈 Available Visualizations
 
 ### Example Outputs (from your latest run)
@@ -78,6 +92,103 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 
 - Comparison Insights
   ![Comparison Insights](docs/images/comparison_insights_latest.png)
+
+### How to read the visuals
+- Player insights: Sorted by contribution with position-aware colors. Slender whisker error bars show mean ± std; labels include positions. Ordering reduces overlap and highlights impact.
+- Position analysis: Aggregates by true positions (not UNK), sorted by total points. Panels show total points, average per player, share of team points, and player count—useful for roster balance and position scarcity.
+- Uncertainty analysis: Left-top relates contribution vs CV (who contributes most and is volatile); left-bottom shows mean vs std (consistency vs output). Top-right is the distribution of player CV; bottom-right is the team score PDF with 95% CI and key percentiles—gives a realistic weekly range.
+- Comparison insights: Annotated team metrics (mean, std, min/max, 95% CI, percentiles) plus roster coverage pie (how many listed players had valid historical data). The model-comparison panel shows MAE for Bayesian vs the "Baseline" predictor; lower is better.
+
+> Baseline = a simple 7‑game moving average for each player (no modeling/covariates). It’s used as a sanity check; MAE is computed on the same test split as the Bayesian model.
+
+## 🔬 Technical Notes: How estimates are produced
+
+- Data preparation
+  - Last 5 seasons are combined into `datasets/combined_datasets/*season_modern.csv` and cleaned (position normalization, outlier caps, injury columns preserved, home/away flag).
+  - The Bayesian script trains on the penultimate season and evaluates on the latest (e.g., train 2023 → test 2024), caching traces/results in `results/bayesian-hierarchical-results/`.
+
+### Concepts in 60 seconds
+- **Bayesian model**: combines prior beliefs with observed data to produce a distribution of likely outcomes, not just a single number. You get both an estimate and its uncertainty.
+- **MCMC**: a numerical method that draws many samples from that distribution when it can’t be computed directly; think “smart random walk” that explores plausible values.
+- **Uncertainty**: error bars and intervals indicate how much outcomes can vary; wider bars mean more risk. Use them to balance ceiling vs stability when drafting.
+- **Monte Carlo**: simulate many plausible weeks/seasons to see realistic ranges (floor/median/ceiling) for your team’s total score.
+- **Baseline vs model**: we benchmark against a simple 7‑game moving average; the model should beat this on held‑out data (lower MAE).
+
+### Full generative model (compact)
+
+- Baseline (7‑game moving average)
+
+$$
+\hat{y}_{i,t}^{\text{base}} = \frac{1}{k}\sum_{s=1}^{k} y_{i,t-s},\quad k=\min(7,\,t-1)
+$$
+
+- Bayesian model (per‑game fantasy points)
+
+$$
+\begin{aligned}
+ y_{i,t} &\sim \mathcal{N}(\mu_{i,t},\,\sigma^2) \\
+ \mu_{i,t} &= \alpha 
+ + b^{\text{pos}}_{\text{pos}(i)} 
+ + b^{\text{team}}_{\text{team}(i,t)} 
+ + b^{\text{opp}}_{\text{opp}(i,t)} 
+ + b^{\text{home}}\,\mathbb{I}\{\text{home}_{i,t}\}
+\end{aligned}
+$$
+
+Priors (typical choices):
+
+$$
+\alpha \sim \mathcal{N}(0,\,10^2),\quad b^{(\cdot)}_j \sim \mathcal{N}(0,\,\tau^2),\quad \tau \sim \text{HalfCauchy}(5),\quad \sigma \sim \text{HalfCauchy}(5)
+$$
+
+- Monte Carlo team simulation
+
+$$
+T^{(s)} = \sum_{j=1}^{m} X^{(s)}_j,\quad s=1,\dots,S
+$$
+
+with $X^{(s)}_j$ sampled from the empirical distribution of historical game points for player $j$ (guardrails when sparse). Summary statistics:
+
+$$
+\bar{T} = \frac{1}{S}\sum_{s=1}^S T^{(s)},\quad s_T=\sqrt{\frac{1}{S-1}\sum_s\big(T^{(s)}-\bar{T}\big)^2},\quad \text{SE}(\bar{T})=\frac{s_T}{\sqrt{S}}
+$$
+
+and the 95% CI:
+
+$$
+\bar{T} \pm 1.96\,\text{SE}(\bar{T}).
+$$
+
+- Risk‑adjusted tier score (sketch)
+
+$$
+\text{score}_i = \hat{P}_i - \lambda\,\sigma_i,\quad \lambda \in \{\text{low},\,\text{med},\,\text{high}\}
+$$
+
+- Contribution and uncertainty
+
+$$
+\text{Contribution}_i(\%) = 100\cdot \frac{\hat{P}_i}{\sum_j \hat{P}_j},\qquad \text{CV}_i = \frac{\sigma_i}{\hat{P}_i}
+$$
+
+- Baseline vs Bayesian MAE (lower is better)
+
+$$
+\text{MAE} = \frac{1}{N}\sum_{n=1}^{N}\big|\hat{y}_n - y_n\big|
+$$
+
+#### Baseline predictor (details)
+- For each player–game in the test set, the baseline predicts the 7‑game moving average of that player’s prior games (if fewer than 7 exist, use what’s available). It ignores opponent, team effects, and home/away.
+- We compute MAE for this baseline and for the Bayesian model on the same held‑out split; these appear in `modern_model_results.json` as `mae_baseline` and `mae_bayesian` and feed the Comparison Insights panel.
+- Why keep it? It’s a strong, transparent benchmark; the model should consistently match or beat it to justify added complexity.
+
+### Diagnostics & reproducibility
+- Convergence checks: inspect R‑hat (≈1.00 is good), effective sample size (ESS), and trace plots.
+  - Saved ArviZ artifacts/plots (if enabled by your environment) live under `plots/bayesian_model/`.
+  - ArviZ docs: https://python.arviz.org for interpreting R‑hat, ESS, and posteriors.
+- Re‑run the Bayesian stage to refresh results and diagnostics:
+  - `ffbayes-bayes` (uses cached trace if present; reruns if config/data changed).
+- All Monte Carlo inputs/outputs are under `results/montecarlo_results/` and `results/team_aggregation/`; drafts under `results/draft_strategy/`.
 
 ## 📋 Example Draft Strategy Output
 
