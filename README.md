@@ -125,10 +125,11 @@ $$
 Bayesian model (per‑game fantasy points)
 
 $$
-\begin{aligned}
- y_{i,t} &\sim \mathcal{N}(\mu_{i,t},\,\sigma^2) \\
- \mu_{i,t} &= \alpha + b^{\text{pos}}_{\text{pos}(i)} + b^{\text{team}}_{\text{team}(i,t)} + b^{\text{opp}}_{\text{opp}(i,t)} + b^{\text{home}}\,\mathbb{I}\{\text{home}_{i,t}\}
-\end{aligned}
+y_{i,t} \sim \mathcal{N}(\mu_{i,t},\,\sigma^2)
+$$
+
+$$
+\mu_{i,t} = \alpha + b^{\text{pos}}_{\text{pos}(i)} + b^{\text{team}}_{\text{team}(i,t)} + b^{\text{opp}}_{\text{opp}(i,t)} + b^{\text{home}}\,\mathbb{I}\{\text{home}_{i,t}\}
 $$
 
 Priors (typical choices):
