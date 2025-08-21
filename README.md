@@ -116,20 +116,20 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 
 ### Full generative model (compact)
 
-- Baseline (7‑game moving average)
+Baseline (7‑game moving average)
 
-    $$
-    \hat{y}_{i,t}^{\text{base}} = \frac{1}{k}\sum_{s=1}^{k} y_{i,t-s},\quad k=\min(7,\,t-1)
-    $$
+$$
+\hat{y}_{i,t}^{\text{base}} = \frac{1}{k}\sum_{s=1}^{k} y_{i,t-s},\quad k=\min(7,\,t-1)
+$$
 
-- Bayesian model (per‑game fantasy points)
+Bayesian model (per‑game fantasy points)
 
-    $$
-    \begin{aligned}
-     y_{i,t} &\sim \mathcal{N}(\mu_{i,t},\,\sigma^2) \\
-     \mu_{i,t} &= \alpha + b^{\text{pos}}_{\text{pos}(i)} + b^{\text{team}}_{\text{team}(i,t)} + b^{\text{opp}}_{\text{opp}(i,t)} + b^{\text{home}}\,\mathbb{I}\{\text{home}_{i,t}\}
-    \end{aligned}
-    $$
+$$
+\begin{aligned}
+ y_{i,t} &\sim \mathcal{N}(\mu_{i,t},\,\sigma^2) \\
+ \mu_{i,t} &= \alpha + b^{\text{pos}}_{\text{pos}(i)} + b^{\text{team}}_{\text{team}(i,t)} + b^{\text{opp}}_{\text{opp}(i,t)} + b^{\text{home}}\,\mathbb{I}\{\text{home}_{i,t}\}
+\end{aligned}
+$$
 
 Priors (typical choices):
 
