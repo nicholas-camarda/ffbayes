@@ -67,7 +67,7 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 - **Monte Carlo team simulation (Phase B)**
   - For your drafted team, we simulate weekly team scores by sampling historical player game scores from the last 5 seasons (with guardrails and fallbacks when history is sparse).
   - For each simulation: sample a historical week for every rostered player, sum to a team total; repeat thousands of times.
-  - We summarize the distribution with mean, std, min/max, percentiles, and a 95% CI using mean ± 1.96 × SE.
+  - We summarize the distribution with mean, std, min/max, percentiles, and a 95% CI using $\text{mean} \pm 1.96 \times \mathrm{SE}$.
 - **Draft strategy (Phase A)**
   - Tiers are created from season‑level predicted points and uncertainty; risk tolerance tilts toward safer or higher‑variance options.
   - For each pick, the strategy proposes primary/backup/fallback options factoring position scarcity and roster construction.
@@ -75,7 +75,7 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 - **Metrics used in visuals**
   - Coefficient of Variation (CV): std/mean per player; higher implies greater volatility.
   - Contribution %: a player’s mean points divided by the sum of team means.
-  - Team CI: mean ± 1.96 × (std/√N_sims).
+  - Team CI: $\text{mean} \pm 1.96 \times (\text{std}/\sqrt{N_{\text{sims}}})$.
 
 ## 📈 Available Visualizations
 
@@ -125,6 +125,11 @@ Uses available history if fewer than 7 prior games; no opponent/team/home effect
 
 - Bayesian model:
   
+  Likelihood:
+  ```math
+  y_{it} \sim \mathrm{StudentT}(\nu, \mu_{it}, \sigma_{r(i,t)})
+  ```
+  
   Mean:
   ```math
   \mu_{it} = \alpha + \sum_{p \in \{QB, WR, RB, TE\}} \beta^{p}_{\mathrm{opp}(i,t)} \, \mathbb{I}\{\mathrm{pos}(i)=p\} + h^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{home_{it}\} + a^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{away_{it}\}
@@ -135,7 +140,7 @@ Uses available history if fewer than 7 prior games; no opponent/team/home effect
   \beta^{p}_{\cdot} \sim \mathcal{N}(0, \tau^{p});\quad h^{p}_{r},\ a^{p}_{r} \sim \mathcal{N}(0, \tau^{p}_{r});\quad \sigma_{r} \sim \mathrm{HalfNormal}(\sigma_0);\quad \nu = 1 + \exp(\eta)
   ```
   
-  Data index: player i in week t; positions in {QB, WR, RB, TE}; teams indexed 0..T-1; rank r∈{0,1,2,3} from quartiles of 7-game average.
+  Data index: player $i$ in week $t$; positions in $\{QB, WR, RB, TE\}$; teams indexed $0..T-1$; rank $r \in \{0,1,2,3\}$ from quartiles of 7-game average.
 
   Defense effect by position:
   ```math
