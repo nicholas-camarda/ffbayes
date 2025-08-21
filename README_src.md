@@ -117,7 +117,10 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 ### Generative model (quick overview)
 - Baseline: 7-game moving average (per player).
 
-<p align="center"><img src="svgs/cd69e1f04d5ca7be47df319c67a9ed72.svg?invert_in_darkmode" align=middle width=325.42882514999997pt height=47.917996499999994pt/></p>
+$$ 
+\hat{y}_{it}^{(\mathrm{baseline})} = \frac{1}{k_{it}} \sum_{s=1}^{k_{it}} y_{i,t-s} 
+\quad k_{it} = \min(7, t-1) 
+$$
 
 Uses available history if fewer than 7 prior games; no opponent/team/home effects.
 
@@ -127,15 +130,34 @@ Uses available history if fewer than 7 prior games; no opponent/team/home effect
 
   Likelihoods (heavy-tailed for robustness):
 
-<p align="center"><img src="svgs/652e3543d1c35f9bf685d134a2c5775f.svg?invert_in_darkmode" align=middle width=459.00959115pt height=167.86013309999998pt/></p>
+$$
+\begin{aligned}
+\text{defense effect}_{it} &= \mathbb{1}_{QB,i}\,\beta^{QB}_{\text{opp}[i,t]} + \mathbb{1}_{WR,i}\,\beta^{WR}_{\text{opp}[i,t]} + \\
+&\quad \mathbb{1}_{RB,i}\,\beta^{RB}_{\text{opp}[i,t]} + \mathbb{1}_{TE,i}\,\beta^{TE}_{\text{opp}[i,t]} \\
+\Delta y_{it} &\sim \text{Student-}t\big(\nu_2,\; \mu=\text{defense effect}_{it},\; \sigma=\sigma^{(b)}_{r(i,t)}\big) \\
+\mu_{it} &= \underbrace{\bar{y}^{(7)}_{i,t}}_{\text{7-game avg}} + \text{defense effect}_{it} + \text{home/away}_{i,t} \\
+y_{it} &\sim \text{Student-}t\big(\nu_1,\; \mu=\mu_{it},\; \sigma=\sigma_{r(i,t)}\big)
+\end{aligned}
+$$
 
   Home/away offsets by position and rank r:
 
-<p align="center"><img src="svgs/12b39044bc3b4526b8ae580a16a67bad.svg?invert_in_darkmode" align=middle width=968.9171514pt height=21.8192205pt/></p>
+$$
+\text{home/away}_{i,t} = \mathbb{I}\{home\}\,(h^{QB}_{r}\mathbb{1}_{QB,i}+h^{WR}_{r}\mathbb{1}_{WR,i}+h^{RB}_{r}\mathbb{1}_{RB,i}+h^{TE}_{r}\mathbb{1}_{TE,i}) \\
+\quad + \mathbb{I}\{away\}\,(a^{QB}_{r}\mathbb{1}_{QB,i}+a^{WR}_{r}\mathbb{1}_{WR,i}+a^{RB}_{r}\mathbb{1}_{RB,i}+a^{TE}_{r}\mathbb{1}_{TE,i})
+$$
 
   Hierarchical priors (from `src/ffbayes/analysis/bayesian_hierarchical_ff_modern.py`):
 
-<p align="center"><img src="svgs/c91c321c256acf56c583d6b095bcab13.svg?invert_in_darkmode" align=middle width=444.58861260000003pt height=128.47327349999998pt/></p>
+$$
+\begin{aligned}
+\beta^{pos}_{team} &\sim \mathcal{N}(\mu^{pos}_{\text{def}},\; 100^2) \quad (pos\in\{QB,WR,RB,TE\}) \\
+\mu^{pos}_{\text{def}} &\sim \mathcal{N}(0,\; 100^2) \\
+h^{pos}_{r},\; a^{pos}_{r} &\sim \mathcal{N}(m^{pos}_{\text{home/away}},\; 10^2),\quad m^{pos}_{\text{home/away}}\sim \mathcal{N}(0,\;100^2) \\
+\nu_1,\nu_2 &\sim 1+\text{Exponential}(1/29) \\
+\sigma_{r},\; \sigma^{(b)}_{r} &\sim \text{Uniform}(0,100)
+\end{aligned}
+$$
 
   Observed inputs used in the model: `FantPt`, 7-game rolling average `7_game_avg`, position one-hots (`position_QB`, `position_WR`, `position_RB`, `position_TE`), opponent team index `opp_team`, rank `rank` (quartiles of `7_game_avg` per player-season), and `is_home`.
 
