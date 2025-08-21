@@ -118,13 +118,13 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 
 - Baseline (7‑game moving average)
 
-\[
+$$
 \hat{y}_{i,t}^{\text{base}} = \frac{1}{k}\sum_{s=1}^{k} y_{i,t-s},\quad k=\min(7,\,t-1)
-\]
+$$
 
 - Bayesian model (per‑game fantasy points)
 
-\[
+$$
 \begin{aligned}
  y_{i,t} &\sim \mathcal{N}(\mu_{i,t},\,\sigma^2) \\
  \mu_{i,t} &= \alpha 
@@ -133,49 +133,49 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
  + b^{\text{opp}}_{\text{opp}(i,t)} 
  + b^{\text{home}}\,\mathbb{I}\{\text{home}_{i,t}\}
 \end{aligned}
-\]
+$$
 
 Priors (typical choices):
 
-\[
-\alpha \sim \mathcal{N}(0\,10^2),\quad b^{(\cdot)}_j \sim \mathcal{N}(0\,\tau^2),\quad \tau \sim \text{HalfCauchy}(5),\quad \sigma \sim \text{HalfCauchy}(5)
-\]
+$$
+\alpha \sim \mathcal{N}(0,\,10^2),\quad b^{(\cdot)}_j \sim \mathcal{N}(0,\,\tau^2),\quad \tau \sim \text{HalfCauchy}(5),\quad \sigma \sim \text{HalfCauchy}(5)
+$$
 
 - Monte Carlo team simulation
 
-\[
+$$
 T^{(s)} = \sum_{j=1}^{m} X^{(s)}_j,\quad s=1,\dots,S
-\]
+$$
 
 with $X^{(s)}_j$ sampled from the empirical distribution of historical game points for player $j$ (guardrails when sparse). Summary statistics:
 
-\[
+$$
 \bar{T} = \frac{1}{S}\sum_{s=1}^S T^{(s)},\quad s_T=\sqrt{\frac{1}{S-1}\sum_s\big(T^{(s)}-\bar{T}\big)^2},\quad \text{SE}(\bar{T})=\frac{s_T}{\sqrt{S}}
-\]
+$$
 
 and the 95% CI:
 
-\[
+$$
 \bar{T} \pm 1.96\,\text{SE}(\bar{T}).
-\]
+$$
 
 - Risk‑adjusted tier score (sketch)
 
-\[
+$$
 \text{score}_i = \hat{P}_i - \lambda\,\sigma_i,\quad \lambda \in \{\text{low},\,\text{med},\,\text{high}\}
-\]
+$$
 
 - Contribution and uncertainty
 
-\[
+$$
 \text{Contribution}_i(\%) = 100\cdot \frac{\hat{P}_i}{\sum_j \hat{P}_j},\qquad \text{CV}_i = \frac{\sigma_i}{\hat{P}_i}
-\]
+$$
 
 - Baseline vs Bayesian MAE (lower is better)
 
-\[
+$$
 \text{MAE} = \frac{1}{N}\sum_{n=1}^{N}\big|\hat{y}_n - y_n\big|
-\]
+$$
 
 #### Baseline predictor (details)
 - For each player–game in the test set, the baseline predicts the 7‑game moving average of that player’s prior games (if fewer than 7 exist, use what’s available). It ignores opponent, team effects, and home/away.
