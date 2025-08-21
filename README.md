@@ -118,19 +118,13 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 
 Baseline (7‑game moving average)
 
-$$
-\hat{y}_{i,t}^{\text{base}} = \frac{1}{k}\sum_{s=1}^{k} y_{i,t-s},\quad k=\min(7,\,t-1)
-$$
+![Baseline equation](https://render.githubusercontent.com/render/math?math=%255Chat%257By%257D_%257Bi%252Ct%257D%255E%257B%255Ctext%257Bbase%257D%257D%257D%2520%253D%2520%255Cfrac%257B1%257D%257Bk%257D%255Csum_%257Bs%253D1%257D%255E%257Bk%257D%2520y_%257Bi%252Ct-s%257D%252C%255Cquad%2520k%253D%255Cmin(7%252Ct-1))
 
 Bayesian model (per‑game fantasy points)
 
-$$
-y_{i,t} \sim \mathcal{N}(\mu_{i,t},\,\sigma^2)
-$$
+![y distribution](https://render.githubusercontent.com/render/math?math=y_%257Bi%252Ct%257D%2520%255Csim%2520%255Cmathcal%257BN%257D(%255Cmu_%257Bi%252Ct%257D%252C%25E2%2580%8B%255Csigma%255E2))
 
-$$
-\mu_{i,t} = \alpha + b^{\text{pos}}_{\text{pos}(i)} + b^{\text{team}}_{\text{team}(i,t)} + b^{\text{opp}}_{\text{opp}(i,t)} + b^{\text{home}}\,\mathbb{I}\{\text{home}_{i,t}\}
-$$
+![mu definition](https://render.githubusercontent.com/render/math?math=%255Cmu_%257Bi%252Ct%257D%2520%253D%2520%255Calpha%2520%252B%2520b%255E%257B%255Ctext%257Bpos%257D%257D_%257B%255Ctext%257Bpos%257D(i)%257D%2520%252B%2520b%255E%257B%255Ctext%257Bteam%257D%257D_%257B%255Ctext%257Bteam%257D(i%252Ct)%257D%2520%252B%2520b%255E%257B%255Ctext%257Bopp%257D%257D_%257B%255Ctext%257Bopp%257D(i%252Ct)%257D%2520%252B%2520b%255E%257B%255Ctext%257Bhome%257D%257D%255Cmathbb%257BI%257D%255C%257B%255Ctext%257Bhome%257D_%257Bi%252Ct%257D%255C%257D)
 
 Priors (typical choices):
 
