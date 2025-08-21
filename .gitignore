@@ -31,7 +31,8 @@ old *
 snake_draft_datasets/
 results/
 plots/
-docs/
+# docs ignored
+#docs/
 my_ff_teams/
 
 # Outputs
