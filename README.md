@@ -115,8 +115,7 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 - **Baseline vs model**: we benchmark against a simple 7‑game moving average; the model should beat this on held‑out data (lower MAE).
 
 ### Generative model (quick overview)
-- Baseline: 7-game moving average (per player).
-  $\hat{y}_{it}^{(\mathrm{baseline})} = \frac{1}{\min(7, t-1)} \sum_{s=1}^{\min(7, t-1)} y_{i,t-s}$
+- Baseline: 7-game moving average (per player). $$ \hat{y}_{it}^{(\mathrm{baseline})} = \frac{1}{\min(7, t-1)} \sum_{s=1}^{\min(7, t-1)} y_{i,t-s} $$
 
 
 Uses available history if fewer than 7 prior games; no opponent/team/home effects.
