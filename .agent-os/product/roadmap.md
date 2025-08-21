@@ -31,13 +31,42 @@
 - [ ] **Quality Assurance**: Validate outputs and ensure data integrity
 - [ ] **Regression Testing**: Ensure existing functionality is preserved
 
-## Phase 4: Advanced Features and Optimization
+## Phase 4: Bayesian Model Enhancement (CURRENT FOCUS)
+
+### Implementation Phases
+
+#### Phase 4.1: Data Integration Fixes (Week 1)
+**Status**: In Progress
+- [ ] Fix snap counts data loading (list conversion issue)
+- [ ] Implement real injury data integration
+- [ ] Add proper error handling for missing data
+- [ ] Test unified model with real data
+
+#### Phase 4.2: High-Impact Data Sources (Week 2-3)
+**Status**: Pending
+- [ ] OpenWeatherMap API integration for historical weather
+- [ ] ESPN API integration for Vegas odds and betting lines
+- [ ] Advanced stats integration (target share, snap counts, red zone usage)
+- [ ] Validate each feature's individual impact
+
+#### Phase 4.3: Production Integration (Week 4)
+**Status**: Pending
+- [ ] Pipeline integration and testing
+- [ ] Documentation updates
+- [ ] Legacy code cleanup
+- [ ] Performance monitoring setup
+
+### Next Steps
+1. **Immediate**: Fix data loading issues in unified model
+2. **Short-term**: Implement weather and Vegas odds APIs
+3. **Medium-term**: Add advanced statistics features
+4. **Long-term**: Validate performance improvements with real data
+
+## Phase 5: Advanced Features and Optimization
 
 - [ ] **Advanced Draft Strategy**: Implement more sophisticated algorithms beyond basic VOR
 - [ ] **Uncertainty Quantification**: Better confidence intervals and risk assessment
 - [ ] **Bench Player Optimization**: Limited bench management for small leagues
-- [ ] **Injury/Practice Status**: Incorporate injury reports into predictions
-- [ ] **Weather Integration**: Add weather data for improved accuracy
 
 ## Phase 5: Production Features
 
@@ -92,6 +121,12 @@ The immediate priority is **Phase 3: Testing and Validation**. This involves:
 - [x] Pipeline orchestration enhanced with proper sequencing and dependency management
 - [x] Data validation completed with comprehensive checks
 - [x] Logging and debugging capabilities added across all components
+
+### Phase 4 Success Criteria (Bayesian Enhancement)
+- [ ] **MAE Improvement**: 5-15% over baseline (MAE ≤ 3.15-3.53)
+- [ ] **Data Integration**: All planned data sources working
+- [ ] **Pipeline Integration**: Unified model in production pipeline
+- [ ] **Documentation**: Complete usage and maintenance docs
 
 ### Long-term Success Criteria
 - [ ] 99%+ pipeline reliability with 45-minute completion time

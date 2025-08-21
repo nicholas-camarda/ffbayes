@@ -7,7 +7,7 @@ name = "ffbayes"
 version = "0.1.0"
 description = "Unified Fantasy Football Analytics Pipeline"
 requires-python = ">=3.10"
-authors = [{ name = "FFBayes" }]
+authors = [{ name = "Nicholas Camarda" }]
 readme = "README.md"
 keywords = ["fantasy-football", "bayesian", "monte-carlo", "pymc", "pipeline"]
 license = { text = "MIT" }
@@ -21,11 +21,12 @@ ffbayes-collect = "ffbayes.data_pipeline.collect_data:main"
 ffbayes-validate = "ffbayes.data_pipeline.validate_data:main"
 ffbayes-preprocess = "ffbayes.data_pipeline.preprocess_analysis_data:main"
 ffbayes-mc = "ffbayes.analysis.montecarlo_historical_ff:main"
-ffbayes-bayes = "ffbayes.analysis.bayesian_hierarchical_ff_modern:main"
+ffbayes-bayes = "ffbayes.analysis.bayesian_hierarchical_ff_unified:main"
 ffbayes-agg = "ffbayes.analysis.bayesian_team_aggregation:main"
 ffbayes-compare = "ffbayes.analysis.model_comparison_framework:main"
 ffbayes-viz = "ffbayes.analysis.create_team_aggregation_visualizations:main"
 ffbayes-draft-strategy = "ffbayes.draft_strategy.bayesian_draft_strategy:main"
+ffbayes-compare-strategies = "ffbayes.analysis.draft_strategy_comparison:main"
 
 [tool.ruff.lint]
 select = [

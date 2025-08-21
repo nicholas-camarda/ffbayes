@@ -43,6 +43,16 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 
 ## 🎯 How the Models Work
 
+### Traditional VOR Strategy (Value Over Replacement)
+- **Purpose:** Established fantasy football rankings based on value over replacement
+- **Method:** Scrapes FantasyPros data and calculates VOR for each position
+- **Input:** FantasyPros ADP and projection data
+- **Output:** Top 120 players ranked by VOR with position-specific replacement values
+- **Files:** `snake_draft_datasets/snake-draft_ppr-0.5_vor_top-120_2025.csv`
+- **Execution:** Runs independently after data preprocessing (~30 seconds)
+- **Features:** Position-specific replacement values (RB: 126.05, WR: 138.3, QB: 288.2, TE: 104.2)
+- **Reliability:** High with graceful error handling for network issues
+
 ### Bayesian Hierarchical Model (Step 1: Propose)
 - **Purpose:** Player-level predictions with uncertainty
 - **Method:** PyMC4 hierarchical model accounting for team effects, position, and player history
@@ -51,10 +61,12 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 - **Visualization:** `plots/bayesian_model/` - Model diagnostics and predictions
 
 ### Draft Strategy Generation (Step 2: Optimize)
-- **Purpose:** Tiered draft recommendations
+- **Purpose:** Tiered draft recommendations with uncertainty quantification
 - **Method:** Uses Bayesian predictions to create optimal team construction
 - **Input:** Bayesian player projections + position scarcity + uncertainty analysis
 - **Output:** Multiple options per pick with reasoning and uncertainty analysis
+- **Features:** Tier-based approach, position scarcity analysis, team construction optimization
+- **Configuration:** Draft position, league size, risk tolerance (low/medium/high)
 
 ### Monte Carlo Validation (Step 3: Evaluate - Adversarial!)
 - **Purpose:** Adversarial validation of draft strategies
@@ -64,6 +76,11 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 - **Visualization:** `plots/monte_carlo/` - Team performance distributions
 
 ### Phases & metrics (cheat sheet)
+- **VOR Strategy (Traditional)**
+  - Scrapes FantasyPros for real-time ADP and projection data
+  - Calculates value over replacement for each position (RB: 126.05, WR: 138.3, QB: 288.2, TE: 104.2)
+  - Generates static rankings of top 120 players by VOR
+  - Outputs saved to `snake_draft_datasets/` as CSV and Excel files
 - **Monte Carlo team simulation (Phase B)**
   - For your drafted team, we simulate weekly team scores by sampling historical player game scores from the last 5 seasons (with guardrails and fallbacks when history is sparse).
   - For each simulation: sample a historical week for every rostered player, sum to a team total; repeat thousands of times.
@@ -158,6 +175,25 @@ For Bayesian model below, data is index as player $i$ in week $t$, positions in 
 
   Outputs: posterior predictive mean and std for each player-week; MAE is reported vs held-out actuals and compared to the 7-game-average baseline.
 
+### Prior Specification and Regularization
+
+The model uses carefully calibrated priors to balance flexibility with regularization. These priors were chosen based on domain knowledge of fantasy football scoring patterns and empirical analysis of historical data.
+
+| Parameter | Prior | Rationale |
+|-----------|-------|-----------|
+| **Defensive effects** | Normal(0, 4.0) | Allows for substantial team-level effects. Some teams can have significant defensive impacts (5-8 points) |
+| **Team-specific** | Normal(μ_global, 3.0) | Allows for variation between teams while maintaining regularization around the global mean |
+| **Home/away** | Normal(0, 3.0) | Allows for substantial home field advantage. Home advantage can be 2-5 points in fantasy football |
+| **Position-specific** | Normal(μ_global, 2.0) | Allows for variation in home/away effects by position and rank |
+| **Observation noise** | HalfNormal(8.0) | Allows for realistic fantasy point variation. Fantasy points can vary widely (5-15 points SD is common) |
+| **Degrees of freedom** | Exponential(1/29.0) + 1 | Provides heavy tails for robustness while staying close to normal (ν≈30) |
+| **Intercept** | Normal(0, 2.0) | Allows the model to learn an overall adjustment beyond the 7-game average |
+| **7-game avg multiplier** | Normal(1.0, 0.1) | Allows the model to learn if the 7-game average is systematically biased |
+
+**Prior Evolution**: Previous versions used extremely diffuse priors (Normal(0, 100²)) which led to poor generalization and unstable predictions. The current specification provides proper regularization while maintaining the model's ability to capture meaningful opponent and situational effects.
+
+**Impact**: These priors prevent overfitting to training data while allowing the model to learn substantial effects (5-8 point defensive impacts, 2-5 point home advantages) that are realistic in fantasy football.
+
 #### Baseline predictor (details)
 - For each player–game in the test set, the baseline predicts the 7‑game moving average of that player’s prior games (if fewer than 7 exist, use what’s available). It ignores opponent, team effects, and home/away.
 - We compute MAE for this baseline and for the Bayesian model on the same held‑out split; these appear in `modern_model_results.json` as `mae_baseline` and `mae_bayesian` and feed the Comparison Insights panel.
@@ -192,15 +228,57 @@ For Bayesian model below, data is index as player $i$ in week $t$, positions in 
 }
 ```
 
+## 📊 Strategy Comparison
+
+### VOR vs Bayesian Strategies
+The pipeline provides two complementary draft strategies:
+
+| Feature | VOR Strategy | Bayesian Strategy |
+|---------|-------------|-------------------|
+| **Data Source** | FantasyPros projections | Bayesian model predictions |
+| **Approach** | Value over replacement | Tier-based with uncertainty |
+| **Output** | Static rankings | Dynamic pick-by-pick strategy |
+| **Uncertainty** | None | Full uncertainty quantification |
+| **Position Scarcity** | Basic | Advanced analysis |
+| **Team Construction** | Individual rankings | Team optimization |
+| **Execution Speed** | Fast (~30 seconds) | Moderate (~2-3 minutes) |
+| **Dependencies** | None | Requires Bayesian model |
+
+### Comparison Tools
+```bash
+# Generate comparison analysis and visualizations
+ffbayes-compare-strategies
+
+# View comparison report
+cat results/draft_strategy_comparison_report.txt
+
+# Check comparison visualizations
+ls plots/draft_strategy_comparison/
+```
+
 ## 🔧 Configuration Options
 
 ### Draft Strategy Parameters
+
+#### Bayesian Strategy
 ```bash
 ffbayes-draft-strategy \
   --draft-position 3 \        # Your draft position (1 - [LEAGUE_SIZE])
   --league-size 12 \          # League size (8, 10, 12, 14, 16)
   --risk-tolerance low \      # Risk level (low, medium, high)
   --output-file strategy.json # Save to file
+```
+
+#### VOR Strategy
+```bash
+# Run VOR strategy directly
+conda run -n ffbayes python -m ffbayes.draft_strategy.traditional_vor_draft
+
+# VOR strategy runs automatically in pipeline
+ffbayes-pipeline
+
+# Compare both strategies
+ffbayes-compare-strategies
 ```
 
 ### Pipeline Options
@@ -223,11 +301,14 @@ ffbayes/
 ├── datasets/
 │   ├── season_datasets/          # Raw NFL data by year
 │   └── combined_datasets/        # Processed 5-year datasets
+├── snake_draft_datasets/         # VOR strategy outputs
+│   ├── snake-draft_ppr-0.5_vor_top-120_2025.csv
+│   └── DRAFTING STRATEGY -- snake-draft_ppr-0.5_vor_top-120_2025.xlsx
 ├── results/
 │   ├── montecarlo_results/       # Team simulations
 │   ├── bayesian-hierarchical-results/  # Player predictions
 │   ├── team_aggregation/         # Combined analysis
-│   └── draft_strategy/           # Draft strategy outputs
+│   └── draft_strategy/           # Bayesian draft strategy outputs
 ├── plots/
 │   ├── bayesian_model/           # Model diagnostics
 │   ├── team_aggregation/         # Team analysis

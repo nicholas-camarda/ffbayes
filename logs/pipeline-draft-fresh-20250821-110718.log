@@ -1,0 +1,123 @@
+Initializing NUTS using jitter+adapt_diag...
+Multiprocess sampling (4 chains in 4 jobs)
+NUTS: [nu_minus_one, std_dev_rank, std_dev_rank_b, opp_team_prior, defensive_differential_qb, defensive_differential_wr, defensive_differential_rb, defensive_differential_te, home_additive_prior, away_additive_prior, home_differential_qb, home_differential_rb, home_differential_te, home_differential_wr, away_differential_qb, away_differential_rb, away_differential_wr, away_differential_te]
+Default configuration: 7 cores, 1000 draws, 4 chains
+============================================================
+Modern Bayesian Hierarchical Fantasy Football Model
+Using PyMC4 for robust uncertainty quantification
+============================================================
+🆕 No existing trace found - will run full sampling
+Loading preprocessed data for analysis...
+Loading preprocessed data from: datasets/combined_datasets/2020-2024season_modern.csv
+Loaded data shape: (13459, 38)
+Found 32 teams
+Loaded data shape: (13459, 38)
+Found 32 teams
+Training on 2023 data, testing on 2024 data
+Training data shape: (2801, 38)
+Test data shape: (2762, 38)
+Building modern PyMC4 model...
+Part 1: Defining observables...
+Part 2: Modeling defensive effects...
+Part 3: Modeling home/away effects...
+Part 4: Building likelihood models...
+Part 5: Training model...
+                                                                                                               
+  Progress                Draws   Divergences   Step size   Grad evals   Sampling Speed   Elapsed   Remaining  
+ ───────────────────────────────────────────────────────────────────────────────────────────────────────────── 
+  ━━━━━━━━━━━━━━━━━━━━━   2000    0             0.24        15           41.29 draws/s    0:00:48   0:00:00    
+  ━━━━━━━━━━━━━━━━━━━━━   2000    0             0.24        15           40.46 draws/s    0:00:49   0:00:00    
+  ━━━━━━━━━━━━━━━━━━━━━   2000    0             0.22        15           40.94 draws/s    0:00:48   0:00:00    
+  ━━━━━━━━━━━━━━━━━━━━━   2000    0             0.21        15           40.17 draws/s    0:00:49   0:00:00    
+                                                                                                               
+Sampling 4 chains for 1_000 tune and 1_000 draw iterations (4_000 + 4_000 draws total) took 50 seconds.
+Sampling: [fantasy_points]
+Model training completed!
+Trace saved to: results/bayesian-hierarchical-results/trace_20250821_110908.pkl
+Part 6: Evaluating model...
+Generating predictions...
+Sampling ... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00 / 0:00:01
+Test data length: 2762
+Predictions length: 2801
+⚠️  Length mismatch detected. Truncating predictions to match test data.
+Adjusted predictions length: 2762
+Bayesian Model MAE: 6.89
+Baseline (7-game avg) MAE: 3.71
+Improvement: -85.9%
+Part 7: Generating visualizations...
+Results saved to results/bayesian-hierarchical-results/modern_model_results.json
+Model training and evaluation completed successfully!
+
+============================================================
+Model Summary:
+- Bayesian Model MAE: 6.89
+- Baseline MAE: 3.71
+- Improvement: -85.9%
+============================================================
+🚀 QUICK TEST MODE: DISABLED
+======================================================================
+Bayesian Team Aggregation for Fantasy Football
+Aggregating individual player predictions to team-level projections
+======================================================================
+📊 Loading Monte Carlo simulation results...
+   Loading: 2025_projections_from_years[2023, 2024].tsv
+   Loaded 200 simulations with 15 players
+🧠 Loading Bayesian individual predictions...
+   Loading: modern_model_results.json
+   Loaded Bayesian results with 187 teams
+
+📋 Sample Team Roster: 14 players
+🔗 Aggregating 14 players to team projections...
+   Using 14 players with available data
+   Team projection: 118.7 ± 0.0 points
+   Confidence interval: [118.7, 118.7]
+🔄 Handling roster variations and missing players...
+   Roster coverage: 100.0%
+   Missing players: 0
+🔗 Integrating with existing model outputs...
+   Generated 2 insights
+💾 Saving team aggregation results...
+   Results saved to: results/team_aggregation/team_aggregation_results_20250821_110915.json
+📊 Generating team aggregation visualizations...
+   Generated 1 visualization plots
+
+======================================================================
+Team Aggregation Summary:
+- Team Projection: 118.7 ± 0.0 points
+- Roster Coverage: 100.0%
+- Confidence Level: 95%
+- Results saved to: results/team_aggregation/team_aggregation_results_20250821_110915.json
+- Visualizations: 1 plots generated
+======================================================================
+/opt/homebrew/Cellar/python@3.10/3.10.15/Frameworks/Python.framework/Versions/3.10/lib/python3.10/runpy.py:126: RuntimeWarning: 'ffbayes.draft_strategy.bayesian_draft_strategy' found in sys.modules after import of package 'ffbayes.draft_strategy', but prior to execution of 'ffbayes.draft_strategy.bayesian_draft_strategy'; this may result in unpredictable behaviour
+  warn(RuntimeWarning(msg))
+2025-08-21 11:09:17,098 - __main__ - INFO - Loading predictions...
+2025-08-21 11:09:17,098 - __main__ - INFO - Loading player data with positions...
+2025-08-21 11:09:17,099 - __main__ - INFO - Using most recent dataset: datasets/combined_datasets/2020-2024season_modern.csv
+2025-08-21 11:09:17,129 - __main__ - INFO - Loaded player data: (13459, 38)
+2025-08-21 11:09:17,143 - __main__ - INFO - Processed 268 players with valid projections
+2025-08-21 11:09:17,148 - __main__ - INFO - Position breakdown: {'WR': 112, 'RB': 69, 'TE': 50, 'QB': 35, 'FB': 2}
+2025-08-21 11:09:17,148 - __main__ - INFO - Loading Monte Carlo team projections...
+2025-08-21 11:09:17,148 - __main__ - INFO - Using most recent Monte Carlo results: results/montecarlo_results/2025_projections_from_years[2023, 2024].tsv
+2025-08-21 11:09:17,157 - __main__ - INFO - Generated 200 team projections from Monte Carlo data
+2025-08-21 11:09:17,157 - __main__ - INFO - Generating draft strategy...
+2025-08-21 11:09:17,157 - __main__ - INFO - Generating draft strategy for position 3
+2025-08-21 11:09:17,158 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,159 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,161 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,162 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,164 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,166 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,168 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,170 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,171 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,173 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,174 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,176 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,177 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,178 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,180 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,181 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:09:17,183 - __main__ - INFO - Generated strategy for 16 picks
+2025-08-21 11:09:17,195 - __main__ - INFO - Strategy saved to results/draft_strategy/draft_strategy_pos3_20250821_110917.json
+2025-08-21 11:09:17,195 - __main__ - INFO - Draft strategy generation completed successfully

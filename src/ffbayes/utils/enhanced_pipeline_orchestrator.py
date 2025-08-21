@@ -57,13 +57,13 @@ class PipelineStep:
 	"""Represents a single pipeline step."""
 	name: str
 	script: str
-	args: str = ""
 	description: str
 	dependencies: List[str]
 	timeout: int
 	retry_count: int
 	critical: bool
 	parallel_group: str
+	args: str = ""
 	status: StepStatus = StepStatus.PENDING
 	start_time: Optional[float] = None
 	end_time: Optional[float] = None

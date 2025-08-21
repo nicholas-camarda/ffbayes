@@ -133,6 +133,63 @@
 - 🔄 **Error Handling**: In Progress - Basic implementation, comprehensive work needed
 - 🔄 **Testing Framework**: In Progress - Quick tests created, comprehensive framework needed
 
+## Bayesian Model Enhancement Decisions
+
+### Problem Statement
+
+**Decision**: Focus on substantial improvement of Bayesian model performance over baseline.
+
+**Rationale**: The current model only marginally outperforms a simple 7-game average (3.69 vs 3.71 MAE), despite its sophisticated hierarchical structure. Research indicates that additional data sources and advanced techniques could provide substantial improvements.
+
+**Status**: 🎯 **CURRENT FOCUS** - Active enhancement effort
+
+### Research-Based Data Source Prioritization
+
+**Decision**: Prioritize data sources based on expected impact and implementation difficulty.
+
+**Rationale**: Research indicates varying impact levels for different data sources. Focusing on high-impact, manageable implementations first maximizes ROI.
+
+**Data Source Impact Assessment**:
+| Data Source | Expected Impact | Implementation Difficulty | Priority |
+|-------------|----------------|-------------------------|----------|
+| Weather Data | 5-10% improvement | Medium | High |
+| Vegas Odds | 3-8% improvement | Medium | High |
+| Snap Counts | 2-6% improvement | Low | High |
+| Advanced Stats | 2-4% improvement | Medium | Medium |
+| Injury Data | 2-5% improvement | Low | Medium |
+| Time Series | 2-5% improvement | High | Medium |
+
+**Status**: 📊 **RESEARCH COMPLETE** - Implementation prioritized
+
+### Model Architecture Decisions
+
+**Decision**: Use enhanced mean calculation with multiple data source effects.
+
+**Rationale**: Bayesian hierarchical structure allows for principled integration of multiple data sources while maintaining uncertainty quantification.
+
+**Prior Specifications**:
+- **Intercept**: Normal(0, 2.0) - Overall adjustment
+- **Average multiplier**: Normal(1.0, 0.1) - Baseline correction
+- **Snap effect**: Normal(0, 1.0) - Playing time impact
+- **Injury penalty**: Normal(-2.0, 1.0) - Availability impact
+- **Weather effects**: Normal(0, 0.5) - Environmental impact
+- **Vegas effects**: Normal(0, 0.5) - Game context impact
+
+**Status**: 🏗️ **DESIGN COMPLETE** - Implementation in progress
+
+### Success Criteria Definition
+
+**Decision**: Set clear, measurable success criteria for model enhancement.
+
+**Rationale**: Clear success metrics ensure focused development and objective evaluation of improvements.
+
+**Success Criteria**:
+- **Minimum**: 5% MAE improvement over baseline (MAE ≤ 3.53)
+- **Target**: 10% MAE improvement over baseline (MAE ≤ 3.34)
+- **Stretch**: 15% MAE improvement over baseline (MAE ≤ 3.15)
+
+**Status**: 🎯 **DEFINED** - Metrics established for evaluation
+
 ## Next Priority Actions
 
 1. **Complete legacy script analysis** to understand what needs to be preserved
@@ -140,5 +197,7 @@
 3. **Resolve PyMC compatibility** by evaluating both versions
 4. **Enhance pipeline orchestration** with proper sequencing and error handling
 5. **Implement comprehensive testing** framework for all components
+6. **Fix data loading issues** in unified Bayesian model
+7. **Implement weather and Vegas odds APIs** for model enhancement
 
 

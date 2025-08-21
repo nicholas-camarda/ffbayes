@@ -37,8 +37,8 @@
     },
     {
       "name": "bayesian_analysis",
-      "script": "ffbayes.analysis.bayesian_hierarchical_ff_modern",
-      "description": "Run Bayesian hierarchical analysis to generate player predictions",
+      "script": "ffbayes.analysis.bayesian_hierarchical_ff_unified",
+      "description": "Run unified Bayesian hierarchical analysis with enhanced features",
       "timeout": 900,
       "retry_count": 2,
       "dependencies": ["data_preprocessing"],
@@ -56,7 +56,17 @@
       "parallel_group": "modeling"
     },
     {
-      "name": "draft_strategy",
+      "name": "vor_draft_strategy",
+      "script": "ffbayes.draft_strategy.traditional_vor_draft",
+      "description": "Generate traditional VOR-based draft strategy",
+      "timeout": 300,
+      "retry_count": 2,
+      "dependencies": ["data_preprocessing"],
+      "critical": false,
+      "parallel_group": "strategy"
+    },
+    {
+      "name": "bayesian_draft_strategy",
       "script": "ffbayes.draft_strategy.bayesian_draft_strategy",
       "args": "--draft-position 3 --league-size 10 --risk-tolerance medium",
       "description": "Generate optimal draft strategies using Bayesian predictions",
@@ -72,7 +82,7 @@
       "description": "Validate drafted teams using Monte Carlo simulation (adversarial evaluation)",
       "timeout": 600,
       "retry_count": 2,
-      "dependencies": ["draft_strategy"],
+      "dependencies": ["bayesian_draft_strategy"],
       "critical": true,
       "parallel_group": "validation"
     },
@@ -93,6 +103,16 @@
       "timeout": 180,
       "retry_count": 2,
       "dependencies": ["model_comparison"],
+      "critical": false,
+      "parallel_group": "analysis"
+    },
+    {
+      "name": "draft_strategy_comparison",
+      "script": "ffbayes.analysis.draft_strategy_comparison",
+      "description": "Compare VOR and Bayesian draft strategies with analysis and visualizations",
+      "timeout": 300,
+      "retry_count": 2,
+      "dependencies": ["vor_draft_strategy", "bayesian_draft_strategy"],
       "critical": false,
       "parallel_group": "analysis"
     }
@@ -242,7 +262,6 @@
     "conda_environment": "ffbayes",
     "working_directory": ".",
     "environment_variables": {
-      "QUICK_TEST": "false",
       "MAX_CORES": "4",
       "USE_MULTIPROCESSING": "true"
     }

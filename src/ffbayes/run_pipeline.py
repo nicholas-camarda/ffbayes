@@ -5,6 +5,7 @@ Runs the complete pipeline in the proper sequence with enhanced orchestration.
 """
 
 import argparse
+import os
 import shlex
 import signal
 import subprocess
@@ -132,7 +133,10 @@ def run_step(step_name, script_path, description):
         else:
             cmd = [sys.executable, script_path]
 
-        with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, text=True) as proc:
+        # Pass through environment variables (including QUICK_TEST)
+        env = os.environ.copy()
+
+        with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, text=True, env=env) as proc:
             try:
                 for line in proc.stdout:
                     log_write(line.rstrip("\n"))

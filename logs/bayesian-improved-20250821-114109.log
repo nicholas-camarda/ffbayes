@@ -1,0 +1,63 @@
+Initializing NUTS using jitter+adapt_diag...
+Multiprocess sampling (4 chains in 4 jobs)
+NUTS: [nu_minus_one, std_dev_rank, std_dev_rank_b, opp_team_prior, defensive_differential_qb, defensive_differential_wr, defensive_differential_rb, defensive_differential_te, home_additive_prior, away_additive_prior, home_differential_qb, home_differential_rb, home_differential_te, home_differential_wr, away_differential_qb, away_differential_rb, away_differential_wr, away_differential_te, intercept]
+Sampling 4 chains for 1_000 tune and 1_000 draw iterations (4_000 + 4_000 draws total) took 94 seconds.
+The rhat statistic is larger than 1.01 for some parameters. This indicates problems during sampling. See https://arxiv.org/abs/1903.08008 for details
+The effective sample size per chain is smaller than 100 for some parameters.  A higher number is needed for reliable rhat and ess computation. See https://arxiv.org/abs/1903.08008 for details
+Sampling: [fantasy_points]
+
+Default configuration: 7 cores, 1000 draws, 4 chains
+============================================================
+Modern Bayesian Hierarchical Fantasy Football Model
+Using PyMC4 for robust uncertainty quantification
+============================================================
+🆕 No existing trace found - will run full sampling
+Loading preprocessed data for analysis...
+Loading preprocessed data from: datasets/combined_datasets/2020-2024season_modern.csv
+Loaded data shape: (13459, 38)
+Found 32 teams
+Loaded data shape: (13459, 38)
+Found 32 teams
+Training on 2023 data, testing on 2024 data
+Training data shape: (2801, 38)
+Test data shape: (2762, 38)
+Building modern PyMC4 model...
+Part 1: Defining observables...
+Part 2: Modeling defensive effects...
+Part 3: Modeling home/away effects...
+Part 4: Building likelihood models...
+Part 5: Training model...
+                                                                                
+                              Step      Grad      Sampli…                       
+  Progre…   Draws   Diverg…   size      evals     Speed     Elapsed   Remaini…  
+ ────────────────────────────────────────────────────────────────────────────── 
+  ━━━━━━━   2000    0         0.10      31        21.24     0:01:34   0:00:00   
+                                                  draws/s                       
+  ━━━━━━━   2000    0         0.14      31        21.38     0:01:33   0:00:00   
+                                                  draws/s                       
+  ━━━━━━━   2000    0         0.12      31        21.73     0:01:32   0:00:00   
+                                                  draws/s                       
+  ━━━━━━━   2000    0         0.12      31        21.95     0:01:31   0:00:00   
+                                                  draws/s                       
+                                                                                
+Model training completed!
+Trace saved to: results/bayesian-hierarchical-results/trace_20250821_114314.pkl
+Part 6: Evaluating model...
+Generating predictions on test data...
+Sampling ... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00 / 0:00:01
+Test data length: 2762
+Predictions length: 2762
+Bayesian Model MAE: 3.74
+Baseline (7-game avg) MAE: 3.71
+Improvement: -0.9%
+Part 7: Generating visualizations...
+Results saved to results/bayesian-hierarchical-results/modern_model_results.json
+Model training and evaluation completed successfully!
+
+============================================================
+Model Summary:
+- Bayesian Model MAE: 3.74
+- Baseline MAE: 3.71
+- Improvement: -0.9%
+============================================================
+

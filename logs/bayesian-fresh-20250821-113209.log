@@ -1,0 +1,24 @@
+Default configuration: 7 cores, 1000 draws, 4 chains
+============================================================
+Modern Bayesian Hierarchical Fantasy Football Model
+Using PyMC4 for robust uncertainty quantification
+============================================================
+🆕 No existing trace found - will run full sampling
+Loading preprocessed data for analysis...
+Loading preprocessed data from: datasets/combined_datasets/2020-2024season_modern.csv
+Loaded data shape: (13459, 38)
+Found 32 teams
+Loaded data shape: (13459, 38)
+Found 32 teams
+Training on 2023 data, testing on 2024 data
+Training data shape: (2801, 38)
+Test data shape: (2762, 38)
+Building modern PyMC4 model...
+Part 1: Defining observables...
+Part 2: Modeling defensive effects...
+Part 3: Modeling home/away effects...
+Part 4: Building likelihood models...
+An error occurred during model building: Variable name diff_from_avg already exists.
+Please check the model parameters and data.
+Model training failed or no trace was generated.
+

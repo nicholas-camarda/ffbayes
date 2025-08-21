@@ -1,3 +1,13 @@
+# Technical Stack & Implementation Guide
+
+## Overview
+This document provides comprehensive technical documentation for the fantasy football analytics pipeline, including current implementation, enhancement plans, and research findings.
+
+## Current Status
+- **Baseline MAE**: 3.71 (7-game average)
+- **Current Bayesian MAE**: 3.69 (0.4% improvement)
+- **Target**: 5-15% improvement (MAE ≤ 3.15-3.53)
+
 ## Tech Stack
 
 ### Languages
@@ -32,6 +42,113 @@ scripts/
 └── run_with_conda.sh       # Conda environment helper
 ```
 
+## Bayesian Model Implementation
+
+### Current Model: `bayesian_hierarchical_ff_modern.py`
+**Status**: Modern PyMC4 implementation (primary)
+**Purpose**: Bayesian hierarchical model for individual player predictions
+
+### Core Architecture
+
+#### 1. Data Preprocessing
+- **Position Encoding**: One-hot encoding for QB, WR, RB, TE
+- **Team Encoding**: Integer encoding for teams and opponents
+- **Home/Away Indicator**: Binary indicator for home/away games
+- **Rolling Averages**: 7-game rolling average of fantasy points
+- **Ranking System**: Quartile-based ranking (1-4) based on rolling average
+
+#### 2. Model Components
+
+**Observables**:
+```python
+# Degrees of freedom for Student's t distributions
+nu = pm.Exponential('nu_minus_one', 1 / 29.0, shape=2) + 1
+
+# Standard deviations based on rank
+err = pm.Uniform('std_dev_rank', 0, 100, shape=ranks)
+err_b = pm.Uniform('std_dev_rank_b', 0, 100, shape=ranks)
+```
+
+**Defensive Effects**:
+```python
+# Global defensive priors for each position
+opp_def = pm.Normal('opp_team_prior', 0, 100**2, shape=num_positions)
+
+# Team-specific defensive effects by position
+opp_qb = pm.Normal('defensive_differential_qb', opp_def[0], 100**2, shape=team_number)
+# ... similar for WR, RB, TE
+```
+
+**Home/Away Effects**:
+```python
+# Home/away advantages by position and rank
+home_adv = pm.Normal('home_additive_prior', 0, 100**2, shape=num_positions)
+away_adv = pm.Normal('away_additive_prior', 0, 100**2, shape=num_positions)
+```
+
+**Likelihood Models**:
+1. **Difference from Average Model**: Predicts deviation from rolling average
+2. **Total Score Prediction Model**: Predicts absolute fantasy points
+
+### Current Performance
+- **MAE**: 3.69 (0.4% improvement over baseline)
+- **Strengths**: Sophisticated hierarchical structure, uncertainty quantification
+- **Weaknesses**: Only marginal improvement over simple baseline
+
+## Enhanced Model Features
+
+### Current Features (Implemented)
+- 7-game average baseline
+- Opponent defensive effects
+- Home/away advantages
+- Position-specific effects
+- Snap counts (offensive percentage)
+- Injury status (Out/Doubtful)
+- Practice status (Limited/DNP)
+
+### Planned Features
+- Weather data (temperature, wind, precipitation)
+- Vegas odds (spreads, over/under)
+- Advanced stats (target share, red zone usage)
+- Time series features (momentum, trends)
+
+## Data Sources and APIs
+
+### Weather Data
+- **API**: OpenWeatherMap Historical Weather API
+- **Features**: Temperature, wind speed, precipitation, humidity
+- **Integration**: Merge by game date and stadium location
+
+### Vegas Odds
+- **API**: ESPN API or SportsData.io
+- **Features**: Point spreads, over/under, implied totals
+- **Integration**: Merge by game ID and date
+
+### Advanced Stats
+- **API**: ESPN API, Pro Football Reference
+- **Features**: Target share, snap counts, red zone usage, air yards
+- **Integration**: Merge by player ID, season, week
+
+### Enhanced Model Architecture
+```python
+# Enhanced mean calculation
+mu = (
+    intercept + 
+    (avg_multiplier * player_avg) + 
+    defensive_effects + 
+    home_away_effects +
+    snap_effect * offense_pct +
+    injury_penalty * injury_status +
+    weather_effects +
+    vegas_effects +
+    time_series_effects
+)
+```
+
+
+
+## Pipeline Architecture
+
 ### Pipeline Dependencies
 - **Data Collection**: `nfl_data_py` → Weekly player stats, schedules, injuries
 - **Data Validation**: `pyarrow`, `pandas` → Quality checks and completeness validation
@@ -39,23 +156,43 @@ scripts/
 - **Bayesian Modeling**: `pymc`, `arviz` → Player prediction models
 - **Draft Strategy**: `requests`, `beautifulsoup4` → FantasyPros scraping and VOR calculations
 
-### Environment Management
+### Pipeline Orchestration
+- **Master Script**: `run_pipeline.py` orchestrates complete workflow
+- **Progress Monitoring**: `alive-progress` with comprehensive logging
+- **Error Handling**: Graceful degradation with detailed error reporting
+- **Step Execution**: Sequential execution with dependency management
+
+### Data Collection Implementation
+- **Primary Source**: `nfl_data_py` for NFL statistics and schedule data
+- **Secondary Sources**: FantasyPros for player rankings and projections
+- **Data Types**: Player stats, schedules, injuries, snap counts
+- **Quality Validation**: Completeness checks, statistical validation, outlier detection
+
+### Monte Carlo Simulation
+- **Purpose**: Team-level projections using historical data
+- **Method**: Random sampling from historical player performance
+- **Features**: Weighted year distribution, recursive retry mechanism
+- **Output**: Team score projections with uncertainty quantification
+
+## Environment Management
 - **Primary**: `ffbayes` conda environment with PyMC4 and modern packages
 - **Fallback**: PyMC3 environment for legacy compatibility
 - **Helper Scripts**: `run_with_conda.sh`, `Makefile` for easy execution
 - **Package Management**: `conda` with `pip` for specific package versions
 
-### Output Artifacts
+## Output Artifacts
 - **Datasets**: `datasets/*.csv`, `combined_datasets/*.csv`
 - **Results**: `results/montecarlo_results/*.tsv`
 - **Plots**: `plots/*.png`
 - **Draft Strategy**: `snake_draft_datasets/*.csv`, `*.xlsx`
 - **Pipeline Logs**: Comprehensive logging and progress monitoring
 
-### Development Tools
+## Development Tools
 - **Linting/Formatting**: Ruff with `pyproject.toml` configuration
 - **Version Control**: Git with organized `.gitignore`
 - **Documentation**: Agent OS product documentation and technical specs
 - **Testing**: Incremental testing approach with quick validation scripts
+
+
 
 

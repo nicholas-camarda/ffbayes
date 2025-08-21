@@ -1,0 +1,271 @@
+2025-08-21 11:05:06,718 - ffbayes-collect - INFO - Starting ffbayes-collect
+2025-08-21 11:05:06,718 - ffbayes-collect - INFO - Starting ffbayes-collect
+2025-08-21 11:05:06,718 - ffbayes-collect - INFO - Processing default years: [2020, 2021, 2022, 2023, 2024]
+📊 Collecting NFL data for years: [2020, 2021, 2022, 2023, 2024]
+   📅 Automatically calculated last 5 available years from current year (2025)
+on 0: ⏭️  Skipping year 2020 as file already exists
+on 0: ⏭️  Skipping year 2021 as file already exists
+on 0: ⏭️  Skipping year 2022 as file already exists
+on 0: ⏭️  Skipping year 2023 as file already exists
+on 0: ⏭️  Skipping year 2024 as file already exists
+Data Collection: Processing Years |⚠︎                                       | (!) 0/5 [0%] in 0.0s (0.00/s) 
+2025-08-21 11:05:06,743 - ffbayes-collect - INFO - Collection completed in 0.0 seconds
+2025-08-21 11:05:06,743 - ffbayes-collect - INFO - Successfully processed 0 years: []
+2025-08-21 11:05:06,743 - ffbayes-collect - INFO - ffbayes-collect: Data collection completed successfully
+2025-08-21 11:05:07,379 - ffbayes-validate - INFO - Starting ffbayes-validate
+2025-08-21 11:05:07,379 - ffbayes-validate - INFO - Starting ffbayes-validate
+🔍 Validating data quality...
+   📁 Found 10 season datasets
+on 0:       ✅ 2015: Good data quality (0.0% missing in core columns)
+on 0:       ✅ 2016: Good data quality (0.0% missing in core columns)
+on 0:       ✅ 2017: Good data quality (0.0% missing in core columns)
+on 0:       ✅ 2018: Good data quality (0.0% missing in core columns)
+on 0:       ✅ 2019: Good data quality (0.0% missing in core columns)
+on 0:       ✅ 2020: Good data quality (0.0% missing in core columns)
+on 0:       ✅ 2021: Good data quality (0.0% missing in core columns)
+on 0:       ✅ 2022: Good data quality (0.0% missing in core columns)
+on 0:       ✅ 2023: Good data quality (0.0% missing in core columns)
+on 0:       ✅ 2024: Good data quality (0.0% missing in core columns)
+Data Validation: Validating Season Data |⚠︎                                       | (!) 0/10 [0%] in 0.2s (0.00/s) 
+2025-08-21 11:05:07,635 - ffbayes-validate - INFO - Validation completed in 0.3 seconds
+2025-08-21 11:05:07,635 - ffbayes-validate - INFO - Total rows: 53,155
+2025-08-21 11:05:07,635 - ffbayes-validate - INFO - Quality score: 100.0%
+2025-08-21 11:05:07,635 - ffbayes-validate - INFO - Data complete: True
+2025-08-21 11:05:07,636 - ffbayes-validate - INFO - Outlier detection (10):
+2025-08-21 11:05:07,636 - ffbayes-validate - INFO -   • 2015: Unusually high game numbers: 21.0
+2025-08-21 11:05:07,636 - ffbayes-validate - INFO -   • 2016: Unusually high game numbers: 21.0
+2025-08-21 11:05:07,636 - ffbayes-validate - INFO -   • 2017: Unusually high game numbers: 21.0
+2025-08-21 11:05:07,636 - ffbayes-validate - INFO -   • 2018: Unusually high game numbers: 21.0
+2025-08-21 11:05:07,636 - ffbayes-validate - INFO -   • 2019: Unusually high game numbers: 21.0
+2025-08-21 11:05:07,636 - ffbayes-validate - INFO -   • 2020: Unusually high game numbers: 21.0
+2025-08-21 11:05:07,636 - ffbayes-validate - INFO -   • 2021: Unusually high game numbers: 22.0
+2025-08-21 11:05:07,636 - ffbayes-validate - INFO -   • 2022: Unusually high game numbers: 22.0
+2025-08-21 11:05:07,636 - ffbayes-validate - INFO -   • 2023: Unusually high game numbers: 22.0
+2025-08-21 11:05:07,637 - ffbayes-validate - INFO -   • 2024: Unusually high game numbers: 22.0
+2025-08-21 11:05:07,637 - ffbayes-validate - INFO - ffbayes-validate: Data validation passed! Ready for processing.
+
+📊 Checking data completeness...
+   ✅ All expected recent years available
+2025-08-21 11:05:08,175 - ffbayes-preprocess - INFO - Starting ffbayes-preprocess
+2025-08-21 11:05:08,175 - ffbayes-preprocess - INFO - Starting ffbayes-preprocess
+2025-08-21 11:05:08,175 - ffbayes-preprocess - INFO - Using data directory: /Users/ncamarda/Library/CloudStorage/OneDrive-Personal/Desktop/coding/ffbayes/datasets
+2025-08-21 11:05:08,753 - ffbayes-preprocess - INFO - Preprocessing completed!
+2025-08-21 11:05:08,753 - ffbayes-preprocess - INFO - Final dataset: (13459, 38)
+2025-08-21 11:05:08,754 - ffbayes-preprocess - INFO - Teams: 32
+2025-08-21 11:05:08,754 - ffbayes-preprocess - INFO - ffbayes-preprocess: Data preprocessing completed successfully
+Loading and preprocessing data for analysis...
+Using 5 season files for last 5 years: ['2021season.csv', '2020season.csv', '2023season.csv', '2022season.csv', '2024season.csv']
+Target years: [2020, 2021, 2022, 2023, 2024]
+Combined data shape: (28026, 14)
+Available columns: ['G#', 'Date', 'Tm', 'Away', 'Opp', 'FantPt', 'FantPtPPR', 'Name', 'PlayerID', 'Position', 'Season', 'GameInjuryStatus', 'PracticeInjuryStatus', 'is_home']
+Season range: 2020 - 2024
+After cleaning, data shape: (13459, 38)
+Season range after cleaning: 2020 - 2024
+Combined dataset saved to: datasets/combined_datasets/2020-2024season_modern.csv
+Shape: (13459, 38)
+2025-08-21 11:05:10,737 - arviz.preview - INFO - arviz_base not installed
+2025-08-21 11:05:10,737 - arviz.preview - INFO - arviz_stats not installed
+2025-08-21 11:05:10,737 - arviz.preview - INFO - arviz_plots not installed
+Sampling: [fantasy_points]
+Default configuration: 7 cores, 1000 draws, 4 chains
+============================================================
+Modern Bayesian Hierarchical Fantasy Football Model
+Using PyMC4 for robust uncertainty quantification
+============================================================
+✅ Loaded existing trace from: results/bayesian-hierarchical-results/trace_20250821_073521.pkl
+🔄 Using existing trace - skipping expensive sampling!
+Loading preprocessed data for analysis...
+Loading preprocessed data from: datasets/combined_datasets/2020-2024season_modern.csv
+Loaded data shape: (13459, 38)
+Found 32 teams
+Loaded data shape: (13459, 38)
+Found 32 teams
+Training on 2023 data, testing on 2024 data
+Training data shape: (2801, 38)
+Test data shape: (2762, 38)
+Building modern PyMC4 model...
+Part 1: Defining observables...
+Part 2: Modeling defensive effects...
+Part 3: Modeling home/away effects...
+Part 4: Building likelihood models...
+Part 5: Using existing trace (skipping sampling)
+Model training completed!
+Trace saved to: results/bayesian-hierarchical-results/trace_20250821_110513.pkl
+Part 6: Evaluating model...
+Generating predictions...
+Sampling ... ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 100% 0:00:00 / 0:00:00
+Test data length: 2762
+Predictions length: 2801
+⚠️  Length mismatch detected. Truncating predictions to match test data.
+Adjusted predictions length: 2762
+Bayesian Model MAE: 6.94
+Baseline (7-game avg) MAE: 3.71
+Improvement: -87.1%
+Part 7: Generating visualizations...
+Results saved to results/bayesian-hierarchical-results/modern_model_results.json
+Model training and evaluation completed successfully!
+
+============================================================
+Model Summary:
+- Bayesian Model MAE: 6.94
+- Baseline MAE: 3.71
+- Improvement: -87.1%
+============================================================
+/opt/homebrew/Cellar/python@3.10/3.10.15/Frameworks/Python.framework/Versions/3.10/lib/python3.10/runpy.py:126: RuntimeWarning: 'ffbayes.draft_strategy.bayesian_draft_strategy' found in sys.modules after import of package 'ffbayes.draft_strategy', but prior to execution of 'ffbayes.draft_strategy.bayesian_draft_strategy'; this may result in unpredictable behaviour
+  warn(RuntimeWarning(msg))
+2025-08-21 11:05:19,999 - __main__ - INFO - Loading predictions...
+2025-08-21 11:05:19,999 - __main__ - INFO - Loading player data with positions...
+2025-08-21 11:05:19,999 - __main__ - INFO - Using most recent dataset: datasets/combined_datasets/2020-2024season_modern.csv
+2025-08-21 11:05:20,034 - __main__ - INFO - Loaded player data: (13459, 38)
+2025-08-21 11:05:20,049 - __main__ - INFO - Processed 268 players with valid projections
+2025-08-21 11:05:20,050 - __main__ - INFO - Position breakdown: {'WR': 112, 'RB': 69, 'TE': 50, 'QB': 35, 'FB': 2}
+2025-08-21 11:05:20,050 - __main__ - INFO - Loading Monte Carlo team projections...
+2025-08-21 11:05:20,050 - __main__ - INFO - Using most recent Monte Carlo results: results/montecarlo_results/2025_projections_from_years[2023, 2024].tsv
+2025-08-21 11:05:20,057 - __main__ - INFO - Generated 200 team projections from Monte Carlo data
+2025-08-21 11:05:20,058 - __main__ - INFO - Generating draft strategy...
+2025-08-21 11:05:20,058 - __main__ - INFO - Generating draft strategy for position 3
+2025-08-21 11:05:20,058 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,060 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,062 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,063 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,065 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,066 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,067 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,068 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,071 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,074 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,076 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,078 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,079 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,081 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,082 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,083 - __main__ - INFO - Created 5 tiers with 268 players
+2025-08-21 11:05:20,085 - __main__ - INFO - Generated strategy for 16 picks
+2025-08-21 11:05:20,098 - __main__ - INFO - Strategy saved to results/draft_strategy/draft_strategy_pos3_20250821_110520.json
+2025-08-21 11:05:20,098 - __main__ - INFO - Draft strategy generation completed successfully
+🏈 FANTASY FOOTBALL ANALYTICS PIPELINE
+============================================================
+Started at: 2025-08-21 11:05:05
+📁 Creating required directories...
+
+📁 Exists: datasets/season_datasets
+   📝 Purpose: Raw NFL season data files
+📁 Exists: datasets/combined_datasets
+   📝 Purpose: Combined and processed datasets
+📁 Exists: misc-datasets
+   📝 Purpose: Additional datasets and projections
+📁 Exists: snake_draft_datasets
+   📝 Purpose: Draft strategy and VOR calculations
+📁 Exists: results/montecarlo_results
+   📝 Purpose: Monte Carlo simulation outputs
+📁 Exists: results/bayesian-hierarchical-results
+   📝 Purpose: Bayesian model results and traces
+📁 Exists: plots
+   📝 Purpose: Generated charts and visualizations
+📁 Exists: my_ff_teams
+   📝 Purpose: Your fantasy team configurations
+
+✅ All required directories already exist
+
+🚀 Using Basic Pipeline Execution (Fallback)
+📊 Features: Sequential execution, basic error handling
+
+Selected phase: draft
+
+🔄 Step 1/5: Data Collection
+
+============================================================
+STEP: Data Collection
+============================================================
+📋 Collect raw NFL data from multiple sources
+🚀 Running: python -m ffbayes.data_pipeline.collect_data
+⏱️  Timeout: 300 seconds
+
+✅ Module ffbayes.data_pipeline.collect_data can be imported
+🔄 Starting execution...
+----------------------------------------
+----------------------------------------
+✅ Data Collection completed successfully in 0.6 seconds
+✅ Step 1 completed. Moving to next step...
+
+
+🔄 Step 2/5: Data Validation
+
+============================================================
+STEP: Data Validation
+============================================================
+📋 Validate data quality and completeness
+🚀 Running: python -m ffbayes.data_pipeline.validate_data
+⏱️  Timeout: 300 seconds
+
+✅ Module ffbayes.data_pipeline.validate_data can be imported
+🔄 Starting execution...
+----------------------------------------
+----------------------------------------
+✅ Data Validation completed successfully in 0.9 seconds
+✅ Step 2 completed. Moving to next step...
+
+
+🔄 Step 3/5: Data Preprocessing
+
+============================================================
+STEP: Data Preprocessing
+============================================================
+📋 Preprocess data for analysis
+🚀 Running: python -m ffbayes.data_pipeline.preprocess_analysis_data
+⏱️  Timeout: 300 seconds
+
+✅ Module ffbayes.data_pipeline.preprocess_analysis_data can be imported
+🔄 Starting execution...
+----------------------------------------
+----------------------------------------
+✅ Data Preprocessing completed successfully in 1.2 seconds
+✅ Step 3 completed. Moving to next step...
+
+
+🔄 Step 4/5: Bayesian Analysis
+
+============================================================
+STEP: Bayesian Analysis
+============================================================
+📋 Generate player-level predictions with uncertainty using PyMC4
+🚀 Running: python -m ffbayes.analysis.bayesian_hierarchical_ff_modern
+⏱️  Timeout: 300 seconds
+
+Default configuration: 7 cores, 1000 draws, 4 chains
+✅ Module ffbayes.analysis.bayesian_hierarchical_ff_modern can be imported
+🔄 Starting execution...
+----------------------------------------
+----------------------------------------
+✅ Bayesian Analysis completed successfully in 8.1 seconds
+✅ Step 4 completed. Moving to next step...
+
+
+🔄 Step 5/5: Draft Strategy Generation
+
+============================================================
+STEP: Draft Strategy Generation
+============================================================
+📋 Generate optimal draft strategies using Bayesian predictions
+🚀 Running: python -m ffbayes.draft_strategy.bayesian_draft_strategy --draft-position 3 --league-size 10 --risk-tolerance medium
+⏱️  Timeout: 300 seconds
+
+✅ Module ffbayes.draft_strategy.bayesian_draft_strategy can be imported
+🔄 Starting execution...
+----------------------------------------
+----------------------------------------
+✅ Draft Strategy Generation completed successfully in 0.7 seconds
+✅ Step 5 completed. Moving to next step...
+
+
+============================================================
+BASIC PIPELINE SUMMARY
+============================================================
+📊 Steps completed: 5/5
+⏱️  Total time: 11.4 seconds
+🎯 Success rate: 100.0%
+
+🎉 Pipeline completed successfully!
+📈 Ready for fantasy football analysis!
+
+🏁 Pipeline finished at: 2025-08-21 11:05:20
