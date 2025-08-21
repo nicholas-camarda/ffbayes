@@ -330,3 +330,17 @@ ffbayes-mc --team-file my_ff_teams/my_actual_2025.tsv
   - Save combined dataset to `datasets/combined_datasets/*season_modern.csv`.
 
 These features feed the Bayesian model exactly as specified above.
+
+#### Notation (and column mapping)
+
+- i: player index; corresponds to a row’s `Name`/`player_id` grouping.
+- t: week index within a season; corresponds to `G#`/`week` within `Season`.
+- y_{it}: observed PPR fantasy points for player i in week t → `FantPt` (or `fantasy_points_ppr` upstream).
+- \bar{y}^{(7)}_{i,t}: rolling 7-game average for player i before week t → `7_game_avg`.
+- r(i,t): quartile rank of `7_game_avg` for player i in that season → `rank` in {0,1,2,3}.
+- pos(i): position of player i (QB/WR/RB/TE) → one-hot indicators `position_QB`, `position_WR`, `position_RB`, `position_TE`.
+- opp(i,t): opponent team index faced by i in week t → `opp_team` (derived from `Opp`).
+- home_{it}: home indicator for i in week t (1 if home, 0 if away) → `is_home`.
+- team(i,t): player team index (used in preprocessing and visuals) → `team` (derived from `Tm`).
+
+All symbols in equations correspond directly to these columns produced by `collect_data.py` and `preprocess_analysis_data.py`.
