@@ -115,8 +115,11 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 - **Baseline vs model**: we benchmark against a simple 7‑game moving average; the model should beat this on held‑out data (lower MAE).
 
 ### Generative model (quick overview)
-- Baseline: 7-game moving average (per player). $$ \hat{y}_{it}^{(\mathrm{baseline})} = \frac{1}{\min(7, t-1)} \sum_{s=1}^{\min(7, t-1)} y_{i,t-s} $$
+- Baseline: 7-game moving average (per player). 
 
+```math
+$$ \hat{y}_{it}^{(\mathrm{baseline})} = \frac{1}{\min(7, t-1)} \sum_{s=1}^{\min(7, t-1)} y_{i,t-s} $$
+```
 
 Uses available history if fewer than 7 prior games; no opponent/team/home effects.
 
@@ -124,7 +127,8 @@ Uses available history if fewer than 7 prior games; no opponent/team/home effect
   
   Likelihood: $$ y_{it} \sim \mathrm{StudentT}(\nu, \mu_{it}, \sigma_{r(i,t)}) $$
   
-  Mean: $$ \mu_{it} = \alpha + \sum_{p \in \{QB, WR, RB, TE\}} \beta^{p}_{\mathrm{opp}(i,t)} \, \mathbb{I}\{\mathrm{pos}(i)=p\} + h^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{home_{it}\} + a^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{away_{it}\} $$
+  Mean: 
+  $$ \mu_{it} = \alpha + \sum_{p \in \{QB, WR, RB, TE\}} \beta^{p}_{\mathrm{opp}(i,t)} \, \mathbb{I}\{\mathrm{pos}(i)=p\} + h^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{home_{it}\} + a^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{away_{it}\} $$
   
   Priors: $$ \beta^{p}_{\cdot} \sim \mathcal{N}(0, \tau^{p});\quad h^{p}_{r},\ a^{p}_{r} \sim \mathcal{N}(0, \tau^{p}_{r});\quad \sigma_{r} \sim \mathrm{HalfNormal}(\sigma_0);\quad \nu = 1 + \exp(\eta) $$
   
