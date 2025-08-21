@@ -190,6 +190,40 @@
 
 **Status**: 🎯 **DEFINED** - Metrics established for evaluation
 
+### Data Quality Principle
+
+**Decision**: Only use real historical data for model training - NEVER synthetic data.
+
+**Rationale**: "Garbage in, garbage out" principle. Synthetic data creates false patterns and leads to unreliable predictions. Real historical data ensures model learns actual patterns from the real world.
+
+**Implementation**:
+- ✅ **Snap counts**: Real data from nfl_data_py
+- ✅ **Injury data**: Real data from nfl_data_py  
+- ✅ **Fantasy stats**: Real data from combined datasets
+- ⏸️ **Weather data**: Disabled until real OpenWeatherMap API integration
+- 🔄 **Vegas odds**: Will implement with real betting line data only
+
+**Status**: 🛡️ **CRITICAL PRINCIPLE** - No synthetic data in production models
+
+### Injury Data Source Decision
+
+**Decision**: Continue with current `nfl_data_py` injury data implementation while prioritizing higher-impact features.
+
+**Rationale**: Analysis revealed that while more reliable injury databases exist (NCAA ISP, OSIICS, SafetyLit), they are not specifically tailored for NFL fantasy football. Current implementation provides 0.3% improvement with robust error handling for low coverage scenarios.
+
+**Research Findings**:
+- **Current Coverage**: 0.03% of fantasy players have injury data from `nfl_data_py`
+- **Name Matching**: 616 successful matches found with normalization
+- **Alternative Sources**: NCAA ISP (collegiate focus), OSIICS (classification system), SafetyLit (academic research)
+- **Better Alternatives**: NFL official injury reports, ESPN/Yahoo APIs (future consideration)
+
+**Implementation Decision**:
+- ✅ **Keep current implementation** - Working with graceful error handling
+- 🎯 **Focus on higher-impact features** - Weather and Vegas odds have greater improvement potential
+- 🔮 **Future enhancement** - Consider NFL official sources in later iterations
+
+**Status**: ✅ **DECIDED** - Current implementation maintained, focus shifted to higher-impact features
+
 ## Next Priority Actions
 
 1. **Complete legacy script analysis** to understand what needs to be preserved

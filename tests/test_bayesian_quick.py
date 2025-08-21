@@ -9,7 +9,7 @@ from pathlib import Path
 
 # Use package import for analysis module
 sys.path.append(str(Path.cwd() / 'src'))
-from ffbayes.analysis.bayesian_hierarchical_ff_modern import bayesian_hierarchical_ff_modern
+from ffbayes.analysis.bayesian_hierarchical_ff_unified import bayesian_hierarchical_ff_unified
 
 
 def main():
@@ -27,7 +27,7 @@ def main():
     
     try:
         # Run with quick test parameters
-        trace, results = bayesian_hierarchical_ff_modern(
+        trace, results = bayesian_hierarchical_ff_unified(
             path_to_data_directory='datasets',
             cores=2,              # Fewer cores
             draws=100,            # Very few draws

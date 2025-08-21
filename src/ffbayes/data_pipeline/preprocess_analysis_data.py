@@ -143,7 +143,8 @@ def main(args=None):
     
     # Check for quick test mode
     if args.quick_test:
-        logger.info("Running in QUICK_TEST mode - processing limited data")
+        logger.warning("⚠️  QUICK_TEST mode explicitly enabled - processing limited data")
+        logger.warning("⚠️  This will not provide production-quality results")
     
     # Preprocess data for analysis
     data, team_names = interface.handle_errors(create_analysis_dataset, str(data_dir))

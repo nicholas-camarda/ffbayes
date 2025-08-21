@@ -26,6 +26,7 @@ import pandas as pd
 from scipy import stats
 
 # Configuration
+# Production mode by default - test mode must be explicitly enabled
 QUICK_TEST = os.getenv('QUICK_TEST', 'false').lower() == 'true'
 DEFAULT_CONFIDENCE_LEVEL = 0.95  # 95% confidence intervals
 DEFAULT_MAX_PLAYERS_PER_TEAM = 20  # Maximum players to consider per team

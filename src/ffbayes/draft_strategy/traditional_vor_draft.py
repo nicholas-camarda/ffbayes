@@ -18,25 +18,25 @@ index = ['QB', 'RB', 'WR']
 df = pd.DataFrame({'A': [20, 19, 15], 'B': [25, 11, 14]}, index=index)
 df['A - B'] = df['A'] - df['B']
 
-print(
-    '''
-    Teams on column, e.g. Team A and Team B. Positions on rows. 
-    Notice QB scored the most, but didn't have the highest differential, and therefore wasn't the most important player
-    ''',
-)
+# print(
+#     '''
+#     Teams on column, e.g. Team A and Team B. Positions on rows. 
+#     Notice QB scored the most, but didn't have the highest differential, and therefore wasn't the most important player
+#     ''',
+# )
 
-print(
-    '''
-    You see, you have a limited amount of spots on your starting to play your players. 
-    And your opponent also has a limited number of starting roster spots to play their players. 
-    And so the goal of fantasy football is not to maximize how many points you'll score, 
-    but maximize your scoring differential at each position in relation to your opponent.
-    ''',
-)
+# print(
+#     '''
+#     You see, you have a limited amount of spots on your starting to play your players. 
+#     And your opponent also has a limited number of starting roster spots to play their players. 
+#     And so the goal of fantasy football is not to maximize how many points you'll score, 
+#     but maximize your scoring differential at each position in relation to your opponent.
+#     ''',
+# )
 
-print(
-    'You can think of these scoring differentials as our value over replacement numbers.',
-)
+# print(
+#     'You can think of these scoring differentials as our value over replacement numbers.',
+# )
 
 df['VOR'] = abs(df['A - B'])
 df['VOR'].sort_values(ascending=False)

@@ -169,12 +169,12 @@ class TestStandardizedInterfaces(unittest.TestCase):
     def test_bayesian_script_interface(self):
         """Test Bayesian script has standardized interface."""
         try:
-            import ffbayes.analysis.bayesian_hierarchical_ff_modern as bayesian
+            import ffbayes.analysis.bayesian_hierarchical_ff_unified as bayesian
             self.assertTrue(hasattr(bayesian, 'main'))
             
             # Test that script can be imported and has expected functions
             self.assertTrue(callable(bayesian.main))
-            self.assertTrue(hasattr(bayesian, 'bayesian_hierarchical_ff_modern'))
+            self.assertTrue(hasattr(bayesian, 'bayesian_hierarchical_ff_unified'))
             
         except ImportError as e:
             self.fail(f"Failed to import Bayesian script: {e}")

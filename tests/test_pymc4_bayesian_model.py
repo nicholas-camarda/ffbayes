@@ -63,7 +63,7 @@ class TestPyMC4BayesianModel(unittest.TestCase):
     def test_load_preprocessed_data_success(self):
         """Test successful loading of preprocessed data"""
         import importlib
-        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_modern')
+        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_unified')
         
         # Test the function
         data, team_names = bayesian.load_preprocessed_data(self.datasets_dir)
@@ -79,7 +79,7 @@ class TestPyMC4BayesianModel(unittest.TestCase):
     def test_load_preprocessed_data_no_files(self):
         """Test error handling when no preprocessed data files are found"""
         import importlib
-        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_modern')
+        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_unified')
         
         # Remove all data files
         for file in os.listdir(self.combined_datasets_dir):
@@ -93,7 +93,7 @@ class TestPyMC4BayesianModel(unittest.TestCase):
     def test_load_recent_trace_success(self):
         """Test successful loading of recent trace file"""
         import importlib
-        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_modern')
+        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_unified')
         
         # Create a mock trace file
         mock_trace = {'test': 'trace_data'}
@@ -116,7 +116,7 @@ class TestPyMC4BayesianModel(unittest.TestCase):
     def test_load_recent_trace_no_files(self):
         """Test trace loading when no trace files exist"""
         import importlib
-        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_modern')
+        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_unified')
         
         # Change to temp directory for the test
         original_cwd = os.getcwd()
@@ -131,7 +131,7 @@ class TestPyMC4BayesianModel(unittest.TestCase):
     def test_load_recent_trace_corrupted_file(self):
         """Test trace loading with corrupted pickle file"""
         import importlib
-        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_modern')
+        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_unified')
         
         # Create a corrupted trace file
         trace_file = os.path.join(self.results_dir, 'trace_20231201_120000.pkl')
@@ -151,7 +151,7 @@ class TestPyMC4BayesianModel(unittest.TestCase):
     def test_bayesian_model_data_validation(self):
         """Test data validation and preprocessing in the Bayesian model"""
         import importlib
-        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_modern')
+        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_unified')
         
         # Test with insufficient years of data
         insufficient_data = self.sample_data[self.sample_data['Season'] == 2023].copy()
@@ -168,7 +168,7 @@ class TestPyMC4BayesianModel(unittest.TestCase):
         
         try:
             with self.assertRaises(ValueError) as context:
-                bayesian.bayesian_hierarchical_ff_modern(self.datasets_dir, draws=10, tune=5, chains=2)
+                bayesian.bayesian_hierarchical_ff_unified(self.datasets_dir, draws=10, tune=5, chains=2)
 
             # Current implementation checks for minimum rows
             self.assertIn('Insufficient data', str(context.exception))
@@ -178,22 +178,22 @@ class TestPyMC4BayesianModel(unittest.TestCase):
     def test_bayesian_model_parameter_validation(self):
         """Test parameter validation in the Bayesian model"""
         import importlib
-        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_modern')
+        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_unified')
         
         # Test with invalid parameter values
         with self.assertRaises(ValueError):
-            bayesian.bayesian_hierarchical_ff_modern(self.datasets_dir, draws=0, tune=5, chains=2)
+            bayesian.bayesian_hierarchical_ff_unified(self.datasets_dir, draws=0, tune=5, chains=2)
         
         with self.assertRaises(ValueError):
-            bayesian.bayesian_hierarchical_ff_modern(self.datasets_dir, draws=10, tune=0, chains=2)
+            bayesian.bayesian_hierarchical_ff_unified(self.datasets_dir, draws=10, tune=0, chains=2)
         
         with self.assertRaises(ValueError):
-            bayesian.bayesian_hierarchical_ff_modern(self.datasets_dir, draws=10, tune=5, chains=0)
+            bayesian.bayesian_hierarchical_ff_unified(self.datasets_dir, draws=10, tune=5, chains=0)
     
     def test_bayesian_model_missing_columns(self):
         """Test handling of missing required columns in data"""
         import importlib
-        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_modern')
+        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_unified')
         
         # Create data missing required columns
         incomplete_data = self.sample_data[['Season', 'FantPt']].copy()
@@ -210,14 +210,14 @@ class TestPyMC4BayesianModel(unittest.TestCase):
         
         try:
             with self.assertRaises(KeyError):
-                bayesian.bayesian_hierarchical_ff_modern(self.datasets_dir, draws=10, tune=5, chains=2)
+                bayesian.bayesian_hierarchical_ff_unified(self.datasets_dir, draws=10, tune=5, chains=2)
         finally:
             os.chdir(original_cwd)
     
     def test_bayesian_model_numeric_data_validation(self):
         """Test validation of numeric data types in the Bayesian model"""
         import importlib
-        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_modern')
+        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_unified')
         
         # Create data with non-numeric values in numeric columns
         invalid_data = self.sample_data.copy()
@@ -240,14 +240,14 @@ class TestPyMC4BayesianModel(unittest.TestCase):
         
         try:
             with self.assertRaises((ValueError, TypeError)):
-                bayesian.bayesian_hierarchical_ff_modern(self.datasets_dir, draws=10, tune=5, chains=2)
+                bayesian.bayesian_hierarchical_ff_unified(self.datasets_dir, draws=10, tune=5, chains=2)
         finally:
             os.chdir(original_cwd)
     
     def test_bayesian_model_edge_cases(self):
         """Test edge cases in the Bayesian model"""
         import importlib
-        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_modern')
+        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_unified')
         
         # Test with single player data
         single_player_data = self.sample_data.head(1).copy()
@@ -265,7 +265,7 @@ class TestPyMC4BayesianModel(unittest.TestCase):
         try:
             # Single row should raise insufficient data error in current implementation
             with self.assertRaises(ValueError) as context:
-                bayesian.bayesian_hierarchical_ff_modern(self.datasets_dir, draws=10, tune=5, chains=2)
+                bayesian.bayesian_hierarchical_ff_unified(self.datasets_dir, draws=10, tune=5, chains=2)
             self.assertIn('Insufficient data', str(context.exception))
         finally:
             os.chdir(original_cwd)
@@ -273,7 +273,7 @@ class TestPyMC4BayesianModel(unittest.TestCase):
     def test_bayesian_model_output_validation(self):
         """Test validation of model outputs and results"""
         import importlib
-        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_modern')
+        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_unified')
         
         # Mock PyMC to avoid actual sampling
         with mock.patch('pymc.sample') as mock_sample:
@@ -296,7 +296,7 @@ class TestPyMC4BayesianModel(unittest.TestCase):
                 try:
                     # With only one season CSV (6 rows), the function should raise due to insufficient rows
                     with self.assertRaises(ValueError):
-                        bayesian.bayesian_hierarchical_ff_modern(
+                        bayesian.bayesian_hierarchical_ff_unified(
                             self.datasets_dir, draws=10, tune=5, chains=2
                         )
                 finally:
@@ -305,7 +305,7 @@ class TestPyMC4BayesianModel(unittest.TestCase):
     def test_bayesian_model_file_operations(self):
         """Test file operations (saving trace, results, plots)"""
         import importlib
-        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_modern')
+        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_unified')
         
         # Mock PyMC to avoid actual sampling
         with mock.patch('pymc.sample') as mock_sample:
@@ -328,7 +328,7 @@ class TestPyMC4BayesianModel(unittest.TestCase):
                 try:
                     # With 6 rows, should raise; this test focuses on file ops but respects validation
                     with self.assertRaises(ValueError):
-                        bayesian.bayesian_hierarchical_ff_modern(
+                        bayesian.bayesian_hierarchical_ff_unified(
                             self.datasets_dir, draws=10, tune=5, chains=2
                         )
                 finally:
@@ -337,10 +337,10 @@ class TestPyMC4BayesianModel(unittest.TestCase):
     def test_main_function_execution(self):
         """Test main function execution"""
         import importlib
-        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_modern')
+        bayesian = importlib.import_module('ffbayes.analysis.bayesian_hierarchical_ff_unified')
         
         # Mock the main Bayesian function
-        with mock.patch.object(bayesian, 'bayesian_hierarchical_ff_modern') as mock_main:
+        with mock.patch.object(bayesian, 'bayesian_hierarchical_ff_unified') as mock_main:
             mock_trace = mock.MagicMock()
             mock_results = {
                 'mae_bayesian': 8.5,

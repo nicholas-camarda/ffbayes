@@ -214,7 +214,7 @@ class TestPipelineScriptExecution(unittest.TestCase):
         """Test that scripts execute with proper Python module context."""
         # Test that we can import ffbayes modules
         try:
-            import ffbayes.analysis.bayesian_hierarchical_ff_modern
+            import ffbayes.analysis.bayesian_hierarchical_ff_unified
             import ffbayes.data_pipeline.collect_data
             import ffbayes.data_pipeline.validate_data
             self.assertTrue(True, "All required modules can be imported")

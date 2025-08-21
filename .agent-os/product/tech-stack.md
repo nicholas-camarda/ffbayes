@@ -8,6 +8,100 @@ This document provides comprehensive technical documentation for the fantasy foo
 - **Current Bayesian MAE**: 3.69 (0.4% improvement)
 - **Target**: 5-15% improvement (MAE ≤ 3.15-3.53)
 
+## TESTING PROTOCOL - MANDATORY ENFORCEMENT
+
+### **CRITICAL: ALWAYS USE TEST MODE DURING TESTING**
+
+**ENFORCEMENT RULE**: During ANY testing, development, or validation work, you MUST use QUICK_TEST mode to prevent:
+- ❌ **Production mode execution** (slow, resource-intensive)
+- ❌ **Full dataset processing** (unnecessary during testing)
+- ❌ **Resource waste** (CPU, memory, time)
+- ❌ **Unreliable MAE metrics** (test mode results are not production metrics)
+
+### **Required Test Mode Usage**
+
+**1. Environment Variable Setup (MANDATORY)**
+```bash
+# ALWAYS set this before testing
+export QUICK_TEST=true
+
+# OR use inline for single commands
+QUICK_TEST=true python -m ffbayes.analysis.bayesian_hierarchical_ff_unified
+```
+
+**2. Test Mode Validation (REQUIRED CHECK)**
+```bash
+# Verify test mode is active
+echo $QUICK_TEST
+# Should output: true
+
+# Check for test mode indicators in output
+QUICK_TEST=true python -m ffbayes.analysis.bayesian_hierarchical_ff_unified | grep "QUICK TEST"
+# Should show: "QUICK TEST MODE ENABLED for Unified Bayesian model"
+```
+
+**3. Test Mode Parameters (AUTOMATIC)**
+When `QUICK_TEST=true`:
+- **Cores**: 1 (vs 7 production)
+- **Draws**: 20 (vs 1000 production)
+- **Tune**: 20 (vs 1000 production)
+- **Chains**: 1 (vs 4 production)
+- **Execution Time**: ~7 seconds (vs hours production)
+
+**4. Test Mode Warnings (AUTOMATIC)**
+The system automatically displays:
+```
+WARNING: QUICK_TEST mode detected — MAE and improvement metrics are not reliable and should not be trusted for evaluation.
+```
+
+### **Testing Workflow (MANDATORY)**
+
+**Step 1: Set Test Mode**
+```bash
+export QUICK_TEST=true
+```
+
+**Step 2: Verify Test Mode**
+```bash
+echo $QUICK_TEST
+# Must show: true
+```
+
+**Step 3: Execute Tests**
+```bash
+# Fast test execution
+python -m ffbayes.analysis.bayesian_hierarchical_ff_unified
+```
+
+**Step 4: Validate Test Mode**
+- Check output for "QUICK TEST MODE ENABLED"
+- Verify execution time is ~7 seconds (not hours)
+- Confirm MAE warning is displayed
+
+### **Production Mode (ONLY for Final Validation)**
+
+**Production mode should ONLY be used for:**
+- ✅ Final model validation after testing is complete
+- ✅ Production pipeline execution
+- ✅ Performance benchmarking
+- ✅ User-facing results
+
+**NEVER use production mode for:**
+- ❌ Development testing
+- ❌ Code validation
+- ❌ Feature testing
+- ❌ Debugging
+
+### **Violation Consequences**
+
+**If you run production mode during testing:**
+- ⚠️ **Wasted Resources**: Hours of CPU time, memory usage
+- ⚠️ **Unreliable Results**: MAE metrics from test runs are meaningless
+- ⚠️ **Development Delays**: Waiting for unnecessary computations
+- ⚠️ **Resource Conflicts**: Blocking other development work
+
+**ENFORCEMENT**: Always verify `QUICK_TEST=true` before any testing execution.
+
 ## Tech Stack
 
 ### Languages

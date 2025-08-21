@@ -45,7 +45,7 @@ class TestUtilityIntegration(unittest.TestCase):
             'ffbayes.data_pipeline.validate_data',
             'ffbayes.data_pipeline.preprocess_analysis_data',
             'ffbayes.analysis.montecarlo_historical_ff',
-            'ffbayes.analysis.bayesian_hierarchical_ff_modern',
+            'ffbayes.analysis.bayesian_hierarchical_ff_unified',
             'ffbayes.analysis.bayesian_team_aggregation',
             'ffbayes.analysis.create_team_aggregation_visualizations'
         ]
@@ -189,7 +189,7 @@ class TestUtilityIntegration(unittest.TestCase):
             'ffbayes.data_pipeline.validate_data',
             'ffbayes.data_pipeline.preprocess_analysis_data',
             'ffbayes.analysis.montecarlo_historical_ff',
-            'ffbayes.analysis.bayesian_hierarchical_ff_modern',
+            'ffbayes.analysis.bayesian_hierarchical_ff_unified',
             'ffbayes.analysis.bayesian_team_aggregation',
             'ffbayes.analysis.create_team_aggregation_visualizations',
             'ffbayes.analysis.model_comparison_framework'

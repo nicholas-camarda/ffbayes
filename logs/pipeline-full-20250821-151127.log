@@ -1,0 +1,28 @@
+🏈 FANTASY FOOTBALL ANALYTICS PIPELINE
+============================================================
+Started at: 2025-08-21 15:11:27
+🚀 Using Enhanced Pipeline Orchestrator
+📊 Features: Dependency management, sequential execution with internal multiprocessing, error recovery
+
+
+================================================================================
+ENHANCED PIPELINE ORCHESTRATION - EXECUTION SUMMARY
+================================================================================
+Pipeline Status: ❌ FAILED
+Total Steps: 11
+Completed Steps: 8
+Failed Steps: 2
+Total Execution Time: 122.7s
+Parallel Efficiency: 0.80
+Total Retries: 2
+
+Step Results:
+  ✅ data_collection: 1.2s
+  ✅ data_validation: 0.8s
+  ✅ data_preprocessing: 1.1s
+  ✅ vor_draft_strategy: 4.4s
+  ✅ bayesian_analysis: 78.4s
+  ✅ team_aggregation: 2.5s
+  ✅ bayesian_draft_strategy: 1.5s
+  ✅ visualization: 8.4s
+================================================================================

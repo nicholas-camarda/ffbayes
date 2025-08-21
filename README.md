@@ -1,6 +1,47 @@
-# FFBayes: Fantasy Football Analytics Pipeline
+# FFBayes: Fantasy Football Bayesian Analytics Pipeline
 
-A complete fantasy football analytics pipeline that generates tiered draft strategies using Bayesian modeling and Monte Carlo simulations.
+A comprehensive fantasy football analytics pipeline using Bayesian hierarchical modeling, Monte Carlo simulations, and advanced statistical analysis.
+
+## 🚨 CRITICAL: TESTING PROTOCOL
+
+**ALWAYS USE TEST MODE DURING TESTING AND DEVELOPMENT**
+
+### **MANDATORY TEST MODE USAGE**
+```bash
+# For TESTING only (explicitly enable test mode):
+export QUICK_TEST=true
+echo $QUICK_TEST
+# Must show: true
+
+# Execute tests (fast, ~7 seconds)
+QUICK_TEST=true python -m ffbayes.analysis.bayesian_hierarchical_ff_unified
+
+# For PRODUCTION (default behavior):
+# QUICK_TEST is NOT set - runs in full production mode
+python -m ffbayes.analysis.bayesian_hierarchical_ff_unified
+```
+
+### **Test Mode Benefits**
+- ✅ **Fast Execution**: ~7 seconds vs hours in production
+- ✅ **Resource Efficient**: 1 core, minimal memory usage
+- ✅ **Development Friendly**: Quick iteration and validation
+- ✅ **Clear Warnings**: Automatic MAE reliability warnings
+
+### **Production Mode (ONLY for Final Results)**
+- ❌ **NEVER use for testing or development**
+- ❌ **NEVER use for code validation**
+- ❌ **ONLY use for final model validation and production runs**
+
+### **🚨 ENFORCEMENT RULES**
+1. **DEFAULT**: Production mode (no environment variable needed)
+2. **TESTING**: Only set `export QUICK_TEST=true` when you specifically want test mode
+3. **VERIFY**: Check output for mode indicators (🚀 PRODUCTION vs ⚠️ QUICK_TEST)
+4. **DEVELOPMENT**: Use test mode for quick iteration
+5. **PRODUCTION**: Use default mode for final results and validation
+
+**See `.agent-os/product/testing-protocol.md` for complete mandatory testing protocol.**
+
+**VIOLATION CONSEQUENCES**: Running production mode during testing wastes hours of CPU time, produces unreliable results, and blocks development progress.
 
 ## 🚀 Quick Start: Generate Your Draft Strategy
 

@@ -310,7 +310,7 @@ def main():
         },
         {
             "name": "Bayesian Analysis",
-            "script": "python -m ffbayes.analysis.bayesian_hierarchical_ff_modern",
+            "script": "python -m ffbayes.analysis.bayesian_hierarchical_ff_unified",
             "description": "Generate player-level predictions with uncertainty using PyMC4"
         },
         {

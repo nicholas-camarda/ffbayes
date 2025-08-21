@@ -79,6 +79,7 @@
     {
       "name": "monte_carlo_validation",
       "script": "ffbayes.analysis.montecarlo_historical_ff",
+      "args": "--auto-team-file",
       "description": "Validate drafted teams using Monte Carlo simulation (adversarial evaluation)",
       "timeout": 600,
       "retry_count": 2,
@@ -168,88 +169,6 @@
     "performance_tracking": true,
     "resource_usage_tracking": true,
     "progress_update_interval": 30
-  },
-  "stages": [
-    {
-      "name": "data_collection",
-      "script": "ffbayes.data_pipeline.collect_data",
-      "description": "Collect NFL fantasy football data",
-      "timeout": 300,
-      "retries": 3,
-      "dependencies": []
-    },
-    {
-      "name": "data_validation",
-      "script": "ffbayes.data_pipeline.validate_data",
-      "description": "Validate collected data quality",
-      "timeout": 120,
-      "retries": 2,
-      "dependencies": ["data_collection"]
-    },
-    {
-      "name": "data_preprocessing",
-      "script": "ffbayes.data_pipeline.preprocess_analysis_data",
-      "description": "Preprocess data for analysis",
-      "timeout": 180,
-      "retries": 2,
-      "dependencies": ["data_validation"]
-    },
-    {
-      "name": "bayesian_analysis",
-      "script": "ffbayes.analysis.bayesian_hierarchical_ff_modern",
-      "description": "Run Bayesian hierarchical analysis to generate player predictions",
-      "timeout": 900,
-      "retries": 2,
-      "dependencies": ["data_preprocessing"]
-    },
-    {
-      "name": "team_aggregation",
-      "script": "ffbayes.analysis.bayesian_team_aggregation",
-      "description": "Aggregate individual predictions to team totals",
-      "timeout": 300,
-      "retries": 2,
-      "dependencies": ["bayesian_analysis"]
-    },
-    {
-      "name": "draft_strategy",
-      "script": "ffbayes.draft_strategy.bayesian_draft_strategy",
-      "description": "Generate optimal draft strategies using Bayesian predictions",
-      "timeout": 300,
-      "retries": 2,
-      "dependencies": ["team_aggregation"]
-    },
-    {
-      "name": "monte_carlo_validation",
-      "script": "ffbayes.analysis.montecarlo_historical_ff",
-      "description": "Validate drafted teams using Monte Carlo simulation (adversarial evaluation)",
-      "timeout": 600,
-      "retries": 2,
-      "dependencies": ["draft_strategy"]
-    },
-    {
-      "name": "model_comparison",
-      "script": "ffbayes.analysis.model_comparison_framework",
-      "description": "Compare Bayesian predictions with Monte Carlo validation results",
-      "timeout": 240,
-      "retries": 2,
-      "dependencies": ["monte_carlo_validation", "team_aggregation"]
-    },
-    {
-      "name": "visualization",
-      "script": "ffbayes.analysis.create_team_aggregation_visualizations",
-      "description": "Generate comprehensive visualizations",
-      "timeout": 180,
-      "retries": 2,
-      "dependencies": ["model_comparison"]
-    }
-  ],
-  "execution": {
-    "parallel_stages": [],
-    "max_parallel_jobs": 1,
-    "default_timeout": 300,
-    "default_retries": 2,
-    "progress_monitoring": true,
-    "error_recovery": true
   },
   "output": {
     "results_directory": "results",
