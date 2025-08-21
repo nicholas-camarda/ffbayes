@@ -115,12 +115,49 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 - **Baseline vs model**: we benchmark against a simple 7‑game moving average; the model should beat this on held‑out data (lower MAE).
 
 ### Generative model (quick overview)
-- Baseline: 7-game moving average.
-- Bayesian model: `y_it ~ Normal(mu_it, sigma^2)`; `mu_it = alpha + b_pos[pos(i)] + b_team[team(i,t)] + b_opp[opp(i,t)] + b_home * I{home_it}`.
-- Monte Carlo team simulation: `T^(s) = sum_j X_j^(s)`; summarize mean, std, percentiles; 95% CI: `mean ± 1.96 * SE(mean)`.
-- Risk-adjusted tier score: `score_i = P_hat_i - lambda * sigma_i`.
-- Contribution%: `100 * P_hat_i / sum_j P_hat_j`; `CV_i = sigma_i / P_hat_i`.
-- MAE: `(1/N) * sum_n |y_hat_n - y_n|`.
+- Baseline: 7-game moving average (per player).
+
+  $$
+  \hat{y}_{it}^{(\text{baseline})} = \frac{1}{k_{it}} \sum_{s=1}^{k_{it}} y_{i,\,t-s}, \quad k_{it} = \min(7,\, t-1)
+  $$
+
+  Uses available history if fewer than 7 prior games; no opponent/team/home effects.
+
+- Bayesian model:
+
+  $$
+  y_{it} \sim \mathcal{N}(\mu_{it}, \sigma^2), \quad \mu_{it} = \alpha + b_{pos[\text{pos}(i)]} + b_{team[\text{team}(i,t)]} + b_{opp[\text{opp}(i,t)]} + b_{\text{home}}\,\mathbb{I}\{home_{it}\}
+  $$
+
+- Monte Carlo team simulation:
+
+  $$
+  T^{(s)} = \sum_j X_j^{(s)}
+  $$
+
+  Summarize mean, std, percentiles; 95% CI:
+
+  $$
+  \text{mean} \pm 1.96 \, \mathrm{SE}(\text{mean})
+  $$
+
+- Risk-adjusted tier score:
+
+  $$
+  \mathrm{score}_i = \hat{P}_i - \lambda \, \sigma_i
+  $$
+
+- Contribution%:
+
+  $$
+  100 \, \cdot \, \hat{P}_i \, / \, \sum_j \hat{P}_j, \quad \mathrm{CV}_i = \sigma_i / \hat{P}_i
+  $$
+
+- MAE:
+
+  $$
+  \mathrm{MAE} = \frac{1}{N} \sum_{n=1}^{N} \lvert \, \hat{y}_n - y_n \, \rvert
+  $$
 
 #### Baseline predictor (details)
 - For each player–game in the test set, the baseline predicts the 7‑game moving average of that player’s prior games (if fewer than 7 exist, use what’s available). It ignores opponent, team effects, and home/away.
