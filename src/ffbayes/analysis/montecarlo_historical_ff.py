@@ -29,8 +29,12 @@ if QUICK_TEST:
     number_of_simulations = 200  # Much faster for testing
     print(f"   Using {number_of_simulations} simulations with {len(my_years)} years")
 else:
-    my_years = list(range(current_year - 5, current_year))  # Last 5 years
+    # CRITICAL FIX: Use more years to ensure team players exist in historical data
+    # The team file contains players who may not be active in the last 2 years
+    my_years = list(range(current_year - 8, current_year))  # Last 8 years (2016-2024)
     number_of_simulations = 5000
+    print(f"   Using {number_of_simulations} simulations with {len(my_years)} years")
+    print(f"   Years: {my_years}")
 
 if USE_MULTIPROCESSING:
     print(f"🔥 MULTIPROCESSING ENABLED: Using {MAX_CORES} cores")
@@ -181,11 +185,18 @@ def get_score_for_player(db, player, years, max_attempts=50):
     """
     for attempt in range(max_attempts):
         # Sample the year and week
-        year = np.random.choice(
-            years,
-            # for years 2017-2021
-            p=[0.025, 0.075, 0.15, 0.25, 0.5],
-        )
+        # CRITICAL FIX: Dynamic probability weights based on number of years
+        n_years = len(years)
+        if n_years == 1:
+            # Single year - use uniform probability
+            year = years[0]
+        else:
+            # Multiple years - create balanced probability weights
+            # More recent years get higher probability (exponential decay)
+            weights = np.exp(-np.arange(n_years) * 0.3)  # Exponential decay
+            weights = weights / weights.sum()  # Normalize to sum to 1
+            year = np.random.choice(years, p=weights)
+        
         week = np.random.randint(1, 18)
 
         # Find the player and score them for the given week/year
@@ -200,6 +211,10 @@ def get_score_for_player(db, player, years, max_attempts=50):
                 except (IndexError, KeyError):
                     # If scoring fails, continue to next attempt
                     break
+    
+    # DEBUG: Log when fallback is used
+    print(f"   ⚠️  Player {player.Name} ({player.Position}) not found in {len(years)} years after {max_attempts} attempts")
+    print(f"   Available years: {years}")
     
     # If player not found after max attempts, calculate fallback score
     return calculate_fallback_score(db, player, years)
@@ -255,6 +270,11 @@ def simulate_batch(team, db, years, batch_size, batch_id=0):
     results = []
     
     for sim in range(batch_size):
+        # CRITICAL FIX: Seed each simulation with a unique random seed
+        # This ensures each simulation produces different results
+        unique_seed = int(hash(f"{batch_id}_{sim}_{datetime.now().timestamp()}") % 2**32)
+        np.random.seed(unique_seed)
+        
         team_score = 0
         player_scores = {}
         
@@ -349,6 +369,11 @@ def simulate(team, db, years, exps=10):
                    dual_line=True) as bar:
         
         for exp in range(exps):
+            # CRITICAL FIX: Seed each simulation with a unique random seed
+            # This ensures each simulation produces different results
+            unique_seed = int(hash(f"single_{exp}_{datetime.now().timestamp()}") % 2**32)
+            np.random.seed(unique_seed)
+            
             team_score = 0
             player_scores = {}
             
@@ -537,7 +562,9 @@ def main(args=None):
     
     # Save results
     logger.info("Saving results...")
-    output_dir = interface.get_output_directory(args)
+    # CRITICAL FIX: Ensure Monte Carlo results go to the correct organized subfolder
+    output_dir = Path('results/montecarlo_results')
+    output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / f'{todays_date.year}_projections_from_years{years}.tsv'
     
     outcome.to_csv(output_file, sep='\t')

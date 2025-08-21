@@ -56,7 +56,9 @@ def load_monte_carlo_results(results_dir: str = 'results/montecarlo_results') ->
     if not mc_files:
         raise FileNotFoundError(f"No Monte Carlo projection files found in {results_dir}")
     
-    latest_file = max(mc_files, key=os.path.getctime)
+    # CRITICAL FIX: Use modification time instead of creation time
+    # Creation time can be misleading when files are moved/copied
+    latest_file = max(mc_files, key=os.path.getmtime)
     print(f"   Loading: {os.path.basename(latest_file)}")
     
     # Load the data
@@ -130,6 +132,26 @@ def aggregate_individual_to_team_projections(
         Dictionary containing team projections and uncertainty
     """
     print(f"🔗 Aggregating {len(team_roster)} players to team projections...")
+    
+    # CRITICAL VALIDATION: Check if Monte Carlo results have proper variance
+    if 'Total' in mc_data.columns:
+        total_scores = mc_data['Total'].values
+        total_std = np.std(total_scores)
+        total_mean = np.mean(total_scores)
+        
+        if total_std <= 0.001:
+            print("   🚨 CRITICAL ERROR: Monte Carlo simulation produced identical results!")
+            print(f"   All {len(total_scores)} simulations returned: {total_mean:.1f}")
+            print(f"   Standard deviation: {total_std:.6f}")
+            print("   This indicates the Monte Carlo simulation is broken")
+            print("   Expected: Multiple different simulation results with variance")
+            print("   Actual: Deterministic results with zero uncertainty")
+            raise ValueError("Monte Carlo simulation failed - all results identical")
+        else:
+            print("   ✅ Monte Carlo validation passed")
+            print(f"   Simulations: {len(total_scores)}")
+            print(f"   Team score range: {total_scores.min():.1f} - {total_scores.max():.1f}")
+            print(f"   Mean: {total_mean:.1f}, Std: {total_std:.2f}")
     
     # Filter data to only include players in the roster
     available_players = [p for p in team_roster if p in mc_data.columns]
@@ -415,14 +437,14 @@ def save_team_aggregation_results(
 
 def generate_team_aggregation_visualizations(
     results: Dict,
-    output_dir: str = 'plots'
+    output_dir: str = 'plots/team_aggregation'
 ) -> List[str]:
     """
     Generate visualizations for team aggregation results.
     
     Args:
         results: Team aggregation results dictionary
-        output_dir: Directory to save plots
+        output_dir: Directory to save plots (defaults to organized subfolder)
         
     Returns:
         List of paths to generated plot files
@@ -446,7 +468,22 @@ def generate_team_aggregation_visualizations(
             if mc_proj.get('team_score_mean') and mc_proj.get('team_score_std'):
                 mean = mc_proj['team_score_mean']
                 std = mc_proj['team_score_std']
-                x = np.linspace(mean - 3*std, mean + 3*std, 100)
+                
+                # CRITICAL FIX: Handle very small or zero standard deviations
+                if std <= 0.001:  # If std is essentially zero
+                    print(f"   ⚠️  Warning: Very small standard deviation ({std:.6f}) detected")
+                    print("   This suggests the Monte Carlo simulation may not be working correctly")
+                    print("   Expected: Multiple different simulation results")
+                    print("   Actual: All simulations produced identical results")
+                    
+                    # Create a small artificial spread for visualization
+                    artificial_std = max(0.1, mean * 0.01)  # 1% of mean or 0.1, whichever is larger
+                    print(f"   Using artificial std of {artificial_std:.2f} for visualization")
+                    std = artificial_std
+                
+                # Ensure we have a reasonable range for the plot
+                plot_range = max(3 * std, 1.0)  # At least 1 point range
+                x = np.linspace(mean - plot_range, mean + plot_range, 100)
                 y = stats.norm.pdf(x, mean, std)
                 
                 plt.plot(x, y, 'b-', linewidth=2, label='Team Score Distribution')
@@ -464,6 +501,12 @@ def generate_team_aggregation_visualizations(
                 plt.savefig(plot_file, dpi=300, bbox_inches='tight')
                 plt.close()
                 plot_files.append(plot_file)
+                
+                print("   ✅ Generated team score distribution plot")
+                print(f"   Mean: {mean:.1f}, Std: {std:.3f}")
+            else:
+                print("   ⚠️  Missing Monte Carlo projection data for visualization")
+                print(f"   Available keys: {list(mc_proj.keys()) if mc_proj else 'None'}")
         
         # Note: Player contribution breakdown is now handled by the comprehensive
         # visualization script (team_score_breakdown chart) to avoid redundancy

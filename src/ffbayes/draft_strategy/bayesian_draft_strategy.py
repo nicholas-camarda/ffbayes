@@ -1190,65 +1190,93 @@ def generate_team_file_for_monte_carlo(draft_strategy: Dict[str, Any], output_di
     
     # If no drafted players found, create a team from top predictions
     if not drafted_players:
-        print("Warning: No drafted players found in strategy, creating team from top predictions")
+        print("Warning: No drafted players found in strategy, creating team from recent active players")
         
-        # Create a team with real players from the database
+        # Create a team with REAL, RECENT players from the database
         try:
             # Load the player data to get real player names
             player_data = pd.read_csv('datasets/combined_datasets/2020-2024season_modern.csv')
             
-            # Get unique players by position
-            qb_players = player_data[player_data['Position'] == 'QB']['Name'].unique()
-            rb_players = player_data[player_data['Position'] == 'RB']['Name'].unique()
-            wr_players = player_data[player_data['Position'] == 'WR']['Name'].unique()
-            te_players = player_data[player_data['Position'] == 'TE']['Name'].unique()
+            # CRITICAL FIX: Only use players who have data in recent years (2023-2024)
+            # This ensures Monte Carlo simulation will actually work
+            recent_data = player_data[player_data['Season'].isin([2023, 2024])]
+            print(f"   Found {len(recent_data)} player-season records in 2023-2024")
             
-            # Create a balanced team with real players
+            # Get unique players by position who exist in recent data
+            qb_players = recent_data[recent_data['Position'] == 'QB']['Name'].unique()
+            rb_players = recent_data[recent_data['Position'] == 'RB']['Name'].unique()
+            wr_players = recent_data[recent_data['Position'] == 'WR']['Name'].unique()
+            te_players = recent_data[recent_data['Position'] == 'TE']['Name'].unique()
+            
+            print("   Available players by position:")
+            print(f"     QB: {len(qb_players)} players")
+            print(f"     RB: {len(rb_players)} players")
+            print(f"     WR: {len(wr_players)} players")
+            print(f"     TE: {len(te_players)} players")
+            
+            # Create a balanced team with REAL, RECENT players
             drafted_players = []
             
             if len(qb_players) > 0:
+                # Pick a QB who exists in recent data
+                qb_name = qb_players[0]
+                qb_team = recent_data[(recent_data['Name'] == qb_name) & (recent_data['Position'] == 'QB')]['Tm'].iloc[0]
                 drafted_players.append({
-                    'Name': qb_players[0],
+                    'Name': qb_name,
                     'Position': 'QB',
-                    'Tm': player_data[player_data['Name'] == qb_players[0]]['Tm'].iloc[0] if len(player_data[player_data['Name'] == qb_players[0]]) > 0 else 'UNK'
+                    'Tm': qb_team
                 })
+                print(f"   Selected QB: {qb_name} ({qb_team})")
             
             if len(rb_players) > 0:
+                # Pick 2 RBs who exist in recent data
                 for i in range(min(2, len(rb_players))):
+                    rb_name = rb_players[i]
+                    rb_team = recent_data[(recent_data['Name'] == rb_name) & (recent_data['Position'] == 'RB')]['Tm'].iloc[0]
                     drafted_players.append({
-                        'Name': rb_players[i],
+                        'Name': rb_name,
                         'Position': 'RB',
-                        'Tm': player_data[player_data['Name'] == rb_players[i]]['Tm'].iloc[0] if len(player_data[player_data['Name'] == rb_players[i]]) > 0 else 'UNK'
+                        'Tm': rb_team
                     })
+                    print(f"   Selected RB{i+1}: {rb_name} ({rb_team})")
             
             if len(wr_players) > 0:
+                # Pick 2 WRs who exist in recent data
                 for i in range(min(2, len(wr_players))):
+                    wr_name = wr_players[i]
+                    wr_team = recent_data[(recent_data['Name'] == wr_name) & (recent_data['Position'] == 'WR')]['Tm'].iloc[0]
                     drafted_players.append({
-                        'Name': wr_players[i],
+                        'Name': wr_name,
                         'Position': 'WR',
-                        'Tm': player_data[player_data['Name'] == wr_players[i]]['Tm'].iloc[0] if len(player_data[player_data['Name'] == wr_players[i]]) > 0 else 'UNK'
+                        'Tm': wr_team
                     })
+                    print(f"   Selected WR{i+1}: {wr_name} ({wr_team})")
             
             if len(te_players) > 0:
+                # Pick a TE who exists in recent data
+                te_name = te_players[0]
+                te_team = recent_data[(recent_data['Name'] == te_name) & (recent_data['Position'] == 'TE')]['Tm'].iloc[0]
                 drafted_players.append({
-                    'Name': te_players[0],
+                    'Name': te_name,
                     'Position': 'TE',
-                    'Tm': player_data[player_data['Name'] == te_players[0]]['Tm'].iloc[0] if len(player_data[player_data['Name'] == te_players[0]]) > 0 else 'UNK'
+                    'Tm': te_team
                 })
+                print(f"   Selected TE: {te_name} ({te_team})")
+            
+            print(f"   Created team with {len(drafted_players)} active players from 2023-2024")
         
         except Exception as e:
             print(f"Error loading player data: {e}")
-        
-        # Fallback to sample team if still no players
-        if not drafted_players:
-            print("Creating fallback sample team")
+            print("Creating fallback sample team with active players")
+            
+            # Fallback to sample team with ACTIVE players
             drafted_players = [
-                {'Name': 'Sample QB', 'Position': 'QB', 'Tm': 'UNK'},
-                {'Name': 'Sample RB1', 'Position': 'RB', 'Tm': 'UNK'},
-                {'Name': 'Sample RB2', 'Position': 'RB', 'Tm': 'UNK'},
-                {'Name': 'Sample WR1', 'Position': 'WR', 'Tm': 'UNK'},
-                {'Name': 'Sample WR2', 'Position': 'WR', 'Tm': 'UNK'},
-                {'Name': 'Sample TE', 'Position': 'TE', 'Tm': 'UNK'},
+                {'Name': 'Patrick Mahomes', 'Position': 'QB', 'Tm': 'KC'},  # Active in 2023-2024
+                {'Name': 'Christian McCaffrey', 'Position': 'RB', 'Tm': 'SF'},  # Active in 2023-2024
+                {'Name': 'Saquon Barkley', 'Position': 'RB', 'Tm': 'PHI'},  # Active in 2023-2024
+                {'Name': 'Tyreek Hill', 'Position': 'WR', 'Tm': 'MIA'},  # Active in 2023-2024
+                {'Name': 'Justin Jefferson', 'Position': 'WR', 'Tm': 'MIN'},  # Active in 2023-2024
+                {'Name': 'Travis Kelce', 'Position': 'TE', 'Tm': 'KC'},  # Active in 2023-2024
             ]
     
     # Create DataFrame and save to TSV

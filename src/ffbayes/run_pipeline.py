@@ -63,9 +63,17 @@ def create_required_directories():
         # Results directories
         ("results/montecarlo_results", "Monte Carlo simulation outputs"), 
         ("results/bayesian-hierarchical-results", "Bayesian model results and traces"),
+        ("results/team_aggregation", "Team aggregation results and analysis"),
+        ("results/draft_strategy", "Draft strategy outputs and configurations"),
+        ("results/draft_strategy_comparison", "Draft strategy comparison reports"),
+        ("results/model_comparison", "Model comparison and evaluation results"),
         
-        # Output directories
-        ("plots", "Generated charts and visualizations"),
+        # Output directories - organized subfolders
+        ("plots/team_aggregation", "Team aggregation visualizations and charts"),
+        ("plots/monte_carlo", "Monte Carlo simulation visualizations"),
+        ("plots/draft_strategy_comparison", "Draft strategy comparison charts"),
+        ("plots/bayesian_model", "Bayesian model visualizations and diagnostics"),
+        ("plots/test_runs", "Test run outputs and debugging visualizations"),
         ("my_ff_teams", "Your fantasy team configurations")
     ]
     

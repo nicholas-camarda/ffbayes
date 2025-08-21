@@ -557,7 +557,10 @@ def main():
             results = comparison.run_complete_comparison()
             # Save per-scenario report
             base = Path(json_path).stem
-            report_path = Path('results') / f'draft_strategy_comparison_report_{base}.txt'
+            # CRITICAL FIX: Ensure reports go to the correct organized subfolder
+            report_dir = Path('results/draft_strategy_comparison')
+            report_dir.mkdir(parents=True, exist_ok=True)
+            report_path = report_dir / f'draft_strategy_comparison_report_{base}.txt'
             comparison.generate_comparison_report(str(report_path))
             print(f"Report saved: {report_path}")
         return
