@@ -135,11 +135,7 @@ $$
 T^{(s)} = \sum_j X_j^{(s)}
 $$
 
-Summarize mean, std, percentiles; 95% CI:
-
-$$
-\text{mean} \pm 1.96 \, \mathrm{SE}(\text{mean})
-$$
+Summarize mean, std, percentiles.
 
 - Risk-adjusted tier score:
 
