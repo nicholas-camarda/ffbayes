@@ -12,6 +12,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 try:
     from ffbayes.utils.enhanced_pipeline_orchestrator import EnhancedPipelineOrchestrator
@@ -20,6 +21,20 @@ except Exception:
 
 # Global timeout configuration (fallback)
 STEP_TIMEOUT = 300  # 5 minutes per step
+
+# Simple logging (optional global log file)
+LOG_FILE_HANDLE: Optional[object] = None
+
+
+def log_write(message: str) -> None:
+    """Write message to stdout and the log file if configured."""
+    print(message)
+    if LOG_FILE_HANDLE is not None:
+        try:
+            LOG_FILE_HANDLE.write(message + "\n")
+            LOG_FILE_HANDLE.flush()
+        except Exception:
+            pass
 
 
 class TimeoutError(Exception):
@@ -76,13 +91,13 @@ def create_required_directories():
 
 def run_step(step_name, script_path, description):
     """Run a pipeline step and report results with timeout."""
-    print(f"\n{'='*60}")
-    print(f"STEP: {step_name}")
-    print(f"{'='*60}")
-    print(f"📋 {description}")
-    print(f"🚀 Running: {script_path}")
-    print(f"⏱️  Timeout: {STEP_TIMEOUT} seconds")
-    print()
+    log_write(f"\n{'='*60}")
+    log_write(f"STEP: {step_name}")
+    log_write(f"{'='*60}")
+    log_write(f"📋 {description}")
+    log_write(f"🚀 Running: {script_path}")
+    log_write(f"⏱️  Timeout: {STEP_TIMEOUT} seconds")
+    log_write("")
     
     # Check if script exists (for file paths) or is a valid module (for python -m commands)
     if script_path.startswith("python -m "):
@@ -92,12 +107,12 @@ def run_step(step_name, script_path, description):
         module_name = parts[2] if len(parts) >= 3 else ""
         try:
             __import__(module_name)
-            print(f"✅ Module {module_name} can be imported")
+            log_write(f"✅ Module {module_name} can be imported")
         except ImportError as e:
-            print(f"❌ Module {module_name} cannot be imported: {e}")
+            log_write(f"❌ Module {module_name} cannot be imported: {e}")
             return False, 0.0
     elif not Path(script_path).exists():
-        print(f"❌ Script not found: {script_path}")
+        log_write(f"❌ Script not found: {script_path}")
         return False, 0.0
     
     start_time = time.time()
@@ -107,21 +122,29 @@ def run_step(step_name, script_path, description):
         signal.signal(signal.SIGALRM, timeout_handler)
         signal.alarm(STEP_TIMEOUT)
         
-        print("🔄 Starting execution...")
-        print("-" * 40)
+        log_write("🔄 Starting execution...")
+        log_write("-" * 40)
         
-        # Run the script with real-time output instead of capturing
+        # Run the script with real-time output streaming to console and log
         if script_path.startswith("python -m "):
-            # Execute as module with args
             parts = shlex.split(script_path)
-            # Expect: ["python", "-m", module, ...args]
             cmd = [sys.executable, "-m"] + parts[2:]
-            result = subprocess.run(cmd, timeout=STEP_TIMEOUT)
         else:
-            # Execute as file
-            result = subprocess.run([
-                sys.executable, script_path
-            ], timeout=STEP_TIMEOUT)
+            cmd = [sys.executable, script_path]
+
+        with subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, text=True) as proc:
+            try:
+                for line in proc.stdout:
+                    log_write(line.rstrip("\n"))
+                proc.wait(timeout=STEP_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                raise TimeoutError("Pipeline step timed out")
+
+        class _Result:
+            def __init__(self, returncode):
+                self.returncode = returncode
+        result = _Result(proc.returncode)
         
         # Clear the alarm
         signal.alarm(0)
@@ -129,11 +152,11 @@ def run_step(step_name, script_path, description):
         elapsed_time = time.time() - start_time
         
         if result.returncode == 0:
-            print("-" * 40)
-            print(f"✅ {step_name} completed successfully in {elapsed_time:.1f} seconds")
+            log_write("-" * 40)
+            log_write(f"✅ {step_name} completed successfully in {elapsed_time:.1f} seconds")
         else:
-            print("-" * 40)
-            print(f"❌ {step_name} failed with exit code {result.returncode}")
+            log_write("-" * 40)
+            log_write(f"❌ {step_name} failed with exit code {result.returncode}")
         
         return result.returncode == 0, elapsed_time
         
@@ -142,15 +165,15 @@ def run_step(step_name, script_path, description):
         signal.alarm(0)
         
         elapsed_time = time.time() - start_time
-        print(f"❌ {step_name} failed with exit code {e.returncode}")
+        log_write(f"❌ {step_name} failed with exit code {e.returncode}")
         
         if e.stdout:
-            print("\n📤 Output:")
-            print(e.stdout[-500:])
+            log_write("\n📤 Output:")
+            log_write(e.stdout[-500:])
         
         if e.stderr:
-            print("\n🚨 Error details:")
-            print(e.stderr[-500:])
+            log_write("\n🚨 Error details:")
+            log_write(e.stderr[-500:])
         
         return False, elapsed_time
     
@@ -159,7 +182,7 @@ def run_step(step_name, script_path, description):
         signal.alarm(0)
         
         elapsed_time = time.time() - start_time
-        print(f"⏰ {step_name} timed out after {STEP_TIMEOUT} seconds")
+        log_write(f"⏰ {step_name} timed out after {STEP_TIMEOUT} seconds")
         return False, elapsed_time
     
     except FileNotFoundError:
@@ -167,7 +190,7 @@ def run_step(step_name, script_path, description):
         signal.alarm(0)
         
         elapsed_time = time.time() - start_time
-        print(f"❌ {step_name} failed: Python interpreter not found")
+        log_write(f"❌ {step_name} failed: Python interpreter not found")
         return False, elapsed_time
     
     except Exception as e:
@@ -175,7 +198,7 @@ def run_step(step_name, script_path, description):
         signal.alarm(0)
         
         elapsed_time = time.time() - start_time
-        print(f"❌ {step_name} failed with unexpected error: {e}")
+        log_write(f"❌ {step_name} failed with unexpected error: {e}")
         return False, elapsed_time
 
 def main():
@@ -190,15 +213,29 @@ def main():
                         help="Which phase to run: draft (Phase A), validate (Phase B), or full")
     parser.add_argument("--team-file", type=str, help="Path to TSV team file for Monte Carlo validation")
     known_args, _ = parser.parse_known_args()
+
+    # Initialize logging to file named with phase and timestamp
+    try:
+        logs_dir = Path('logs')
+        logs_dir.mkdir(parents=True, exist_ok=True)
+        start_ts = datetime.now().strftime('%Y%m%d-%H%M%S')
+        log_path = logs_dir / f"pipeline-{known_args.phase}-{start_ts}.log"
+        global LOG_FILE_HANDLE
+        LOG_FILE_HANDLE = log_path.open('a', encoding='utf-8')
+        log_write("🏈 FANTASY FOOTBALL ANALYTICS PIPELINE")
+        log_write("=" * 60)
+        log_write(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    except Exception:
+        pass
     
     # Create required directories first
     create_required_directories()
     
     # Check if enhanced orchestrator is available
     if EnhancedPipelineOrchestrator is not None and known_args.phase == "full":
-        print("🚀 Using Enhanced Pipeline Orchestrator")
-        print("📊 Features: Dependency management, sequential execution with internal multiprocessing, error recovery")
-        print()
+        log_write("🚀 Using Enhanced Pipeline Orchestrator")
+        log_write("📊 Features: Dependency management, sequential execution with internal multiprocessing, error recovery")
+        log_write("")
         
         try:
             # Use enhanced orchestrator
@@ -211,42 +248,42 @@ def main():
             summary = orchestrator.get_execution_summary()
             
             # Display enhanced summary
-            print("\n" + "="*80)
-            print("ENHANCED PIPELINE ORCHESTRATION - EXECUTION SUMMARY")
-            print("="*80)
+            log_write("\n" + "="*80)
+            log_write("ENHANCED PIPELINE ORCHESTRATION - EXECUTION SUMMARY")
+            log_write("="*80)
             
-            print(f"Pipeline Status: {'✅ SUCCESS' if success else '❌ FAILED'}")
-            print(f"Total Steps: {summary['pipeline_info']['total_steps']}")
-            print(f"Completed Steps: {summary['performance_metrics']['completed_steps']}")
-            print(f"Failed Steps: {summary['performance_metrics']['failed_steps']}")
-            print(f"Total Execution Time: {summary['pipeline_info']['total_time']:.1f}s")
-            print(f"Parallel Efficiency: {summary['performance_metrics']['parallel_efficiency']:.2f}")
+            log_write(f"Pipeline Status: {'✅ SUCCESS' if success else '❌ FAILED'}")
+            log_write(f"Total Steps: {summary['pipeline_info']['total_steps']}")
+            log_write(f"Completed Steps: {summary['performance_metrics']['completed_steps']}")
+            log_write(f"Failed Steps: {summary['performance_metrics']['failed_steps']}")
+            log_write(f"Total Execution Time: {summary['pipeline_info']['total_time']:.1f}s")
+            log_write(f"Parallel Efficiency: {summary['performance_metrics']['parallel_efficiency']:.2f}")
             
             if summary['error_recovery_state']['total_retries'] > 0:
-                print(f"Total Retries: {summary['error_recovery_state']['total_retries']}")
+                log_write(f"Total Retries: {summary['error_recovery_state']['total_retries']}")
             
-            print("\nStep Results:")
+            log_write("\nStep Results:")
             for result in summary['step_results']:
                 status_icon = "✅" if result['success'] else "❌"
-                print(f"  {status_icon} {result['step_name']}: {result['execution_time']:.1f}s")
+                log_write(f"  {status_icon} {result['step_name']}: {result['execution_time']:.1f}s")
                 if result['retry_attempts'] > 0:
-                    print(f"    Retries: {result['retry_attempts']}")
+                    log_write(f"    Retries: {result['retry_attempts']}")
                 if result['error_message']:
-                    print(f"    Error: {result['error_message']}")
+                    log_write(f"    Error: {result['error_message']}")
             
-            print("="*80)
+            log_write("="*80)
             
             return 0 if success else 1
             
         except Exception as e:
-            print(f"❌ Enhanced orchestrator failed: {e}")
-            print("🔄 Falling back to basic pipeline execution...")
-            print()
+            log_write(f"❌ Enhanced orchestrator failed: {e}")
+            log_write("🔄 Falling back to basic pipeline execution...")
+            log_write("")
     
     # Fallback to basic pipeline execution
-    print("🚀 Using Basic Pipeline Execution (Fallback)")
-    print("📊 Features: Sequential execution, basic error handling")
-    print()
+    log_write("🚀 Using Basic Pipeline Execution (Fallback)")
+    log_write("📊 Features: Sequential execution, basic error handling")
+    log_write("")
     
     pipeline_start = time.time()
     
@@ -303,13 +340,13 @@ def main():
     results = []
     total_time = 0
     
-    print(f"Selected phase: {phase}")
+    log_write(f"Selected phase: {phase}")
     if phase == "validate" and not known_args.team_file:
-        print("⚠️  --team-file not provided; Monte Carlo will require it and may fail.")
+        log_write("⚠️  --team-file not provided; Monte Carlo will require it and may fail.")
     
     # Run each step with clear visibility
     for i, step in enumerate(pipeline_steps, 1):
-        print(f"\n🔄 Step {i}/{len(pipeline_steps)}: {step['name']}")
+        log_write(f"\n🔄 Step {i}/{len(pipeline_steps)}: {step['name']}")
         
         success, elapsed_time = run_step(
             step['name'], 
@@ -326,37 +363,44 @@ def main():
         total_time += elapsed_time
         
         if not success:
-            print(f"\n🚨 Pipeline failed at step {i}: {step['name']}")
-            print("🔄 Please fix the issue and re-run the pipeline")
+            log_write(f"\n🚨 Pipeline failed at step {i}: {step['name']}")
+            log_write("🔄 Please fix the issue and re-run the pipeline")
             break
         
-        print(f"✅ Step {i} completed. Moving to next step...")
-        print()
+        log_write(f"✅ Step {i} completed. Moving to next step...")
+        log_write("")
     
     # Pipeline summary
-    print(f"\n{'='*60}")
-    print("BASIC PIPELINE SUMMARY")
-    print(f"{'='*60}")
+    log_write(f"\n{'='*60}")
+    log_write("BASIC PIPELINE SUMMARY")
+    log_write(f"{'='*60}")
     
     successful_steps = sum(1 for r in results if r['success'])
     total_steps = len(results)
     
-    print(f"📊 Steps completed: {successful_steps}/{total_steps}")
-    print(f"⏱️  Total time: {total_time:.1f} seconds")
-    print(f"🎯 Success rate: {(successful_steps/total_steps)*100:.1f}%")
+    log_write(f"📊 Steps completed: {successful_steps}/{total_steps}")
+    log_write(f"⏱️  Total time: {total_time:.1f} seconds")
+    log_write(f"🎯 Success rate: {(successful_steps/total_steps)*100:.1f}%")
     
     # Enhanced status reporting
     if successful_steps == total_steps:
-        print("\n🎉 Pipeline completed successfully!")
-        print("📈 Ready for fantasy football analysis!")
+        log_write("\n🎉 Pipeline completed successfully!")
+        log_write("📈 Ready for fantasy football analysis!")
     elif successful_steps == 0:
-        print("\n❌ Pipeline failed completely. Check all steps.")
-        print("🔧 Review error messages and fix issues before re-running.")
+        log_write("\n❌ Pipeline failed completely. Check all steps.")
+        log_write("🔧 Review error messages and fix issues before re-running.")
     else:
-        print(f"\n⚠️  Pipeline partially completed ({successful_steps}/{total_steps} steps)")
-        print("🔧 Check failed steps and re-run as needed")
+        log_write(f"\n⚠️  Pipeline partially completed ({successful_steps}/{total_steps} steps)")
+        log_write("🔧 Check failed steps and re-run as needed")
     
-    print(f"\n🏁 Pipeline finished at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    log_write(f"\n🏁 Pipeline finished at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Close log file handle if open
+    try:
+        if LOG_FILE_HANDLE is not None:
+            LOG_FILE_HANDLE.close()
+    except Exception:
+        pass
     
     # Return exit code for automation
     return 0 if successful_steps == total_steps else 1
