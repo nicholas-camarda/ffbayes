@@ -116,26 +116,26 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 
 ### Generative model (quick overview)
 - Baseline: 7-game moving average (per player).
+  $\hat{y}_{it}^{(\mathrm{baseline})} = \frac{1}{\min(7, t-1)} \sum_{s=1}^{\min(7, t-1)} y_{i,t-s}$
 
-<p align="center"><img src="docs/pngs/cd69e1f04d5ca7be47df319c67a9ed72.png" align=middle width=325.42882514999997pt height=47.917996499999994pt/></p>
 
 Uses available history if fewer than 7 prior games; no opponent/team/home effects.
 
 - Bayesian model:
+  - Likelihood: $y_{it} \sim \mathrm{StudentT}(\nu, \mu_{it}, \sigma_{r(i,t)})$.
+  - Mean: $\mu_{it} = \alpha + \sum_{p \in \{QB,WR,RB,TE\}} \beta^{p}_{\mathrm{opp}(i,t)} \mathbb{I}\{\mathrm{pos}(i)=p\} + h^{\mathrm{pos}(i)}_{r(i,t)} \mathbb{I}\{home_{it}\} + a^{\mathrm{pos}(i)}_{r(i,t)} \mathbb{I}\{away_{it}\}$.
+  - Priors: $\beta^{p}_{\cdot} \sim \mathcal{N}(0, \tau^{p})$; $h^{p}_{r}, a^{p}_{r} \sim \mathcal{N}(0, \tau^{p}_{r})$; $\sigma_{r} \sim \mathrm{HalfNormal}(\sigma_0)$; $\nu=1+\exp(\eta)$.
 
   Data index: player i in week t; positions in {QB, WR, RB, TE}; teams indexed 0..T-1; rank r∈{0,1,2,3} from quartiles of 7-game average.
 
   Likelihoods (heavy-tailed for robustness):
 
-<p align="center"><img src="docs/pngs/652e3543d1c35f9bf685d134a2c5775f.png" align=middle width=459.00959115pt height=167.86013309999998pt/></p>
 
   Home/away offsets by position and rank r:
 
-<p align="center"><img src="docs/pngs/12b39044bc3b4526b8ae580a16a67bad.png" align=middle width=968.9171514pt height=21.8192205pt/></p>
 
   Hierarchical priors (from `src/ffbayes/analysis/bayesian_hierarchical_ff_modern.py`):
 
-<p align="center"><img src="docs/pngs/c91c321c256acf56c583d6b095bcab13.png" align=middle width=444.58861260000003pt height=128.47327349999998pt/></p>
 
   Observed inputs used in the model: `FantPt`, 7-game rolling average `7_game_avg`, position one-hots (`position_QB`, `position_WR`, `position_RB`, `position_TE`), opponent team index `opp_team`, rank `rank` (quartiles of `7_game_avg` per player-season), and `is_home`.
 
