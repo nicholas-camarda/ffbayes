@@ -343,12 +343,13 @@ All symbols in equations correspond directly to these columns produced by `colle
 - $\alpha$: global intercept (baseline level).
 - $\mu_{it}$: latent mean for player $i$ in week $t$.
 - $\beta^{p}_{\mathrm{opp}(i,t)}$: opponent-by-position effect for position $p\in\{QB,WR,RB,TE\}$ against the opponent faced in week $t$.
-- $h^{\mathrm{pos}(i)}_{r(i,t)}$, $a^{\mathrm{pos}(i)}_{r(i,t)}$: home and away offsets for player $i$'s position and rank $r(i,t)$.
+- $h^{\mathrm{pos}(i)}_{r(i,t)}$: home offset for player $i$'s position and rank $r(i,t)$.
+- $a^{\mathrm{pos}(i)}_{r(i,t)}$: away offset for player $i$'s position and rank $r(i,t)$.
 - $\mathbb{I}\{\cdot\}$: indicator function (1 if condition is true, else 0).
 - $\sigma_{r}$: rank-specific residual scale used in the likelihood.
 - $\tau^{p}$, $\tau^{p}_{r}$: prior scales (standard deviations) for effects by position and position-by-rank.
-- $\nu$: Student-$t$ degrees of freedom; parameterized as $\nu = 1+\exp(\eta)$ to enforce $\nu>1$.
+- $\nu$: Student-T degrees of freedom; parameterized as $\nu = 1+\exp(\eta)$ to enforce $\nu>1$.
 - $\eta$: unconstrained real parameter for $\nu$.
 - $home_{it}$, $away_{it}$: binary indicators for home/away; $away_{it}=1-home_{it}$.
 - $\text{defense}_{it}$: shorthand for the opponent-by-position sum of $\beta$ effects.
-- $\mathrm{StudentT}(\nu,\mu,\sigma)$: Student-$t$ distribution with df $\nu$, location $\mu$, scale $\sigma$.
+- $\mathrm{StudentT}(\nu,\mu,\sigma)$: Student-T distribution with df $\nu$, location $\mu$, scale $\sigma$.
