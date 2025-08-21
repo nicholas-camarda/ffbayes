@@ -141,8 +141,6 @@ For Bayesian model below, data is index as player $i$ in week $t$, positions in 
   ```math
   \beta^{p}_{\cdot} \sim \mathcal{N}(0, \tau^{p});\quad h^{p}_{r},\ a^{p}_{r} \sim \mathcal{N}(0, \tau^{p}_{r});\quad \sigma_{r} \sim \mathrm{HalfNormal}(\sigma_0);\quad \nu = 1 + \exp(\eta)
   ```
-  
-  Symbols used above: $\alpha$ (intercept), $\mu_{it}$ (latent mean), $\beta^{p}_{\mathrm{opp}(i,t)}$ (opponent-by-position effect), $h^{\mathrm{pos}(i)}_{r(i,t)}$ and $a^{\mathrm{pos}(i)}_{r(i,t)}$ (home/away offsets by position and rank), $\mathbb{I}\{\cdot\}$ (indicator), $\sigma_r$ (rank-specific scale), $\tau^p,\tau^p_r$ (prior scales), $\nu=1+\exp(\eta)$ (Student–$t$ df).
 
   Defense effect by position:
   ```math
@@ -328,7 +326,7 @@ These features feed the Bayesian model exactly as specified above.
 
 #### Notation (and column mapping)
 
-- i: player index; corresponds to a row’s `Name`/`player_id` grouping.
+- i: player index; corresponds to a row's `Name`/`player_id` grouping.
 - t: week index within a season; corresponds to `G#`/`week` within `Season`.
 - y_{it}: observed PPR fantasy points for player i in week t → `FantPt` (or `fantasy_points_ppr` upstream).
 - \bar{y}^{(7)}_{i,t}: rolling 7-game average for player i before week t → `7_game_avg`.
@@ -345,12 +343,12 @@ All symbols in equations correspond directly to these columns produced by `colle
 - $\alpha$: global intercept (baseline level).
 - $\mu_{it}$: latent mean for player $i$ in week $t$.
 - $\beta^{p}_{\mathrm{opp}(i,t)}$: opponent-by-position effect for position $p\in\{QB,WR,RB,TE\}$ against the opponent faced in week $t$.
-- $h^{\mathrm{pos}(i)}_{r(i,t)}$, $a^{\mathrm{pos}(i)}_{r(i,t)}$: home and away offsets for player $i$’s position and rank $r(i,t)$.
+- $h^{\mathrm{pos}(i)}_{r(i,t)}$, $a^{\mathrm{pos}(i)}_{r(i,t)}$: home and away offsets for player $i$'s position and rank $r(i,t)$.
 - $\mathbb{I}\{\cdot\}$: indicator function (1 if condition is true, else 0).
 - $\sigma_{r}$: rank-specific residual scale used in the likelihood.
 - $\tau^{p}$, $\tau^{p}_{r}$: prior scales (standard deviations) for effects by position and position-by-rank.
-- $\nu$: Student–$t$ degrees of freedom; parameterized as $\nu = 1+\exp(\eta)$ to enforce $\nu>1$.
+- $\nu$: Student-$t$ degrees of freedom; parameterized as $\nu = 1+\exp(\eta)$ to enforce $\nu>1$.
 - $\eta$: unconstrained real parameter for $\nu$.
 - $home_{it}$, $away_{it}$: binary indicators for home/away; $away_{it}=1-home_{it}$.
 - $\text{defense}_{it}$: shorthand for the opponent-by-position sum of $\beta$ effects.
-- $\mathrm{StudentT}(\nu,\mu,\sigma)$: Student–$t$ distribution with df $\nu$, location $\mu$, scale $\sigma$.
+- $\mathrm{StudentT}(\nu,\mu,\sigma)$: Student-$t$ distribution with df $\nu$, location $\mu$, scale $\sigma$.
