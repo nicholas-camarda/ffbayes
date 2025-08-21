@@ -68,16 +68,16 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 ### Example Outputs (from your latest run)
 
 - Team Score Breakdown
-  ![Team Score Breakdown](plots/team_aggregation/team_score_breakdown_latest.png)
+  ![Team Score Breakdown](docs/images/team_score_breakdown_latest.png)
 
 - Position Analysis
-  ![Position Analysis](plots/team_aggregation/position_analysis_latest.png)
+  ![Position Analysis](docs/images/position_analysis_latest.png)
 
 - Uncertainty Analysis
-  ![Uncertainty Analysis](plots/team_aggregation/uncertainty_analysis_latest.png)
+  ![Uncertainty Analysis](docs/images/uncertainty_analysis_latest.png)
 
 - Comparison Insights
-  ![Comparison Insights](plots/team_aggregation/comparison_insights_latest.png)
+  ![Comparison Insights](docs/images/comparison_insights_latest.png)
 
 ## 📋 Example Draft Strategy Output
 
