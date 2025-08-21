@@ -123,20 +123,11 @@ Uses available history if fewer than 7 prior games; no opponent/team/home effect
 
 - Bayesian model:
   
-  Likelihood:
-  $$
-  y_{it} \sim \mathrm{StudentT}(\nu, \mu_{it}, \sigma_{r(i,t)})
-  $$
+  Likelihood: $$ y_{it} \sim \mathrm{StudentT}(\nu, \mu_{it}, \sigma_{r(i,t)}) $$
   
-  Mean:
-  $$
-  \mu_{it} = \alpha + \sum_{p \in \{QB, WR, RB, TE\}} \beta^{p}_{\mathrm{opp}(i,t)} \, \mathbb{I}\{\mathrm{pos}(i)=p\} + h^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{home_{it}\} + a^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{away_{it}\}
-  $$
+  Mean: $$ \mu_{it} = \alpha + \sum_{p \in \{QB, WR, RB, TE\}} \beta^{p}_{\mathrm{opp}(i,t)} \, \mathbb{I}\{\mathrm{pos}(i)=p\} + h^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{home_{it}\} + a^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{away_{it}\} $$
   
-  Priors:
-  $$
-  \beta^{p}_{\cdot} \sim \mathcal{N}(0, \tau^{p});\quad h^{p}_{r},\ a^{p}_{r} \sim \mathcal{N}(0, \tau^{p}_{r});\quad \sigma_{r} \sim \mathrm{HalfNormal}(\sigma_0);\quad \nu = 1 + \exp(\eta)
-  $$
+  Priors: $$ \beta^{p}_{\cdot} \sim \mathcal{N}(0, \tau^{p});\quad h^{p}_{r},\ a^{p}_{r} \sim \mathcal{N}(0, \tau^{p}_{r});\quad \sigma_{r} \sim \mathrm{HalfNormal}(\sigma_0);\quad \nu = 1 + \exp(\eta) $$
   
   Data index: player i in week t; positions in {QB, WR, RB, TE}; teams indexed 0..T-1; rank r∈{0,1,2,3} from quartiles of 7-game average.
 
@@ -144,9 +135,6 @@ Uses available history if fewer than 7 prior games; no opponent/team/home effect
 
 
   Home/away offsets by position and rank r:
-
-
-  Hierarchical priors (from `src/ffbayes/analysis/bayesian_hierarchical_ff_modern.py`):
 
 
   Observed inputs used in the model: `FantPt`, 7-game rolling average `7_game_avg`, position one-hots (`position_QB`, `position_WR`, `position_RB`, `position_TE`), opponent team index `opp_team`, rank `rank` (quartiles of `7_game_avg` per player-season), and `is_home`.
