@@ -126,35 +126,44 @@ Uses available history if fewer than 7 prior games; no opponent/team/home effect
 
 - Bayesian model:
 
-$$
-y_{it} \sim \mathcal{N}(\mu_{it}, \sigma^2), \quad \mu_{it} = \alpha + b_{pos[\text{pos}(i)]} + b_{team[\text{team}(i,t)]} + b_{opp[\text{opp}(i,t)]} + b_{\text{home}}\,\mathbb{I}\{home_{it}\}
-$$
+  Data index: player i in week t; positions in {QB, WR, RB, TE}; teams indexed 0..T-1; rank r∈{0,1,2,3} from quartiles of 7-game average.
 
-- Monte Carlo team simulation:
+  Likelihoods (heavy-tailed for robustness):
 
 $$
-T^{(s)} = \sum_j X_j^{(s)}
+\begin{aligned}
+\text{defense effect}_{it} &= \mathbb{1}_{QB,i}\,\beta^{QB}_{\text{opp}[i,t]} + \mathbb{1}_{WR,i}\,\beta^{WR}_{\text{opp}[i,t]} + \\
+&\quad \mathbb{1}_{RB,i}\,\beta^{RB}_{\text{opp}[i,t]} + \mathbb{1}_{TE,i}\,\beta^{TE}_{\text{opp}[i,t]} \\
+\Delta y_{it} &\sim \text{Student-}t\big(\nu_2,\; \mu=\text{defense effect}_{it},\; \sigma=\sigma^{(b)}_{r(i,t)}\big) \\
+\mu_{it} &= \underbrace{\bar{y}^{(7)}_{i,t}}_{\text{7-game avg}} + \text{defense effect}_{it} + \text{home/away}_{i,t} \\
+y_{it} &\sim \text{Student-}t\big(\nu_1,\; \mu=\mu_{it},\; \sigma=\sigma_{r(i,t)}\big)
+\end{aligned}
 $$
 
-Summarize mean, std, percentiles.
-
-- Risk-adjusted tier score:
+  Home/away offsets by position and rank r:
 
 $$
-\mathrm{score}_i = \hat{P}_i - \lambda \, \sigma_i
+\text{home/away}_{i,t} = \mathbb{I}\{home\}\,(h^{QB}_{r}\mathbb{1}_{QB,i}+h^{WR}_{r}\mathbb{1}_{WR,i}+h^{RB}_{r}\mathbb{1}_{RB,i}+h^{TE}_{r}\mathbb{1}_{TE,i}) \\
+\quad + \mathbb{I}\{away\}\,(a^{QB}_{r}\mathbb{1}_{QB,i}+a^{WR}_{r}\mathbb{1}_{WR,i}+a^{RB}_{r}\mathbb{1}_{RB,i}+a^{TE}_{r}\mathbb{1}_{TE,i})
 $$
 
-- Contribution%:
+  Hierarchical priors (from `src/ffbayes/analysis/bayesian_hierarchical_ff_modern.py`):
 
 $$
-100 \cdot \hat{P}_i / \sum_j \hat{P}_j, \quad \mathrm{CV}_i = \sigma_i / \hat{P}_i
+\begin{aligned}
+\beta^{pos}_{team} &\sim \mathcal{N}(\mu^{pos}_{\text{def}},\; 100^2) \quad (pos\in\{QB,WR,RB,TE\}) \\
+\mu^{pos}_{\text{def}} &\sim \mathcal{N}(0,\; 100^2) \\
+h^{pos}_{r},\; a^{pos}_{r} &\sim \mathcal{N}(m^{pos}_{\text{home/away}},\; 10^2),\quad m^{pos}_{\text{home/away}}\sim \mathcal{N}(0,\;100^2) \\
+\nu_1,\nu_2 &\sim 1+\text{Exponential}(1/29) \\
+\sigma_{r},\; \sigma^{(b)}_{r} &\sim \text{Uniform}(0,100)
+\end{aligned}
 $$
 
-- MAE:
+  Observed inputs used in the model: `FantPt`, 7-game rolling average `7_game_avg`, position one-hots (`position_QB`, `position_WR`, `position_RB`, `position_TE`), opponent team index `opp_team`, rank `rank` (quartiles of `7_game_avg` per player-season), and `is_home`.
 
-$$
-\mathrm{MAE} = \frac{1}{N} \sum_{n=1}^{N} \lvert \hat{y}_n - y_n \rvert
-$$
+  Train/test split: latest two seasons from the combined 5-year dataset (train second-latest; test latest).
+
+  Outputs: posterior predictive mean and std for each player-week; MAE is reported vs held-out actuals and compared to the 7-game-average baseline.
 
 #### Baseline predictor (details)
 - For each player–game in the test set, the baseline predicts the 7‑game moving average of that player’s prior games (if fewer than 7 exist, use what’s available). It ignores opponent, team effects, and home/away.
@@ -310,3 +319,14 @@ ffbayes-bayes
 ffbayes-draft-strategy --draft-position 3 --league-size 12 --risk-tolerance medium
 ffbayes-mc --team-file my_ff_teams/my_actual_2025.tsv
 ```
+
+#### Data used by the model (from the pipeline)
+
+- Source collection: `nfl_data_py` weekly player data and schedules; optional injuries. See `src/ffbayes/data_pipeline/collect_data.py`.
+- Preprocessing (last 5 seasons):
+  - Merge schedules to derive `is_home`, opponent `Opp`/`opp_team` indices.
+  - Compute `7_game_avg` per player-season and quartile `rank` (0–3).
+  - One-hot positions; keep essential columns and compute `diff_from_avg = FantPt - 7_game_avg`.
+  - Save combined dataset to `datasets/combined_datasets/*season_modern.csv`.
+
+These features feed the Bayesian model exactly as specified above.
