@@ -9,6 +9,7 @@ This directory contains product specifications, research, analysis, and strategi
 - **`roadmap.md`** - Product roadmap and development timeline
 - **`decisions.md`** - Key product decisions and rationale
 - **`testing-protocol.md`** - **🚨 MANDATORY TESTING PROTOCOL** - Critical testing mode enforcement and workflow requirements
+- **`ORGANIZATION_STRUCTURE.md`** - **📁 PROJECT ORGANIZATION** - Complete folder structure for plots, results, and organized subfolders
 
 ## Purpose
 
@@ -25,6 +26,7 @@ These documents serve as:
 - **For Product Planning**: Reference `roadmap.md` for current priorities and timeline
 - **For Decision Context**: See `decisions.md` for key decisions and rationale
 - **For Testing Requirements**: **READ `testing-protocol.md` FIRST** - mandatory testing mode enforcement
+- **For Project Organization**: See `ORGANIZATION_STRUCTURE.md` for complete folder structure and file organization
 
 ## Maintenance
 
@@ -41,6 +43,7 @@ These documents should be updated as:
 - **Current Roadmap**: See `roadmap.md`
 - **Key Decisions**: See `decisions.md`
 - **🚨 MANDATORY TESTING**: See `testing-protocol.md` - **ALWAYS USE TEST MODE DURING TESTING**
+- **📁 Project Organization**: See `ORGANIZATION_STRUCTURE.md` - complete folder structure and file organization
 
 ## Critical Testing Requirement
 
