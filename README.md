@@ -117,8 +117,9 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 ### Generative model (quick overview)
 - Baseline: 7-game moving average (per player).
 
-$$
-\hat{y}_{it}^{(\mathrm{baseline})} = \frac{1}{k_{it}} \sum_{s=1}^{k_{it}} y_{i,t-s} \quad k_{it} = \min(7, t-1)
+$$ 
+\hat{y}_{it}^{(\mathrm{baseline})} = \frac{1}{k_{it}} \sum_{s=1}^{k_{it}} y_{i,t-s} 
+\quad k_{it} = \min(7, t-1) 
 $$
 
 Uses available history if fewer than 7 prior games; no opponent/team/home effects.
