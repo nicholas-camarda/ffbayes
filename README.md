@@ -123,7 +123,7 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 
 Uses available history if fewer than 7 prior games; no opponent/team/home effects.
 
-For Bayesian model below, data is index as player $i$ in week $t$; positions in {QB, WR, RB, TE}; teams indexed $0..T-1$; rank $r∈{0,1,2,3}$ from quartiles of 7-game average.
+For Bayesian model below, data is index as player $i$ in week $t$, positions in {QB, WR, RB, TE} and teams indexed $0..T-1$. Rank $r∈{0,1,2,3}$ from quartiles of 7-game average.
 
 - Bayesian model:
   
