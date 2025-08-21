@@ -114,59 +114,13 @@ ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
 - **Monte Carlo**: simulate many plausible weeks/seasons to see realistic ranges (floor/median/ceiling) for your team’s total score.
 - **Baseline vs model**: we benchmark against a simple 7‑game moving average; the model should beat this on held‑out data (lower MAE).
 
-### Full generative model (compact)
-
-Baseline (7‑game moving average)
-
-![Baseline equation](https://render.githubusercontent.com/render/math?math=%255Chat%257By%257D_%257Bi%252Ct%257D%255E%257B%255Ctext%257Bbase%257D%257D%257D%2520%253D%2520%255Cfrac%257B1%257D%257Bk%257D%255Csum_%257Bs%253D1%257D%255E%257Bk%257D%2520y_%257Bi%252Ct-s%257D%252C%255Cquad%2520k%253D%255Cmin(7%252Ct-1))
-
-Bayesian model (per‑game fantasy points)
-
-![y distribution](https://render.githubusercontent.com/render/math?math=y_%257Bi%252Ct%257D%2520%255Csim%2520%255Cmathcal%257BN%257D(%255Cmu_%257Bi%252Ct%257D%252C%25E2%2580%8B%255Csigma%255E2))
-
-![mu definition](https://render.githubusercontent.com/render/math?math=%255Cmu_%257Bi%252Ct%257D%2520%253D%2520%255Calpha%2520%252B%2520b%255E%257B%255Ctext%257Bpos%257D%257D_%257B%255Ctext%257Bpos%257D(i)%257D%2520%252B%2520b%255E%257B%255Ctext%257Bteam%257D%257D_%257B%255Ctext%257Bteam%257D(i%252Ct)%257D%2520%252B%2520b%255E%257B%255Ctext%257Bopp%257D%257D_%257B%255Ctext%257Bopp%257D(i%252Ct)%257D%2520%252B%2520b%255E%257B%255Ctext%257Bhome%257D%257D%255Cmathbb%257BI%257D%255C%257B%255Ctext%257Bhome%257D_%257Bi%252Ct%257D%255C%257D)
-
-Priors (typical choices):
-
-$$
-\alpha \sim \mathcal{N}(0,\,10^2),\quad b^{(\cdot)}_j \sim \mathcal{N}(0,\,\tau^2),\quad \tau \sim \text{HalfCauchy}(5),\quad \sigma \sim \text{HalfCauchy}(5)
-$$
-
-- Monte Carlo team simulation
-
-$$
-T^{(s)} = \sum_{j=1}^{m} X^{(s)}_j,\quad s=1,\dots,S
-$$
-
-with $X^{(s)}_j$ sampled from the empirical distribution of historical game points for player $j$ (guardrails when sparse). Summary statistics:
-
-$$
-\bar{T} = \frac{1}{S}\sum_{s=1}^S T^{(s)},\quad s_T=\sqrt{\frac{1}{S-1}\sum_s\big(T^{(s)}-\bar{T}\big)^2},\quad \text{SE}(\bar{T})=\frac{s_T}{\sqrt{S}}
-$$
-
-and the 95% CI:
-
-$$
-\bar{T} \pm 1.96\,\text{SE}(\bar{T}).
-$$
-
-- Risk‑adjusted tier score (sketch)
-
-$$
-\text{score}_i = \hat{P}_i - \lambda\,\sigma_i,\quad \lambda \in \{\text{low},\,\text{med},\,\text{high}\}
-$$
-
-- Contribution and uncertainty
-
-$$
-\text{Contribution}_i(\%) = 100\cdot \frac{\hat{P}_i}{\sum_j \hat{P}_j},\qquad \text{CV}_i = \frac{\sigma_i}{\hat{P}_i}
-$$
-
-- Baseline vs Bayesian MAE (lower is better)
-
-$$
-\text{MAE} = \frac{1}{N}\sum_{n=1}^{N}\big|\hat{y}_n - y_n\big|
-$$
+### Generative model (quick overview)
+- Baseline: 7-game moving average.
+- Bayesian model: `y_it ~ Normal(mu_it, sigma^2)`; `mu_it = alpha + b_pos[pos(i)] + b_team[team(i,t)] + b_opp[opp(i,t)] + b_home * I{home_it}`.
+- Monte Carlo team simulation: `T^(s) = sum_j X_j^(s)`; summarize mean, std, percentiles; 95% CI: `mean ± 1.96 * SE(mean)`.
+- Risk-adjusted tier score: `score_i = P_hat_i - lambda * sigma_i`.
+- Contribution%: `100 * P_hat_i / sum_j P_hat_j`; `CV_i = sigma_i / P_hat_i`.
+- MAE: `(1/N) * sum_n |y_hat_n - y_n|`.
 
 #### Baseline predictor (details)
 - For each player–game in the test set, the baseline predicts the 7‑game moving average of that player’s prior games (if fewer than 7 exist, use what’s available). It ignores opponent, team effects, and home/away.
