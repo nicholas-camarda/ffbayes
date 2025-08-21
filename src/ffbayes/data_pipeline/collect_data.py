@@ -29,11 +29,11 @@ except Exception:
 
 # Configuration
 CURRENT_YEAR = datetime.now().year
-# Automatically calculate the last 10 years
-# This ensures the script always collects the most recent 10 years of data
+# Automatically calculate the last 5 years
+# This ensures the script always collects the most recent 5 years of data
 # without needing manual updates each year
 # Note: Data is typically only available up to the previous year
-DEFAULT_YEARS = list(range(CURRENT_YEAR - 10, CURRENT_YEAR))
+DEFAULT_YEARS = list(range(CURRENT_YEAR - 5, CURRENT_YEAR))
 
 # Timeout configuration
 API_TIMEOUT = 30  # seconds
@@ -388,7 +388,7 @@ def collect_nfl_data(years=None):
         years = DEFAULT_YEARS
     
     print(f"📊 Collecting NFL data for years: {years}")
-    print(f"   📅 Automatically calculated last 10 available years from current year ({CURRENT_YEAR})")
+    print(f"   📅 Automatically calculated last 5 available years from current year ({CURRENT_YEAR})")
     
     # Create directory structure
     SEASON_DATASETS_DIR.mkdir(parents=True, exist_ok=True)

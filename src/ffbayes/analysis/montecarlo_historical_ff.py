@@ -62,82 +62,28 @@ combined_data = None
 
 # Try to load team file from my_ff_teams directory
 
-# Comment out module-level team loading for testing purposes
-# team_files = glob.glob('my_ff_teams/my_team_*.tsv')
-# if team_files:
-#     # Use the most recent team file
-#     latest_team_file = max(team_files, key=os.path.getctime)
-#     my_team = pd.read_csv(latest_team_file, sep='\t')
-#     print(f'Loaded team from {latest_team_file}')
-#
-#     # Check if team file has required columns, add them if missing
-#     if 'Position' not in my_team.columns:
-#         print('Warning: Team file missing Position column. Adding default positions...')
-#         # Try to infer positions from names or add defaults
-#         my_team['Position'] = 'RB'  # Default to RB, user should update
-#     if 'Tm' not in my_team.columns:
-#         print('Warning: Team file missing Tm column. Adding default teams...')
-#         my_team['Tm'] = 'UNK'  # Default to UNK, user should update
-#
-#     # Filter for valid fantasy football positions
-#     valid_positions = ['QB', 'RB', 'WR', 'TE', 'K', 'DST']
-#     my_team = my_team[my_team['Position'].isin(valid_positions)]
-#     print(f'Filtered to {len(my_team)} players with valid positions')
-#
-# else:
-#     print('No team files found in my_ff_teams/. Creating sample team for demonstration...')
-#     # Create a sample team for demonstration
-#     sample_players = [
-#         {'Name': 'Aaron Rodgers', 'Position': 'QB', 'Tm': 'NYJ'},
-#         {'Name': 'Christian McCaffrey', 'Position': 'RB', 'Tm': 'SF'},
-#         {'Name': 'Tyreek Hill', 'Position': 'WR', 'Tm': 'MIA'},
-#         {'Name': 'Travis Kelce', 'Position': 'TE', 'Tm': 'KC'},
-#     ]
-#     my_team = pd.DataFrame(sample_players)
-
-def load_team():
-    """Load team from file or create sample team"""
-    team_files = glob.glob('my_ff_teams/my_team_*.tsv')
-    if team_files:
-        # Use the most recent team file
-        latest_team_file = max(team_files, key=os.path.getctime)
-        my_team = pd.read_csv(latest_team_file, sep='\t')
-        print(f'Loaded team from {latest_team_file}')
-
-        # Check if team file has required columns, add them if missing
-        if 'Position' not in my_team.columns:
-            print('Warning: Team file missing Position column. Adding default positions...')
-            # Try to infer positions from names or add defaults
-            my_team['Position'] = 'RB'  # Default to RB, user should update
-        if 'Tm' not in my_team.columns:
-            print('Warning: Team file missing Tm column. Adding default teams...')
-            my_team['Tm'] = 'UNK'  # Default to UNK, user should update
-
-        # Filter for valid fantasy football positions
-        valid_positions = ['QB', 'RB', 'WR', 'TE', 'K', 'DST']
-        my_team = my_team[my_team['Position'].isin(valid_positions)]
-        print(f'Filtered to {len(my_team)} players with valid positions')
-        return my_team
-    else:
-        print('No team files found in my_ff_teams/. Creating sample team for demonstration...')
-        # Create a sample team for demonstration
-        sample_players = [
-            {'Name': 'Aaron Rodgers', 'Position': 'QB', 'Tm': 'NYJ'},
-            {'Name': 'Christian McCaffrey', 'Position': 'RB', 'Tm': 'SF'},
-            {'Name': 'Tyreek Hill', 'Position': 'WR', 'Tm': 'MIA'},
-            {'Name': 'Travis Kelce', 'Position': 'TE', 'Tm': 'KC'},
-        ]
-        return pd.DataFrame(sample_players)
-
-# Create a default team for module-level operations
-# my_team = load_team()
-
-# print("Combined data:", combined_data)
-# print("Team:", my_team)
+def load_team_from_file(team_file: str) -> pd.DataFrame:
+    """Load team from a provided TSV file and sanitize columns."""
+    if not os.path.exists(team_file):
+        raise FileNotFoundError(f"Team file not found: {team_file}")
+    team_df = pd.read_csv(team_file, sep='\t')
+    # Ensure required columns
+    if 'Position' not in team_df.columns:
+        print('Warning: Team file missing Position column. Adding default positions...')
+        team_df['Position'] = 'RB'
+    if 'Tm' not in team_df.columns:
+        print('Warning: Team file missing Tm column. Adding default teams...')
+        team_df['Tm'] = 'UNK'
+    # Filter valid positions
+    valid_positions = ['QB', 'RB', 'WR', 'TE', 'K', 'DST']
+    team_df = team_df[team_df['Position'].isin(valid_positions)]
+    return team_df
 
 
 def make_team(team, db):
-    ### Make my team based off of my picks and whether they have historical data to simulate on ###
+    """
+    Make my team based off of my picks and whether they have historical data to simulate on
+    """
     tm = []
     # Convert pandas Series to set more explicitly
     my_team_names = set(team['Name'].tolist())
@@ -154,13 +100,10 @@ def make_team(team, db):
     return pd.DataFrame(tm).drop_duplicates(subset=['Name', 'Position'])[['Name', 'Position', 'Tm']]
 
 
-# Comment out module-level execution for testing
-# tm = make_team(team=my_team, db=combined_data)
-
-
-# print(tm)
-# print("\n")
 def validate_team(db_team, my_team):
+    """
+    Validate the team by checking if all players in my team have historical data to simulate on
+    """
     ### Check which members of my team actually have historical data to simulate on ###
     # get the column names of team using team.dtype.names
     unique_teams = db_team.loc[:, ['Name', 'Position', 'Tm']].drop_duplicates()
@@ -179,13 +122,6 @@ def validate_team(db_team, my_team):
         print('\nMissing team members:')
         missing_players = my_team_set.difference(db_set)
         print(missing_players)
-
-
-# Comment out module-level execution for testing
-# validate_team(db_team=tm, my_team=my_team)
-
-# print(combined_data.columns)
-# print("\n\n")
 
 
 def get_games(db, year, week):
@@ -457,14 +393,12 @@ def main(args=None):
         "Fantasy Football Monte Carlo Simulation with standardized interface"
     )
     
-    # Parse arguments
-    if args is None:
-        args = interface.parse_arguments()
-    
-    # Add model-specific arguments
+    # Build parser and parse arguments
     parser = interface.setup_argument_parser()
     parser = interface.add_model_arguments(parser)
     parser = interface.add_data_arguments(parser)
+    # Require explicit team file unless QUICK_TEST
+    parser.add_argument("--team-file", type=str, help="Path to TSV team file with Name, Position, Tm columns")
     args = parser.parse_args()
     
     # Set up logging
@@ -482,7 +416,7 @@ def main(args=None):
     simulations = number_of_simulations
     if args.quick_test:
         logger.info("Running in QUICK_TEST mode - using reduced simulations")
-        simulations = min(simulations, 1000)  # Limit simulations in quick test mode
+        simulations = min(simulations, 1000)
     
     # Override with command line arguments if provided
     if args.cores:
@@ -492,9 +426,22 @@ def main(args=None):
     
     logger.info(f"Simulation parameters: Years={years}, Simulations={simulations:,}")
     
-    # Load team locally for this execution
+    # Load team explicitly
     logger.info("Loading team data...")
-    my_team = interface.handle_errors(load_team)
+    if args.team_file:
+        my_team = interface.handle_errors(load_team_from_file, team_file=args.team_file)
+    elif QUICK_TEST:
+        logger.warning("No --team-file provided; QUICK_TEST mode creating sample team")
+        sample_players = [
+            {'Name': 'Aaron Rodgers', 'Position': 'QB', 'Tm': 'NYJ'},
+            {'Name': 'Christian McCaffrey', 'Position': 'RB', 'Tm': 'SF'},
+            {'Name': 'Tyreek Hill', 'Position': 'WR', 'Tm': 'MIA'},
+            {'Name': 'Travis Kelce', 'Position': 'TE', 'Tm': 'KC'},
+        ]
+        my_team = pd.DataFrame(sample_players)
+    else:
+        interface.log_error("--team-file is required for Monte Carlo validation. Provide a TSV with Name, Position, Tm.", interface.EXIT_DATA_ERROR)
+        return
     logger.info(f"Loaded {len(my_team)} players")
     
     # Create team locally for this execution
@@ -553,7 +500,7 @@ def main(args=None):
     
     logger.info("Player Performance Summary:")
     for col in outcome.columns:
-        if col != 'Total':  # Skip the total column
+        if col != 'Total':
             player_scores = outcome[col]
             logger.info(f"  {col}: {player_scores.mean():.1f} ± {player_scores.std():.1f} points")
     

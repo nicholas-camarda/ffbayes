@@ -27,9 +27,26 @@ def create_analysis_dataset(path_to_data_directory):
     if not all_files:
         raise ValueError(f"No season data files found in {path_to_data_directory}/season_datasets/")
     
-    print(f"Found {len(all_files)} season files: {[os.path.basename(f) for f in all_files]}")
+    # Sort files by year and get only the last 5 years
+    from datetime import datetime
+    current_year = datetime.now().year
+    target_years = list(range(current_year - 5, current_year))
     
-    data_temp = pd.concat((pd.read_csv(f) for f in all_files), ignore_index=True)
+    # Filter files to only include the last 5 years
+    filtered_files = []
+    for file in all_files:
+        filename = os.path.basename(file)
+        year = int(filename.replace('season.csv', ''))
+        if year in target_years:
+            filtered_files.append(file)
+    
+    if not filtered_files:
+        raise ValueError(f"No season data files found for the last 5 years ({target_years})")
+    
+    print(f"Using {len(filtered_files)} season files for last 5 years: {[os.path.basename(f) for f in filtered_files]}")
+    print(f"Target years: {target_years}")
+    
+    data_temp = pd.concat((pd.read_csv(f) for f in filtered_files), ignore_index=True)
     print(f"Combined data shape: {data_temp.shape}")
     print(f"Available columns: {data_temp.columns.tolist()}")
     print(f"Season range: {data_temp['Season'].min()} - {data_temp['Season'].max()}")
@@ -85,9 +102,12 @@ def create_analysis_dataset(path_to_data_directory):
     print(f"After cleaning, data shape: {data.shape}")
     print(f"Season range after cleaning: {data['Season'].min()} - {data['Season'].max()}")
 
-    # Save combined dataset
+    # Save combined dataset with consistent naming
     output_dir = 'datasets/combined_datasets'
-    output_file = os.path.join(output_dir, 'combined_ff_data.csv')
+    
+    # Create filename with year range for consistency
+    year_range = f"{data['Season'].min()}-{data['Season'].max()}"
+    output_file = os.path.join(output_dir, f'{year_range}season_modern.csv')
     
     data.to_csv(output_file, index=False)
     print(f"Combined dataset saved to: {output_file}")

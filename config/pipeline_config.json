@@ -4,6 +4,151 @@
     "version": "1.0.0",
     "description": "Comprehensive fantasy football analytics pipeline with Monte Carlo and Bayesian analysis"
   },
+  "pipeline_steps": [
+    {
+      "name": "data_collection",
+      "script": "ffbayes.data_pipeline.collect_data",
+      "description": "Collect NFL fantasy football data",
+      "timeout": 300,
+      "retry_count": 3,
+      "dependencies": [],
+      "critical": true,
+      "parallel_group": "data_processing"
+    },
+    {
+      "name": "data_validation",
+      "script": "ffbayes.data_pipeline.validate_data",
+      "description": "Validate collected data quality",
+      "timeout": 120,
+      "retry_count": 2,
+      "dependencies": ["data_collection"],
+      "critical": true,
+      "parallel_group": "data_processing"
+    },
+    {
+      "name": "data_preprocessing",
+      "script": "ffbayes.data_pipeline.preprocess_analysis_data",
+      "description": "Preprocess data for analysis",
+      "timeout": 180,
+      "retry_count": 2,
+      "dependencies": ["data_validation"],
+      "critical": true,
+      "parallel_group": "data_processing"
+    },
+    {
+      "name": "bayesian_analysis",
+      "script": "ffbayes.analysis.bayesian_hierarchical_ff_modern",
+      "description": "Run Bayesian hierarchical analysis to generate player predictions",
+      "timeout": 900,
+      "retry_count": 2,
+      "dependencies": ["data_preprocessing"],
+      "critical": true,
+      "parallel_group": "modeling"
+    },
+    {
+      "name": "team_aggregation",
+      "script": "ffbayes.analysis.bayesian_team_aggregation",
+      "description": "Aggregate individual predictions to team totals",
+      "timeout": 300,
+      "retry_count": 2,
+      "dependencies": ["bayesian_analysis"],
+      "critical": true,
+      "parallel_group": "modeling"
+    },
+    {
+      "name": "draft_strategy",
+      "script": "ffbayes.draft_strategy.bayesian_draft_strategy",
+      "args": "--draft-position 3 --league-size 10 --risk-tolerance medium",
+      "description": "Generate optimal draft strategies using Bayesian predictions",
+      "timeout": 300,
+      "retry_count": 2,
+      "dependencies": ["team_aggregation"],
+      "critical": true,
+      "parallel_group": "strategy"
+    },
+    {
+      "name": "monte_carlo_validation",
+      "script": "ffbayes.analysis.montecarlo_historical_ff",
+      "description": "Validate drafted teams using Monte Carlo simulation (adversarial evaluation)",
+      "timeout": 600,
+      "retry_count": 2,
+      "dependencies": ["draft_strategy"],
+      "critical": true,
+      "parallel_group": "validation"
+    },
+    {
+      "name": "model_comparison",
+      "script": "ffbayes.analysis.model_comparison_framework",
+      "description": "Compare Bayesian predictions with Monte Carlo validation results",
+      "timeout": 240,
+      "retry_count": 2,
+      "dependencies": ["monte_carlo_validation", "team_aggregation"],
+      "critical": false,
+      "parallel_group": "analysis"
+    },
+    {
+      "name": "visualization",
+      "script": "ffbayes.analysis.create_team_aggregation_visualizations",
+      "description": "Generate comprehensive visualizations",
+      "timeout": 180,
+      "retry_count": 2,
+      "dependencies": ["model_comparison"],
+      "critical": false,
+      "parallel_group": "analysis"
+    }
+  ],
+  "global_config": {
+    "max_parallel_steps": 1,
+    "pipeline_timeout": 7200,
+    "default_timeout": 300,
+    "default_retry_count": 2,
+    "retry_delay": 5,
+    "progress_monitoring": true,
+    "error_recovery": true
+  },
+  "parallel_groups": {
+    "data_processing": {
+      "max_concurrent": 1,
+      "timeout": 600
+    },
+    "modeling": {
+      "max_concurrent": 1,
+      "timeout": 1200
+    },
+    "strategy": {
+      "max_concurrent": 1,
+      "timeout": 600
+    },
+    "validation": {
+      "max_concurrent": 1,
+      "timeout": 900
+    },
+    "analysis": {
+      "max_concurrent": 1,
+      "timeout": 600
+    }
+  },
+  "error_handling": {
+    "retry_strategies": {
+      "exponential_backoff": true,
+      "max_backoff_multiplier": 3,
+      "jitter": true
+    },
+    "critical_failure_action": "stop_pipeline",
+    "non_critical_failure_action": "continue_with_warnings",
+    "max_total_retries": 5
+  },
+  "monitoring": {
+    "alert_thresholds": {
+      "cpu_usage_warning": 0.8,
+      "memory_usage_warning": 0.8,
+      "disk_usage_warning": 0.9
+    },
+    "resource_check_interval": 30,
+    "performance_tracking": true,
+    "resource_usage_tracking": true,
+    "progress_update_interval": 30
+  },
   "stages": [
     {
       "name": "data_collection",
@@ -30,17 +175,9 @@
       "dependencies": ["data_validation"]
     },
     {
-      "name": "monte_carlo_analysis",
-      "script": "ffbayes.analysis.montecarlo_historical_ff",
-      "description": "Run Monte Carlo simulation analysis",
-      "timeout": 600,
-      "retries": 2,
-      "dependencies": ["data_preprocessing"]
-    },
-    {
       "name": "bayesian_analysis",
       "script": "ffbayes.analysis.bayesian_hierarchical_ff_modern",
-      "description": "Run Bayesian hierarchical analysis",
+      "description": "Run Bayesian hierarchical analysis to generate player predictions",
       "timeout": 900,
       "retries": 2,
       "dependencies": ["data_preprocessing"]
@@ -54,12 +191,28 @@
       "dependencies": ["bayesian_analysis"]
     },
     {
+      "name": "draft_strategy",
+      "script": "ffbayes.draft_strategy.bayesian_draft_strategy",
+      "description": "Generate optimal draft strategies using Bayesian predictions",
+      "timeout": 300,
+      "retries": 2,
+      "dependencies": ["team_aggregation"]
+    },
+    {
+      "name": "monte_carlo_validation",
+      "script": "ffbayes.analysis.montecarlo_historical_ff",
+      "description": "Validate drafted teams using Monte Carlo simulation (adversarial evaluation)",
+      "timeout": 600,
+      "retries": 2,
+      "dependencies": ["draft_strategy"]
+    },
+    {
       "name": "model_comparison",
       "script": "ffbayes.analysis.model_comparison_framework",
-      "description": "Compare Monte Carlo and Bayesian results",
+      "description": "Compare Bayesian predictions with Monte Carlo validation results",
       "timeout": 240,
       "retries": 2,
-      "dependencies": ["monte_carlo_analysis", "team_aggregation"]
+      "dependencies": ["monte_carlo_validation", "team_aggregation"]
     },
     {
       "name": "visualization",
@@ -71,8 +224,8 @@
     }
   ],
   "execution": {
-    "parallel_stages": ["monte_carlo_analysis", "bayesian_analysis"],
-    "max_parallel_jobs": 2,
+    "parallel_stages": [],
+    "max_parallel_jobs": 1,
     "default_timeout": 300,
     "default_retries": 2,
     "progress_monitoring": true,

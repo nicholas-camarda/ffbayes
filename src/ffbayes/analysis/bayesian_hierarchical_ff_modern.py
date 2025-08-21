@@ -328,7 +328,12 @@ def bayesian_hierarchical_ff_modern(path_to_data_directory, cores=DEFAULT_CORES,
                     axes[i].set_ylabel('Value')
             
             plt.tight_layout()
-            plt.savefig('plots/modern_training_traces.png', dpi=300, bbox_inches='tight')
+            # Use standardized paths
+            from ..utils.interface_standards import get_standard_paths
+            paths = get_standard_paths()
+            plots_dir = paths.plots_root / "bayesian_model"
+            plots_dir.mkdir(exist_ok=True)
+            plt.savefig(plots_dir / 'training_traces.png', dpi=300, bbox_inches='tight')
             plt.close()
             
             # Plot 2: Defensive effects by team
@@ -349,7 +354,12 @@ def bayesian_hierarchical_ff_modern(path_to_data_directory, cores=DEFAULT_CORES,
                 ax.set_xlabel(f'Change in opponent {pos} average')
             
             plt.tight_layout()
-            plt.savefig('plots/modern_team_effects.png', dpi=300, bbox_inches='tight')
+            # Use standardized paths
+            from ..utils.interface_standards import get_standard_paths
+            paths = get_standard_paths()
+            plots_dir = paths.plots_root / "bayesian_model"
+            plots_dir.mkdir(exist_ok=True)
+            plt.savefig(plots_dir / 'team_effects.png', dpi=300, bbox_inches='tight')
             plt.close()
             
             # Plot 3: Prediction vs Actual
@@ -360,7 +370,12 @@ def bayesian_hierarchical_ff_modern(path_to_data_directory, cores=DEFAULT_CORES,
             plt.ylabel('Predicted Fantasy Points')
             plt.title('Bayesian Model Predictions vs Actual')
             plt.grid(True, alpha=0.3)
-            plt.savefig('plots/modern_predictions_vs_actual.png', dpi=300, bbox_inches='tight')
+            # Use standardized paths
+            from ..utils.interface_standards import get_standard_paths
+            paths = get_standard_paths()
+            plots_dir = paths.plots_root / "bayesian_model"
+            plots_dir.mkdir(exist_ok=True)
+            plt.savefig(plots_dir / 'predictions_vs_actual.png', dpi=300, bbox_inches='tight')
             plt.close()
 
             # Save results (avoid pickle issues with PyMC objects)

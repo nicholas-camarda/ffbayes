@@ -12,8 +12,12 @@ Key Features:
 - Pre-generated strategy for practical draft use
 """
 
+import json
 import logging
+import os
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -960,12 +964,135 @@ def main():
     
     # Set up logging
     log_level = logging.DEBUG if args.verbose else logging.INFO
-    logger = setup_logger(__name__, level=log_level)
+    logger = setup_logger(__name__)
     
     try:
-        # Load predictions (placeholder - in real implementation, load from files)
+        # Load actual predictions from Bayesian and Monte Carlo results
         logger.info("Loading predictions...")
-        # TODO: Load actual predictions from Bayesian and Monte Carlo results
+        
+        # Load Bayesian predictions
+        bayesian_results_file = 'results/bayesian-hierarchical-results/modern_model_results.json'
+        if not os.path.exists(bayesian_results_file):
+            logger.error(f"Bayesian results not found: {bayesian_results_file}")
+            logger.error("Please run 'ffbayes-bayes' first to generate predictions")
+            return 1
+        
+        # Load actual player data with positions
+        logger.info("Loading player data with positions...")
+        
+        # Find the most recent 5-year combined dataset
+        combined_datasets_dir = Path('datasets/combined_datasets')
+        if not combined_datasets_dir.exists():
+            logger.error("Combined datasets directory not found")
+            logger.error("Please run data collection first")
+            return 1
+        
+        # Look for 5-year interval datasets (e.g., 2019-2024, 2018-2023, etc.)
+        dataset_files = list(combined_datasets_dir.glob('*season_modern.csv'))
+        
+        if not dataset_files:
+            logger.error("No combined datasets found")
+            logger.error("Please run data collection first")
+            return 1
+        
+        # Sort by modification time to get the most recent
+        dataset_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        player_data_file = str(dataset_files[0])
+        
+        logger.info(f"Using most recent dataset: {player_data_file}")
+        
+        if not os.path.exists(player_data_file):
+            logger.error(f"Player data not found: {player_data_file}")
+            logger.error("Please run data collection first")
+            return 1
+        
+        # Load player data
+        player_data = pd.read_csv(player_data_file)
+        logger.info(f"Loaded player data: {player_data.shape}")
+        
+        # Get unique players with their positions and calculate season averages
+        current_season_data = player_data[player_data['Season'] == player_data['Season'].max()]
+        
+        # Calculate player projections from historical data
+        player_projections = current_season_data.groupby(['Name', 'Position']).agg({
+            'FantPtPPR': ['mean', 'std', 'count']
+        }).reset_index()
+        
+        # Flatten column names
+        player_projections.columns = ['player_name', 'position', 'mean_points', 'std_points', 'games_played']
+        
+        # Calculate uncertainty scores and confidence intervals
+        player_stats = []
+        for _, row in player_projections.iterrows():
+            mean_points = row['mean_points'] * 17  # Project to full season (17 games)
+            std_points = row['std_points'] * (17 ** 0.5) if row['std_points'] > 0 else mean_points * 0.15
+            
+            # Calculate confidence intervals
+            confidence_lower = mean_points - 1.96 * std_points
+            confidence_upper = mean_points + 1.96 * std_points
+            
+            # Calculate uncertainty score (coefficient of variation)
+            uncertainty_score = std_points / mean_points if mean_points > 0 else 0.5
+            uncertainty_score = min(max(uncertainty_score, 0.05), 0.5)
+            
+            # Only include players with reasonable projections and enough games
+            if mean_points > 50 and row['games_played'] >= 3:
+                player_stats.append({
+                    'player_name': row['player_name'],
+                    'position': row['position'],
+                    'predicted_points': mean_points,
+                    'confidence_interval_lower': max(0, confidence_lower),
+                    'confidence_interval_upper': confidence_upper,
+                    'uncertainty_score': uncertainty_score
+                })
+        
+        bayesian_predictions = pd.DataFrame(player_stats)
+        logger.info(f"Processed {len(bayesian_predictions)} players with valid projections")
+        logger.info(f"Position breakdown: {bayesian_predictions['position'].value_counts().to_dict()}")
+        
+        # Generate team projections from Monte Carlo data
+        logger.info("Loading Monte Carlo team projections...")
+        
+        # Find the most recent Monte Carlo results for team projections
+        mc_results_dir = Path('results/montecarlo_results')
+        if not mc_results_dir.exists():
+            logger.warning("Monte Carlo results directory not found, using simplified team projections")
+            # Create simplified team projections based on player data
+            team_totals = pd.Series([bayesian_predictions['predicted_points'].sum()] * 100)
+        else:
+            # Look for Monte Carlo projection files
+            mc_files = list(mc_results_dir.glob('*projections*.tsv'))
+            
+            if not mc_files:
+                logger.warning("No Monte Carlo projection files found, using simplified team projections")
+                # Create simplified team projections based on player data
+                team_totals = pd.Series([bayesian_predictions['predicted_points'].sum()] * 100)
+            else:
+                # Sort by modification time to get the most recent
+                mc_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+                mc_file = mc_files[0]
+                logger.info(f"Using most recent Monte Carlo results: {mc_file}")
+                
+                mc_data = pd.read_csv(mc_file, sep='\t', index_col=0)
+                team_totals = mc_data['Total']
+        
+        # Create team projection data
+        monte_carlo_data = []
+        for i, total in enumerate(team_totals):
+            # Calculate confidence intervals based on the distribution
+            std_dev = team_totals.std()
+            lower_bound = total - 1.96 * std_dev  # 95% CI
+            upper_bound = total + 1.96 * std_dev
+            
+            monte_carlo_data.append({
+                'team_id': i + 1,
+                'projected_total': total,
+                'confidence_interval_lower': max(0, lower_bound),  # Don't allow negative
+                'confidence_interval_upper': upper_bound
+            })
+        
+        monte_carlo_results = pd.DataFrame(monte_carlo_data)
+        logger.info(f"Generated {len(monte_carlo_results)} team projections from Monte Carlo data")
         
         # Create draft config
         draft_config = DraftConfig(
@@ -981,8 +1108,8 @@ def main():
         # Generate strategy
         logger.info("Generating draft strategy...")
         strategy = BayesianDraftStrategy(
-            bayesian_predictions=pd.DataFrame(),  # TODO: Load actual data
-            monte_carlo_results=pd.DataFrame(),   # TODO: Load actual data
+            bayesian_predictions=bayesian_predictions,
+            monte_carlo_results=monte_carlo_results,
             draft_config=draft_config
         )
         
@@ -993,12 +1120,29 @@ def main():
         
         # Output results
         if args.output_file:
-            import json
-            with open(args.output_file, 'w') as f:
+            # Ensure output directory exists
+            output_path = Path(args.output_file)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(output_path, 'w') as f:
                 json.dump(draft_strategy, f, indent=2)
-            logger.info(f"Strategy saved to {args.output_file}")
+            logger.info(f"Strategy saved to {output_path}")
         else:
-            print(json.dumps(draft_strategy, indent=2))
+            # Default to results/draft_strategy/ directory
+            output_dir = Path('results/draft_strategy')
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            default_filename = f'draft_strategy_pos{args.draft_position}_{timestamp}.json'
+            default_path = output_dir / default_filename
+            
+            with open(default_path, 'w') as f:
+                json.dump(draft_strategy, f, indent=2)
+            logger.info(f"Strategy saved to {default_path}")
+            
+            # Removed verbose console dump to avoid flooding logs
+            # Use --verbose if detailed output is ever needed
+            # print(json.dumps(draft_strategy, indent=2))
         
         # Report validation results
         if validation_result['warnings']:

@@ -13,9 +13,11 @@ Note: Parallel execution refers to using multiple CPU cores within individual ta
 not running multiple heavy tasks simultaneously (which would overwhelm most computers).
 """
 
+import importlib
 import json
 import logging
 import os
+import shlex
 import subprocess
 import sys
 import threading
@@ -55,6 +57,7 @@ class PipelineStep:
 	"""Represents a single pipeline step."""
 	name: str
 	script: str
+	args: str = ""
 	description: str
 	dependencies: List[str]
 	timeout: int
@@ -199,6 +202,7 @@ class EnhancedPipelineOrchestrator:
 			step = PipelineStep(
 				name=step_config['name'],
 				script=step_config['script'],
+				args=step_config.get('args', ""),
 				description=step_config['description'],
 				dependencies=step_config['dependencies'],
 				timeout=step_config['timeout'],
@@ -336,14 +340,96 @@ class EnhancedPipelineOrchestrator:
 		
 		logger.info(f"Executing step: {step.name}")
 		
-		# Check if script exists
-		if not os.path.exists(step.script):
-			error_msg = f"Script not found: {step.script}"
-			step.status = StepStatus.FAILED
-			step.error_message = error_msg
+		# Support Python module execution (preferred)
+		# If the script string looks like a Python module path, try running with -m
+		module_name = None
+		if '.' in step.script and os.path.sep not in step.script:
+			try:
+				importlib.import_module(step.script)
+				module_name = step.script
+			except Exception:
+				module_name = None
+		
+		try:
+			# Execute the script or module
+			if module_name:
+				cmd = [sys.executable, "-m", module_name] + (shlex.split(step.args) if step.args else [])
+			else:
+				# Fall back to file path execution if it exists
+				if not os.path.exists(step.script):
+					error_msg = f"Script not found: {step.script}"
+					step.status = StepStatus.FAILED
+					step.error_message = error_msg
+					step.end_time = time.time()
+					step.execution_time = step.end_time - step.start_time
+					return PipelineResult(
+						step_name=step.name,
+						success=False,
+						execution_time=step.execution_time,
+						retry_attempts=step.retry_attempts,
+						error_message=error_msg,
+						exit_code=-1
+					)
+				cmd = [sys.executable, step.script]
+			
+			result = subprocess.run(
+				cmd,
+				capture_output=True,
+				text=True,
+				timeout=step.timeout
+			)
+			
 			step.end_time = time.time()
 			step.execution_time = step.end_time - step.start_time
+			step.exit_code = result.returncode
 			
+			if result.returncode == 0:
+				step.status = StepStatus.COMPLETED
+				logger.info(f"Step {step.name} completed successfully in {step.execution_time:.1f}s")
+				return PipelineResult(
+					step_name=step.name,
+					success=True,
+					execution_time=step.execution_time,
+					retry_attempts=step.retry_attempts,
+					exit_code=result.returncode,
+					output=result.stdout
+				)
+			else:
+				step.status = StepStatus.FAILED
+				error_msg = f"Step failed with exit code {result.returncode}"
+				step.error_message = error_msg
+				logger.error(f"Step {step.name} failed: {error_msg}")
+				return PipelineResult(
+					step_name=step.name,
+					success=False,
+					execution_time=step.execution_time,
+					retry_attempts=step.retry_attempts,
+					error_message=error_msg,
+					exit_code=result.returncode,
+					stderr=result.stderr
+				)
+		except subprocess.TimeoutExpired:
+			step.status = StepStatus.TIMEOUT
+			step.end_time = time.time()
+			step.execution_time = step.end_time - step.start_time
+			error_msg = f"Step timed out after {step.timeout} seconds"
+			step.error_message = error_msg
+			logger.error(f"Step {step.name} timed out")
+			return PipelineResult(
+				step_name=step.name,
+				success=False,
+				execution_time=step.execution_time,
+				retry_attempts=step.retry_attempts,
+				error_message=error_msg,
+				exit_code=-1
+			)
+		except Exception as e:
+			step.status = StepStatus.FAILED
+			step.end_time = time.time()
+			step.execution_time = step.end_time - step.start_time
+			error_msg = f"Unexpected error: {str(e)}"
+			step.error_message = error_msg
+			logger.error(f"Step {step.name} failed with unexpected error: {e}")
 			return PipelineResult(
 				step_name=step.name,
 				success=False,
@@ -443,7 +529,7 @@ class EnhancedPipelineOrchestrator:
 			return False
 		
 		# Check if we've exceeded total retries
-		if self.error_recovery_state['total_retries'] >= self.config['global_config']['max_total_retries']:
+		if self.error_recovery_state['total_retries'] >= self.config['error_handling']['max_total_retries']:
 			return False
 		
 		# Don't retry timeout errors (they're usually not transient)
@@ -599,12 +685,17 @@ class EnhancedPipelineOrchestrator:
 						thread.start()
 						running_steps.append(step)
 				
-				# Check for completed steps
-				completed_steps.update([step.name for step in self.steps if step.status == StepStatus.COMPLETED])
+				# Check for completed, failed, and skipped steps
+				completed_steps.update([step.name for step in self.steps if step.status in 
+									[StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.TIMEOUT, StepStatus.SKIPPED]])
 				
 				# Remove completed steps from running list
 				running_steps = [step for step in running_steps if step.status not in 
 							   [StepStatus.COMPLETED, StepStatus.FAILED, StepStatus.TIMEOUT, StepStatus.SKIPPED]]
+				
+				# Check if all steps are done (including failed ones)
+				if len(completed_steps) >= len(self.steps):
+					break
 				
 				# Monitor resources
 				if self.config['monitoring']['resource_usage_tracking']:
@@ -621,6 +712,13 @@ class EnhancedPipelineOrchestrator:
 			# All steps completed
 			self.pipeline_end_time = time.time()
 			self._finalize_pipeline()
+			
+			# Check if any critical steps failed
+			critical_failures = any(step.status == StepStatus.FAILED and step.critical for step in self.steps)
+			if critical_failures:
+				logger.error("Critical steps failed - pipeline execution unsuccessful")
+				return False
+			
 			return True
 			
 		except KeyboardInterrupt:

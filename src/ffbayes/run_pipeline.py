@@ -4,6 +4,8 @@ run_pipeline.py - Master Fantasy Football Analytics Pipeline
 Runs the complete pipeline in the proper sequence with enhanced orchestration.
 """
 
+import argparse
+import shlex
 import signal
 import subprocess
 import sys
@@ -82,8 +84,19 @@ def run_step(step_name, script_path, description):
     print(f"⏱️  Timeout: {STEP_TIMEOUT} seconds")
     print()
     
-    # Check if script exists
-    if not Path(script_path).exists():
+    # Check if script exists (for file paths) or is a valid module (for python -m commands)
+    if script_path.startswith("python -m "):
+        # This is a module execution command; separate module and args
+        parts = shlex.split(script_path)
+        # parts looks like ["python", "-m", "module", "--flag", "value", ...]
+        module_name = parts[2] if len(parts) >= 3 else ""
+        try:
+            __import__(module_name)
+            print(f"✅ Module {module_name} can be imported")
+        except ImportError as e:
+            print(f"❌ Module {module_name} cannot be imported: {e}")
+            return False, 0.0
+    elif not Path(script_path).exists():
         print(f"❌ Script not found: {script_path}")
         return False, 0.0
     
@@ -98,9 +111,17 @@ def run_step(step_name, script_path, description):
         print("-" * 40)
         
         # Run the script with real-time output instead of capturing
-        result = subprocess.run([
-            sys.executable, script_path
-        ], timeout=STEP_TIMEOUT)
+        if script_path.startswith("python -m "):
+            # Execute as module with args
+            parts = shlex.split(script_path)
+            # Expect: ["python", "-m", module, ...args]
+            cmd = [sys.executable, "-m"] + parts[2:]
+            result = subprocess.run(cmd, timeout=STEP_TIMEOUT)
+        else:
+            # Execute as file
+            result = subprocess.run([
+                sys.executable, script_path
+            ], timeout=STEP_TIMEOUT)
         
         # Clear the alarm
         signal.alarm(0)
@@ -163,11 +184,18 @@ def main():
     print("=" * 60)
     print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
+    # CLI to control phases in fallback mode
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--phase", choices=["draft", "validate", "full"], default="full",
+                        help="Which phase to run: draft (Phase A), validate (Phase B), or full")
+    parser.add_argument("--team-file", type=str, help="Path to TSV team file for Monte Carlo validation")
+    known_args, _ = parser.parse_known_args()
+    
     # Create required directories first
     create_required_directories()
     
     # Check if enhanced orchestrator is available
-    if EnhancedPipelineOrchestrator is not None:
+    if EnhancedPipelineOrchestrator is not None and known_args.phase == "full":
         print("🚀 Using Enhanced Pipeline Orchestrator")
         print("📊 Features: Dependency management, sequential execution with internal multiprocessing, error recovery")
         print()
@@ -222,37 +250,62 @@ def main():
     
     pipeline_start = time.time()
     
-    # Define basic pipeline steps (fallback)
-    pipeline_steps = [
+    # Define basic pipeline steps (fallback) - CORRECTED ORDER - USING PYTHON MODULE EXECUTION
+    all_steps = [
         {
             "name": "Data Collection",
-            "script": "src/ffbayes/data_pipeline/collect_data.py",
+            "script": "python -m ffbayes.data_pipeline.collect_data",
             "description": "Collect raw NFL data from multiple sources"
         },
         {
             "name": "Data Validation", 
-            "script": "src/ffbayes/data_pipeline/validate_data.py",
+            "script": "python -m ffbayes.data_pipeline.validate_data",
             "description": "Validate data quality and completeness"
         },
         {
-            "name": "Monte Carlo Simulation",
-            "script": "src/ffbayes/analysis/montecarlo_historical_ff.py", 
-            "description": "Generate team-level projections using historical data"
+            "name": "Data Preprocessing",
+            "script": "python -m ffbayes.data_pipeline.preprocess_analysis_data",
+            "description": "Preprocess data for analysis"
         },
         {
-            "name": "Bayesian Predictions",
-            "script": "src/ffbayes/analysis/bayesian_hierarchical_ff_modern.py",
+            "name": "Bayesian Analysis",
+            "script": "python -m ffbayes.analysis.bayesian_hierarchical_ff_modern",
             "description": "Generate player-level predictions with uncertainty using PyMC4"
+        },
+        {
+            "name": "Draft Strategy Generation",
+            "script": "python -m ffbayes.draft_strategy.bayesian_draft_strategy --draft-position 3 --league-size 10 --risk-tolerance medium",
+            "description": "Generate optimal draft strategies using Bayesian predictions"
+        },
+        {
+            "name": "Monte Carlo Validation",
+            "script": "python -m ffbayes.analysis.montecarlo_historical_ff",
+            "description": "Validate drafted teams using Monte Carlo simulation (adversarial evaluation)"
         }
     ]
+    
+    # Phase selection
+    phase = known_args.phase
+    if phase == "draft":
+        pipeline_steps = all_steps[:5]
+    elif phase == "validate":
+        pipeline_steps = [all_steps[0], all_steps[1], all_steps[2], all_steps[5]]
+        # Append team-file if provided
+        if known_args.team_file:
+            pipeline_steps[-1]["script"] += f" --team-file {known_args.team_file}"
+    else:
+        # full
+        pipeline_steps = all_steps
+        if known_args.team_file:
+            pipeline_steps[-1]["script"] += f" --team-file {known_args.team_file}"
     
     # Track results
     results = []
     total_time = 0
     
-    print("🔄 Starting basic pipeline execution...")
-    print("📁 All required directories have been created")
-    print()
+    print(f"Selected phase: {phase}")
+    if phase == "validate" and not known_args.team_file:
+        print("⚠️  --team-file not provided; Monte Carlo will require it and may fail.")
     
     # Run each step with clear visibility
     for i, step in enumerate(pipeline_steps, 1):

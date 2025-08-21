@@ -25,6 +25,7 @@ ffbayes-bayes = "ffbayes.analysis.bayesian_hierarchical_ff_modern:main"
 ffbayes-agg = "ffbayes.analysis.bayesian_team_aggregation:main"
 ffbayes-compare = "ffbayes.analysis.model_comparison_framework:main"
 ffbayes-viz = "ffbayes.analysis.create_team_aggregation_visualizations:main"
+ffbayes-draft-strategy = "ffbayes.draft_strategy.bayesian_draft_strategy:main"
 
 [tool.ruff.lint]
 select = [
