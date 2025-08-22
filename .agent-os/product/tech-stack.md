@@ -98,9 +98,50 @@ python -m ffbayes.analysis.bayesian_hierarchical_ff_unified
 - ⚠️ **Wasted Resources**: Hours of CPU time, memory usage
 - ⚠️ **Unreliable Results**: MAE metrics from test runs are meaningless
 - ⚠️ **Development Delays**: Waiting for unnecessary computations
-- ⚠️ **Resource Conflicts**: Blocking other development work
 
-**ENFORCEMENT**: Always verify `QUICK_TEST=true` before any testing execution.
+## PROJECT ORGANIZATION & FILE STRUCTURE
+
+### **Organized Output Structure**
+
+The pipeline automatically organizes all outputs into dedicated subfolders for easy navigation and management:
+
+**📊 Plots Directory (`plots/`)**
+```
+plots/
+├── team_aggregation/           # Team aggregation visualizations
+├── monte_carlo/               # Monte Carlo simulation visualizations  
+├── draft_strategy_comparison/  # Draft strategy comparison charts
+├── bayesian_model/            # Bayesian model visualizations
+└── test_runs/                 # Test run outputs and debugging
+```
+
+**📁 Results Directory (`results/`)**
+```
+results/
+├── team_aggregation/          # Team aggregation results and analysis
+├── montecarlo_results/        # Monte Carlo simulation outputs
+├── bayesian-hierarchical-results/  # Bayesian model results and traces
+├── draft_strategy/            # Draft strategy outputs and configurations
+├── draft_strategy_comparison/ # Draft strategy comparison reports
+└── model_comparison/          # Model comparison and evaluation results
+```
+
+### **Key Benefits**
+- **🎯 Clear Organization**: Each output type has its dedicated subfolder
+- **🔍 Easy Navigation**: Users quickly find specific types of results
+- **📈 Scalability**: New output types automatically go to appropriate subfolders
+- **🧹 Clean Structure**: No mixed file types in root directories
+
+### **Automatic Maintenance**
+- **Pipeline Execution**: Creates all required organized subfolders automatically
+- **Script Outputs**: All scripts save to correct organized subfolders
+- **File Organization**: Existing files automatically moved to appropriate locations
+
+### **Usage Quick Reference**
+- **Team Analysis**: `plots/team_aggregation/` + `results/team_aggregation/`
+- **Monte Carlo Results**: `results/montecarlo_results/`
+- **Bayesian Model**: `results/bayesian-hierarchical-results/`
+- **Draft Strategy**: `results/draft_strategy/` + `results/draft_strategy_comparison/`
 
 ## Tech Stack
 

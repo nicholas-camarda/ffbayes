@@ -5,11 +5,9 @@ This directory contains product specifications, research, analysis, and strategi
 ## Document Organization
 
 ### Core Documentation
-- **`tech-stack.md`** - **COMPREHENSIVE TECHNICAL DOCUMENTATION** - Complete technical stack, architecture, implementation details, enhancement plans, and next steps
+- **`tech-stack.md`** - **COMPREHENSIVE TECHNICAL DOCUMENTATION** - Complete technical stack, architecture, implementation details, enhancement plans, next steps, testing protocol, and project organization
 - **`roadmap.md`** - Product roadmap and development timeline
-- **`decisions.md`** - Key product decisions and rationale
-- **`testing-protocol.md`** - **🚨 MANDATORY TESTING PROTOCOL** - Critical testing mode enforcement and workflow requirements
-- **`ORGANIZATION_STRUCTURE.md`** - **📁 PROJECT ORGANIZATION** - Complete folder structure for plots, results, and organized subfolders
+- **`decisions.md` - Key product decisions and rationale
 
 ## Purpose
 
@@ -22,11 +20,9 @@ These documents serve as:
 
 ## Usage
 
-- **For Technical Understanding**: Start with `tech-stack.md` for complete technical overview
+- **For Complete Technical Overview**: Start with `tech-stack.md` for complete technical overview, testing protocol, and project organization
 - **For Product Planning**: Reference `roadmap.md` for current priorities and timeline
 - **For Decision Context**: See `decisions.md` for key decisions and rationale
-- **For Testing Requirements**: **READ `testing-protocol.md` FIRST** - mandatory testing mode enforcement
-- **For Project Organization**: See `ORGANIZATION_STRUCTURE.md` for complete folder structure and file organization
 
 ## Maintenance
 
@@ -39,16 +35,14 @@ These documents should be updated as:
 
 ## Quick Reference
 
-- **Complete Technical Overview**: See `tech-stack.md` (contains all implementation details, enhancement plans, and next steps)
+- **Complete Technical Overview**: See `tech-stack.md` (contains all implementation details, enhancement plans, next steps, testing protocol, and project organization)
 - **Current Roadmap**: See `roadmap.md`
 - **Key Decisions**: See `decisions.md`
-- **🚨 MANDATORY TESTING**: See `testing-protocol.md` - **ALWAYS USE TEST MODE DURING TESTING**
-- **📁 Project Organization**: See `ORGANIZATION_STRUCTURE.md` - complete folder structure and file organization
 
 ## Critical Testing Requirement
 
 **🚨 BEFORE ANY TESTING OR DEVELOPMENT WORK:**
-1. **READ** `testing-protocol.md` completely
+1. **READ** the testing protocol section in `tech-stack.md` completely
 2. **SET** `export QUICK_TEST=true`
 3. **VERIFY** test mode is active
 4. **NEVER** use production mode for testing
