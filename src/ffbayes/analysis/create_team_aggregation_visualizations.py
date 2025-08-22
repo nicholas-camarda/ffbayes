@@ -164,8 +164,8 @@ def create_team_score_breakdown_chart(results, output_dir, is_test_mode):
     return plot_file
 
 def create_position_analysis_chart(results, output_dir, is_test_mode):
-    """Create position-based analysis chart."""
-    print("📊 Creating position analysis charts...")
+    """Create comprehensive position analysis chart with proper coloring and insights."""
+    print("📊 Creating position analysis chart...")
     
     if 'monte_carlo_projection' not in results or 'player_contributions' not in results['monte_carlo_projection']:
         print("   ⚠️  No Monte Carlo projection data available")
@@ -176,71 +176,88 @@ def create_position_analysis_chart(results, output_dir, is_test_mode):
         print("   ⚠️  No player contribution data available")
         return None
     
-    # Group players by position (use embedded position if present)
+    # Extract and organize data by position
     position_data = {}
     for player, data in player_contribs.items():
         pos = data.get('position', 'UNK')
         if pos not in position_data:
-            position_data[pos] = {'players': [], 'points': [], 'contribs': []}
+            position_data[pos] = {'players': [], 'means': [], 'stds': [], 'contribs': []}
+        
         position_data[pos]['players'].append(player)
-        position_data[pos]['points'].append(data['mean'])
+        position_data[pos]['means'].append(data['mean'])
+        position_data[pos]['stds'].append(data['std'])
         position_data[pos]['contribs'].append(data['contribution_pct'])
     
-    # Sort positions by total points desc for a more informative view
-    pos_order = sorted(position_data.keys(), key=lambda p: sum(position_data[p]['points']), reverse=True)
-    
-    # Create 2x2 subplot layout
+    # Create comprehensive position analysis
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(20, 16))
+    fig.suptitle('Position Analysis & Team Construction Insights', fontsize=18, fontweight='bold')
     
-    positions = pos_order
-    total_points = [sum(position_data[p]['points']) for p in positions]
-    avg_points = [np.mean(position_data[p]['points']) if position_data[p]['points'] else 0 for p in positions]
-    total_contribs = [sum(position_data[p]['contribs']) for p in positions]
-    player_counts = [len(position_data[p]['players']) for p in positions]
+    positions = list(position_data.keys())
+    colors = [POS_PALETTE.get(pos, '#7F7F7F') for pos in positions]
     
-    # Plot 1: Total Points by Position
-    bars1 = ax1.bar(positions, total_points, color=[POS_PALETTE.get(p, '#7F7F7F') for p in positions], alpha=0.9)
-    ax1.set_title('Total Fantasy Points by Position')
-    ax1.set_ylabel('Total Points')
+    # Plot 1: Total Points by Position (Stacked Bar)
+    total_points_by_pos = [sum(position_data[pos]['means']) for pos in positions]
+    bars1 = ax1.bar(positions, total_points_by_pos, color=colors, alpha=0.8, edgecolor='black', linewidth=1)
+    ax1.set_title('Total Fantasy Points by Position', fontsize=14, fontweight='bold')
+    ax1.set_ylabel('Total Points', fontsize=12)
     ax1.grid(True, axis='y', alpha=0.3)
-    for bar, total in zip(bars1, total_points):
-        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5, f'{total:.1f}', ha='center', va='bottom')
+    
+    # Add value labels and insights
+    for bar, total, pos in zip(bars1, total_points_by_pos, positions):
+        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1, f'{total:.1f}', 
+                ha='center', va='bottom', fontweight='bold', fontsize=11)
+        
+        # Add position insights
+        player_count = len(position_data[pos]['players'])
+        avg_points = total / player_count if player_count > 0 else 0
+        ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height()/2, 
+                f'{player_count} players\navg: {avg_points:.1f}', 
+                ha='center', va='center', fontsize=10, color='white', fontweight='bold')
     
     # Plot 2: Average Points per Player by Position
-    bars2 = ax2.bar(positions, avg_points, color=[POS_PALETTE.get(p, '#7F7F7F') for p in positions], alpha=0.9)
-    ax2.set_title('Average Fantasy Points per Player by Position')
-    ax2.set_ylabel('Average Points')
+    avg_points_by_pos = [np.mean(position_data[pos]['means']) for pos in positions]
+    bars2 = ax2.bar(positions, avg_points_by_pos, color=colors, alpha=0.8, edgecolor='black', linewidth=1)
+    ax2.set_title('Average Fantasy Points per Player by Position', fontsize=14, fontweight='bold')
+    ax2.set_ylabel('Average Points per Player', fontsize=12)
     ax2.grid(True, axis='y', alpha=0.3)
-    for bar, avg in zip(bars2, avg_points):
-        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, f'{avg:.1f}', ha='center', va='bottom')
     
-    # Plot 3: Contribution Percentage by Position
-    bars3 = ax3.bar(positions, total_contribs, color=[POS_PALETTE.get(p, '#7F7F7F') for p in positions], alpha=0.9)
-    ax3.set_title('Total Contribution Percentage by Position')
-    ax3.set_ylabel('Contribution (%)')
+    for bar, avg, pos in zip(bars2, avg_points_by_pos, positions):
+        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5, f'{avg:.1f}', 
+                ha='center', va='bottom', fontweight='bold', fontsize=11)
+    
+    # Plot 3: Position Contribution to Team Total
+    total_contrib_by_pos = [sum(position_data[pos]['contribs']) for pos in positions]
+    bars3 = ax3.bar(positions, total_contrib_by_pos, color=colors, alpha=0.8, edgecolor='black', linewidth=1)
+    ax3.set_title('Position Contribution to Team Total (%)', fontsize=14, fontweight='bold')
+    ax3.set_ylabel('Contribution (%)', fontsize=12)
     ax3.grid(True, axis='y', alpha=0.3)
-    for bar, contrib in zip(bars3, total_contribs):
-        ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, f'{contrib:.1f}%', ha='center', va='bottom')
     
-    # Plot 4: Player Count by Position
-    bars4 = ax4.bar(positions, player_counts, color=[POS_PALETTE.get(p, '#7F7F7F') for p in positions], alpha=0.9)
-    ax4.set_title('Number of Players by Position')
-    ax4.set_ylabel('Player Count')
+    for bar, contrib, pos in zip(bars3, total_contrib_by_pos, positions):
+        ax3.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5, f'{contrib:.1f}%', 
+                ha='center', va='bottom', fontweight='bold', fontsize=11)
+    
+    # Plot 4: Position Efficiency (Points per Roster Spot)
+    efficiency_by_pos = [total_points_by_pos[i] / len(position_data[pos]['players']) if len(position_data[pos]['players']) > 0 else 0 
+                        for i, pos in enumerate(positions)]
+    bars4 = ax4.bar(positions, efficiency_by_pos, color=colors, alpha=0.8, edgecolor='black', linewidth=1)
+    ax4.set_title('Position Efficiency (Points per Roster Spot)', fontsize=14, fontweight='bold')
+    ax4.set_ylabel('Points per Roster Spot', fontsize=12)
     ax4.grid(True, axis='y', alpha=0.3)
-    for bar, count in zip(bars4, player_counts):
-        ax4.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, f'{count}', ha='center', va='bottom')
+    
+    for bar, eff, pos in zip(bars4, efficiency_by_pos, positions):
+        ax4.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5, f'{eff:.1f}', 
+                ha='center', va='bottom', fontweight='bold', fontsize=11)
+    
+    # Add comprehensive legend with position colors
+    legend_elements = [plt.Rectangle((0,0),1,1, facecolor=POS_PALETTE.get(pos, '#7F7F7F'), 
+                                   edgecolor='black', linewidth=1, label=f'{pos} ({len(position_data[pos]["players"])} players)')
+                      for pos in positions]
+    ax1.legend(handles=legend_elements, title='Position Breakdown', loc='upper right', fontsize=10)
     
     # Add test mode indicator if applicable
     if is_test_mode:
-        fig.suptitle('Position Analysis (QUICK_TEST MODE - Deterministic Results)', 
-                    fontsize=16, color='red', fontweight='bold')
-    
-    # Add legend consistent with position palette
-    legend_positions = positions
-    legend_handles = [plt.Line2D([0], [0], marker='s', color='w', label=pos,
-                                  markerfacecolor=POS_PALETTE.get(pos, '#7F7F7F'), markersize=10)
-                      for pos in legend_positions]
-    ax1.legend(handles=legend_handles, title='Position', loc='upper right', fontsize=8)
+        fig.suptitle('Position Analysis (QUICK_TEST MODE - Limited Data)', 
+                    fontsize=18, color='red', fontweight='bold')
     
     plt.tight_layout()
     
@@ -254,7 +271,7 @@ def create_position_analysis_chart(results, output_dir, is_test_mode):
     return plot_file
 
 def create_uncertainty_analysis_chart(results, output_dir, is_test_mode):
-    """Create uncertainty analysis chart."""
+    """Create meaningful uncertainty analysis chart with actionable insights."""
     print("📊 Creating uncertainty analysis charts...")
     
     if 'monte_carlo_projection' not in results or 'player_contributions' not in results['monte_carlo_projection']:
@@ -266,8 +283,9 @@ def create_uncertainty_analysis_chart(results, output_dir, is_test_mode):
         print("   ⚠️  No player contribution data available")
         return None
     
-    # Create 2x2 subplot layout
+    # Create comprehensive uncertainty analysis
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(20, 16))
+    fig.suptitle('Player Uncertainty Analysis & Risk Assessment', fontsize=18, fontweight='bold')
     
     players = list(player_contribs.keys())
     means = [player_contribs[p]['mean'] for p in players]
@@ -276,108 +294,94 @@ def create_uncertainty_analysis_chart(results, output_dir, is_test_mode):
     positions = [player_contribs[p].get('position', 'UNK') for p in players]
     colors = [POS_PALETTE.get(pos, '#7F7F7F') for pos in positions]
     
-    # Calculate coefficient of variation (uncertainty metric)
-    cv_values = [std/mean if mean > 0 else 0 for mean, std in zip(means, stds)]
+    # Calculate meaningful uncertainty metrics
+    cv_values = [std/mean if mean > 0 else 0 for mean, std in zip(means, stds)]  # Coefficient of variation
+    risk_scores = [std * contrib/100 for std, contrib in zip(stds, contribs)]  # Risk = uncertainty × impact
     
-    # Plot 1: Uncertainty vs Team Contribution
-    scatter1 = ax1.scatter(contribs, cv_values, c=colors, s=100, alpha=0.8, edgecolors='k', linewidths=0.3)
-    ax1.set_xlabel('Contribution to Team Total (%)')
-    ax1.set_ylabel('Coefficient of Variation (Uncertainty)')
-    ax1.set_title('Player Uncertainty vs Team Contribution')
+    # Plot 1: Player Risk vs Impact Matrix
+    scatter1 = ax1.scatter(contribs, risk_scores, c=colors, s=150, alpha=0.8, edgecolors='black', linewidths=1)
+    ax1.set_xlabel('Team Impact (%)', fontsize=12, fontweight='bold')
+    ax1.set_ylabel('Risk Score (Uncertainty × Impact)', fontsize=12, fontweight='bold')
+    ax1.set_title('Player Risk vs Impact Matrix', fontsize=14, fontweight='bold')
     ax1.grid(True, alpha=0.3)
     
-    # Add legend by position
+    # Add risk zones
+    ax1.axhline(y=np.mean(risk_scores), color='red', linestyle='--', alpha=0.7, label='Average Risk')
+    ax1.axvline(x=np.mean(contribs), color='blue', linestyle='--', alpha=0.7, label='Average Impact')
+    
+    # Add player labels with risk insights
+    for i, player in enumerate(players):
+        risk_level = "HIGH" if risk_scores[i] > np.mean(risk_scores) else "LOW"
+        ax1.annotate(f'{player}\n({risk_level})', (contribs[i], risk_scores[i]), 
+                    xytext=(5, 5), textcoords='offset points', fontsize=9, fontweight='bold')
+    
+    # Plot 2: Uncertainty Distribution by Position
+    pos_uncertainty = {}
+    for i, pos in enumerate(positions):
+        if pos not in pos_uncertainty:
+            pos_uncertainty[pos] = []
+        pos_uncertainty[pos].append(cv_values[i])
+    
+    pos_labels = list(pos_uncertainty.keys())
+    pos_means = [np.mean(pos_uncertainty[pos]) for pos in pos_labels]
+    pos_colors = [POS_PALETTE.get(pos, '#7F7F7F') for pos in pos_labels]
+    
+    bars2 = ax2.bar(pos_labels, pos_means, color=pos_colors, alpha=0.8, edgecolor='black', linewidth=1)
+    ax2.set_title('Average Uncertainty by Position', fontsize=14, fontweight='bold')
+    ax2.set_ylabel('Coefficient of Variation (Uncertainty)', fontsize=12)
+    ax2.grid(True, axis='y', alpha=0.3)
+    
+    for bar, mean, pos in zip(bars2, pos_means, pos_labels):
+        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, f'{mean:.3f}', 
+                ha='center', va='bottom', fontweight='bold', fontsize=11)
+    
+    # Plot 3: Player Reliability Ranking
+    reliability_scores = [1/(1+cv) for cv in cv_values]  # Higher = more reliable
+    sorted_indices = np.argsort(reliability_scores)[::-1]  # Sort by reliability descending
+    
+    sorted_players = [players[i] for i in sorted_indices]
+    sorted_reliability = [reliability_scores[i] for i in sorted_indices]
+    sorted_colors = [colors[i] for i in sorted_indices]
+    
+    bars3 = ax3.bar(range(len(sorted_players)), sorted_reliability, color=sorted_colors, alpha=0.8, edgecolor='black', linewidth=1)
+    ax3.set_title('Player Reliability Ranking (Higher = More Predictable)', fontsize=14, fontweight='bold')
+    ax3.set_ylabel('Reliability Score', fontsize=12)
+    ax3.set_xlabel('Players (Ranked by Reliability)', fontsize=12)
+    ax3.grid(True, axis='y', alpha=0.3)
+    
+    # Add player labels
+    ax3.set_xticks(range(len(sorted_players)))
+    ax3.set_xticklabels(sorted_players, rotation=45, ha='right', fontsize=9)
+    
+    # Plot 4: Uncertainty vs Expected Performance
+    scatter4 = ax4.scatter(means, stds, c=colors, s=150, alpha=0.8, edgecolors='black', linewidths=1)
+    ax4.set_xlabel('Expected Points', fontsize=12, fontweight='bold')
+    ax4.set_ylabel('Standard Deviation (Uncertainty)', fontsize=12, fontweight='bold')
+    ax4.set_title('Performance vs Uncertainty Trade-off', fontsize=14, fontweight='bold')
+    ax4.grid(True, alpha=0.3)
+    
+    # Add trend line
+    z = np.polyfit(means, stds, 1)
+    p = np.poly1d(z)
+    ax4.plot(means, p(means), "r--", alpha=0.8, label=f'Trend: σ = {z[0]:.2f}μ + {z[1]:.2f}')
+    
+    # Add player labels
+    for i, player in enumerate(players):
+        ax4.annotate(player, (means[i], stds[i]), 
+                    xytext=(5, 5), textcoords='offset points', fontsize=9, fontweight='bold')
+    
+    # Add comprehensive legend
     unique_pos = sorted(set(positions))
     legend_handles = [plt.Line2D([0], [0], marker='o', color='w', label=pos,
-                                  markerfacecolor=POS_PALETTE.get(pos, '#7F7F7F'), markeredgecolor='k', markersize=8)
+                                  markerfacecolor=POS_PALETTE.get(pos, '#7F7F7F'), markeredgecolor='black', markersize=8)
                       for pos in unique_pos]
-    ax1.legend(handles=legend_handles, title='Position', loc='upper right', fontsize=8)
-    
-    # Add player labels
-    for i, player in enumerate(players):
-        ax1.annotate(player, (contribs[i], cv_values[i]), 
-                    xytext=(5, 5), textcoords='offset points', fontsize=8)
-    
-    # Plot 2: Distribution of Player Uncertainty
-    ax2.hist(cv_values, bins=10, alpha=0.7, color='skyblue', edgecolor='black')
-    ax2.set_xlabel('Coefficient of Variation')
-    ax2.set_ylabel('Frequency')
-    ax2.set_title('Distribution of Player Uncertainty')
-    ax2.grid(True, alpha=0.3)
-    
-    # Plot 3: Player Mean vs Standard Deviation
-    scatter3 = ax3.scatter(means, stds, c=colors, s=100, alpha=0.8, edgecolors='k', linewidths=0.3)
-    ax3.set_xlabel('Mean Fantasy Points')
-    ax3.set_ylabel('Standard Deviation')
-    ax3.set_title('Player Mean vs Standard Deviation')
-    ax3.grid(True, alpha=0.3)
-    
-    # Legend by position
-    ax3.legend(handles=legend_handles, title='Position', loc='upper left', fontsize=8)
-    
-    # Add player labels
-    for i, player in enumerate(players):
-        ax3.annotate(player, (means[i], stds[i]), 
-                    xytext=(5, 5), textcoords='offset points', fontsize=8)
-    
-    # Plot 4: Team Score Confidence Analysis
-    if 'team_projection' in results and 'total_score' in results['team_projection']:
-        team_score = results['team_projection']['total_score']['mean']
-        team_std = results['team_projection']['total_score']['std']
-        
-        # Create a range around the team score for visualization
-        x_range = np.linspace(team_score - 3*team_std, team_score + 3*team_std, 100)
-        
-        if team_std > 0:
-            # Normal distribution if there's actual uncertainty
-            y_values = stats.norm.pdf(x_range, team_score, team_std)
-            ax4.plot(x_range, y_values, 'b-', linewidth=2, label='Team Score Distribution')
-        else:
-            # Single point if deterministic (test mode)
-            ax4.axvline(x=team_score, color='red', linestyle='--', linewidth=3, 
-                       label=f'Deterministic Score: {team_score:.1f}')
-            y_values = [1.0]  # Dummy value for single point
-        
-        # Add confidence intervals and percentiles
-        if team_std > 0:
-            ci_95_lower = team_score - 1.96 * team_std
-            ci_95_upper = team_score + 1.96 * team_std
-            p5 = team_score - 1.645 * team_std
-            p25 = team_score - 0.675 * team_std
-            p75 = team_score + 0.675 * team_std
-            p95 = team_score + 1.645 * team_std
-            
-            ax4.axvline(ci_95_lower, color='green', linestyle=':', linewidth=2, 
-                        label=f'95% CI Lower: {ci_95_lower:.1f}')
-            ax4.axvline(ci_95_upper, color='green', linestyle=':', linewidth=2, 
-                        label=f'95% CI Upper: {ci_95_upper:.1f}')
-            ax4.axvline(p5, color='yellow', linestyle='--', linewidth=2, 
-                        label=f'P5: {p5:.1f}')
-            ax4.axvline(p25, color='yellow', linestyle='--', linewidth=2, 
-                        label=f'P25: {p25:.1f}')
-            ax4.axvline(p75, color='yellow', linestyle='--', linewidth=2, 
-                        label=f'P75: {p75:.1f}')
-            ax4.axvline(p95, color='yellow', linestyle='--', linewidth=2, 
-                        label=f'P95: {p95:.1f}')
-        else:
-            # For deterministic scores, show the single value
-            ax4.axvline(team_score, color='red', linestyle='--', linewidth=3)
-        
-        ax4.set_xlabel('Team Score (Fantasy Points)')
-        ax4.set_ylabel('Probability Density')
-        ax4.set_title('Team Score Confidence Analysis')
-        ax4.grid(True, alpha=0.3)
-        ax4.legend()
+    ax1.legend(handles=legend_handles, title='Position', loc='upper right', fontsize=10)
+    ax4.legend(loc='upper left', fontsize=10)
     
     # Add test mode indicator if applicable
     if is_test_mode:
-        fig.suptitle('Uncertainty Analysis (QUICK_TEST MODE - Deterministic Results)', 
-                    fontsize=16, color='red', fontweight='bold')
-        # Add warning text
-        fig.text(0.5, 0.02, '⚠️  WARNING: Results are deterministic due to QUICK_TEST mode. ' +
-                'For realistic uncertainty analysis, run with QUICK_TEST=false', 
-                ha='center', fontsize=12, color='red', fontweight='bold',
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.3))
+        fig.suptitle('Player Uncertainty Analysis (QUICK_TEST MODE - Limited Data)', 
+                    fontsize=18, color='red', fontweight='bold')
     
     plt.tight_layout()
     
@@ -391,11 +395,12 @@ def create_uncertainty_analysis_chart(results, output_dir, is_test_mode):
     return plot_file
 
 def create_comparison_insights_chart(results, output_dir, is_test_mode):
-    """Create comparison insights chart."""
+    """Create meaningful comparison insights chart with actionable analysis."""
     print("📊 Creating comparison insights chart...")
     
-    # Create 2x2 subplot layout
+    # Create comprehensive comparison dashboard
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(20, 16))
+    fig.suptitle('Team Construction Insights & Model Performance Analysis', fontsize=18, fontweight='bold')
     
     # Plot 1: Model Performance Comparison (if available)
     model_comp = results.get('model_comparison')
@@ -412,115 +417,211 @@ def create_comparison_insights_chart(results, output_dir, is_test_mode):
                 }
             except Exception:
                 model_comp = None
-    if model_comp:
+    
+    if model_comp and any(model_comp[m].get('mae') for m in model_comp):
         models = list(model_comp.keys())
         mae_values = [model_comp[m].get('mae', 0) or 0 for m in models]
         
-        bars1 = ax1.bar(models, mae_values, alpha=0.7, color=['lightblue', 'lightcoral'])
-        ax1.set_title('Model Performance Comparison (MAE)')
-        ax1.set_ylabel('Mean Absolute Error')
-        ax1.grid(True, alpha=0.3)
+        # Color based on performance (lower MAE = better)
+        colors = ['lightgreen' if mae == min(mae_values) else 'lightcoral' for mae in mae_values]
         
-        # Add value labels
-        for bar, mae in zip(bars1, mae_values):
+        bars1 = ax1.bar(models, mae_values, alpha=0.8, color=colors, edgecolor='black', linewidth=1)
+        ax1.set_title('Model Performance Comparison (MAE)', fontsize=14, fontweight='bold')
+        ax1.set_ylabel('Mean Absolute Error (Lower = Better)', fontsize=12)
+        ax1.grid(True, axis='y', alpha=0.3)
+        
+        # Add value labels and performance insights
+        for bar, mae, model in zip(bars1, mae_values, models):
             ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01, 
-                    f'{mae:.3f}', ha='center', va='bottom')
+                    f'{mae:.3f}', ha='center', va='bottom', fontweight='bold', fontsize=11)
+            
+            # Add performance insight
+            if mae == min(mae_values):
+                ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height()/2, 
+                        'BEST', ha='center', va='center', fontsize=12, fontweight='bold', color='white')
+        
+        # Add improvement calculation
+        if len(mae_values) == 2:
+            improvement = ((max(mae_values) - min(mae_values)) / max(mae_values)) * 100
+            ax1.text(0.5, 0.9, f'Improvement: {improvement:.1f}%', 
+                    transform=ax1.transAxes, ha='center', fontsize=12, fontweight='bold',
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.3))
     else:
-        ax1.text(0.5, 0.5, 'No model comparison data available', 
-                ha='center', va='center', transform=ax1.transAxes, fontsize=14)
-        ax1.set_title('Model Performance Comparison')
+        ax1.text(0.5, 0.5, 'No model comparison data available\nRun model comparison first', 
+                ha='center', va='center', transform=ax1.transAxes, fontsize=14, fontweight='bold')
+        ax1.set_title('Model Performance Comparison', fontsize=14, fontweight='bold')
     
-    # Plot 2: Team Statistics Summary (annotated metrics + CI)
+    # Plot 2: Team Construction Analysis
     ax2.axis('off')
-    if 'team_projection' in results:
+    if 'team_projection' in results and 'total_score' in results['team_projection']:
         team_stats = results['team_projection']['total_score']
-        mean = team_stats['mean']; std = team_stats['std']
-        vmin = team_stats.get('min', mean); vmax = team_stats.get('max', mean)
-        ci = team_stats.get('confidence_interval', [mean - 1.96*std, mean + 1.96*std])
-        percentiles = team_stats.get('percentiles', {})
-        lines = [
-            f"Mean: {mean:.1f} points",
-            f"Std Dev: {std:.1f} points",
-            f"Min/Max: {vmin:.1f} / {vmax:.1f}",
-            f"95% CI: [{ci[0]:.1f}, {ci[1]:.1f}]",
-            f"Percentiles: P5 {percentiles.get('p5', 0):.1f}, P50 {percentiles.get('p50', 0):.1f}, P95 {percentiles.get('p95', 0):.1f}",
-        ]
-        ax2.text(0.02, 0.95, 'Team Score Summary', fontsize=14, fontweight='bold', va='top')
-        for i, text in enumerate(lines):
-            ax2.text(0.02, 0.9 - i*0.12, text, fontsize=12, va='top')
+        mean = team_stats.get('mean', 0)
+        std = team_stats.get('std', 0)
+        vmin = team_stats.get('min', mean - 2*std)
+        vmax = team_stats.get('max', mean + 2*std)
+        
+        # Calculate confidence intervals
+        ci_95 = [mean - 1.96*std, mean + 1.96*std] if std > 0 else [mean, mean]
+        ci_68 = [mean - std, mean + std] if std > 0 else [mean, mean]
+        
+        # Team construction insights
+        insights = []
+        insights.append(f"🎯 Team Projection: {mean:.1f} ± {std:.1f} points")
+        insights.append(f"📊 95% Confidence: [{ci_95[0]:.1f}, {ci_95[1]:.1f}]")
+        insights.append(f"📈 68% Confidence: [{ci_68[0]:.1f}, {ci_68[1]:.1f}]")
+        insights.append(f"📉 Score Range: {vmin:.1f} - {vmax:.1f}")
+        
+        # Add team strength assessment
+        if mean > 120:
+            team_strength = "🏆 ELITE TEAM"
+            strength_color = "darkgreen"
+        elif mean > 110:
+            team_strength = "🥇 STRONG TEAM"
+            strength_color = "green"
+        elif mean > 100:
+            team_strength = "🥈 COMPETITIVE TEAM"
+            strength_color = "orange"
+        else:
+            team_strength = "🥉 DEVELOPING TEAM"
+            strength_color = "red"
+        
+        insights.append(f"\n{team_strength}")
+        
+        # Display insights
+        ax2.text(0.02, 0.95, 'Team Construction Analysis', fontsize=16, fontweight='bold', va='top')
+        for i, insight in enumerate(insights):
+            color = strength_color if 'TEAM' in insight else 'black'
+            fontweight = 'bold' if 'TEAM' in insight else 'normal'
+            ax2.text(0.02, 0.9 - i*0.08, insight, fontsize=12, va='top', color=color, fontweight=fontweight)
     else:
         ax2.text(0.5, 0.5, 'No team projection data available', 
-                ha='center', va='center', transform=ax2.transAxes, fontsize=14)
-        ax2.set_title('Team Score Statistics')
+                ha='center', va='center', transform=ax2.transAxes, fontsize=14, fontweight='bold')
+        ax2.set_title('Team Construction Analysis', fontsize=14, fontweight='bold')
     
-    # Plot 3: Roster Coverage Analysis pie
+    # Plot 3: Roster Coverage & Quality Analysis
     if 'roster_analysis' in results:
         coverage = results['roster_analysis'].get('roster_coverage_percentage', 0)
         missing_players = results['roster_analysis'].get('missing_players_count', 0)
         total_players = results['roster_analysis'].get('total_roster_size', 0)
+        
+        # Roster quality assessment
+        if coverage >= 95:
+            quality = "🏆 EXCELLENT"
+            quality_color = "darkgreen"
+        elif coverage >= 85:
+            quality = "🥇 GOOD"
+            quality_color = "green"
+        elif coverage >= 75:
+            quality = "🥈 FAIR"
+            quality_color = "orange"
+        else:
+            quality = "🥉 POOR"
+            quality_color = "red"
+        
+        # Create enhanced pie chart
         labels = ['Covered Players', 'Missing Players']
         sizes = [coverage, 100 - coverage]
-        colors = ['lightgreen', 'lightcoral']
-        ax3.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
-        ax3.set_title(f'Roster Coverage Analysis\n({total_players - missing_players}/{total_players} players)')
+        colors_pie = ['lightgreen', 'lightcoral']
+        explode = (0.05, 0)  # Slight emphasis on covered players
+        
+        wedges, texts, autotexts = ax3.pie(sizes, labels=labels, colors=colors_pie, 
+                                          autopct='%1.1f%%', startangle=90, explode=explode)
+        
+        # Style the pie chart
+        for autotext in autotexts:
+            autotext.set_color('white')
+            autotext.set_fontweight('bold')
+        
+        ax3.set_title(f'Roster Coverage Analysis\n{quality} ({total_players - missing_players}/{total_players} players)', 
+                     fontsize=14, fontweight='bold', color=quality_color)
     else:
         ax3.text(0.5, 0.5, 'No roster analysis data available', 
-                ha='center', va='center', transform=ax3.transAxes, fontsize=14)
-        ax3.set_title('Roster Coverage Analysis')
+                ha='center', va='center', transform=ax3.transAxes, fontsize=14, fontweight='bold')
+        ax3.set_title('Roster Coverage Analysis', fontsize=14, fontweight='bold')
     
-    # Plot 4: Key Insights and Recommendations (unchanged)
+    # Plot 4: Key Insights and Strategic Recommendations
     insights = []
-    if 'model_comparison' in results:
-        mae_ratio = results['model_comparison'].get('mae_ratio', 1.0)
-        if mae_ratio > 1.2:
-            insights.append(f"Monte Carlo shows {mae_ratio:.1f}x higher error than Bayesian")
-        elif mae_ratio < 0.8:
-            insights.append(f"Bayesian shows {1/mae_ratio:.1f}x higher error than Monte Carlo")
+    
+    # Model performance insights
+    if model_comp and any(model_comp[m].get('mae') for m in model_comp):
+        mae_values = [model_comp[m].get('mae', 0) or 0 for m in model_comp]
+        if len(mae_values) == 2:
+            best_model = models[mae_values.index(min(mae_values))]
+            improvement = ((max(mae_values) - min(mae_values)) / max(mae_values)) * 100
+            insights.append(f"📊 {best_model} model performs best (MAE: {min(mae_values):.3f})")
+            if improvement > 5:
+                insights.append(f"🎯 Significant improvement: {improvement:.1f}% over baseline")
+            else:
+                insights.append(f"⚠️  Minimal improvement: {improvement:.1f}% over baseline")
+    
+    # Team construction insights
+    if 'team_projection' in results and 'total_score' in results['team_projection']:
+        mean = results['team_projection']['total_score']['mean']
+        if mean > 120:
+            insights.append(f"🏆 Elite team projection: {mean:.1f} points")
+            insights.append("💡 Consider conservative draft strategy")
+        elif mean > 110:
+            insights.append(f"🥇 Strong team projection: {mean:.1f} points")
+            insights.append("💡 Balanced approach recommended")
+        elif mean > 100:
+            insights.append(f"🥈 Competitive team: {mean:.1f} points")
+            insights.append("💡 Focus on high-upside players")
         else:
-            insights.append("Both models show similar performance")
+            insights.append(f"🥉 Developing team: {mean:.1f} points")
+            insights.append("💡 Aggressive draft strategy needed")
+    
+    # Roster insights
     if 'roster_analysis' in results:
         coverage = results['roster_analysis'].get('roster_coverage_percentage', 0)
         if coverage < 80:
             insights.append(f"⚠️  Low roster coverage: {coverage:.1f}%")
+            insights.append("💡 Focus on filling missing positions")
         elif coverage < 95:
-            insights.append(f"⚠️  Moderate roster coverage: {coverage:.1f}%")
+            insights.append(f"⚠️  Moderate coverage: {coverage:.1f}%")
+            insights.append("💡 Consider position-specific strategies")
         else:
-            insights.append(f"✅ Excellent roster coverage: {coverage:.1f}%")
-    if 'team_projection' in results:
-        team_score = results['team_projection']['total_score']['mean']
-        if team_score > 120:
-            insights.append(f"🎯 High-scoring team projection: {team_score:.1f} points")
-        elif team_score < 100:
-            insights.append(f"📉 Low-scoring team projection: {team_score:.1f} points")
-        else:
-            insights.append(f"📊 Moderate team projection: {team_score:.1f} points")
+            insights.append(f"✅ Excellent coverage: {coverage:.1f}%")
+            insights.append("💡 Optimize for best available players")
+    
+    # Add general insights if none generated
     if not insights:
         insights = [
             "📊 Team aggregation completed successfully",
             "📈 Individual player predictions aggregated to team level",
-            "🎯 Uncertainty properly propagated from individual to team",
-            "📋 Results ready for draft strategy analysis"
+            "🎯 Use insights to inform draft strategy",
+            "💡 Monitor model performance for improvements"
         ]
-    ax4.text(0.05, 0.95, 'Key Insights & Recommendations:', 
-             transform=ax4.transAxes, fontsize=14, fontweight='bold')
-    for i, insight in enumerate(insights):
-        y_pos = 0.85 - (i * 0.15)
-        ax4.text(0.05, y_pos, f"• {insight}", 
-                transform=ax4.transAxes, fontsize=11, wrap=True)
-    ax4.set_xlim(0, 1)
-    ax4.set_ylim(0, 1)
-    ax4.axis('off')
-    ax4.set_title('Actionable Insights')
     
+    # Display insights
+    ax4.axis('off')
+    ax4.text(0.02, 0.95, 'Strategic Insights & Recommendations', fontsize=16, fontweight='bold', va='top')
+    
+    for i, insight in enumerate(insights):
+        # Color code different types of insights
+        if '🏆' in insight or '🥇' in insight:
+            color = 'darkgreen'
+        elif '⚠️' in insight:
+            color = 'darkorange'
+        elif '💡' in insight:
+            color = 'darkblue'
+        else:
+            color = 'black'
+        
+        ax4.text(0.02, 0.9 - i*0.06, insight, fontsize=11, va='top', color=color, fontweight='bold')
+    
+    # Add test mode indicator if applicable
     if is_test_mode:
-        fig.suptitle('Comparison Insights (QUICK_TEST MODE - Deterministic Results)', 
-                    fontsize=16, color='red', fontweight='bold')
+        fig.suptitle('Team Construction Insights (QUICK_TEST MODE - Limited Data)', 
+                    fontsize=18, color='red', fontweight='bold')
     
     plt.tight_layout()
+    
+    # Save with consistent filename
     filename = "comparison_insights_latest.png"
     plot_file = os.path.join(output_dir, filename)
     plt.savefig(plot_file, dpi=300, bbox_inches='tight')
     plt.close()
+    
     print(f"   ✅ Saved: {filename}")
     return plot_file
 
