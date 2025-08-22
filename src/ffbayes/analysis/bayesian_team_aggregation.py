@@ -422,9 +422,9 @@ def save_team_aggregation_results(
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
     
-    # Generate filename with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    results_file = os.path.join(output_dir, f'team_aggregation_results_{timestamp}.json')
+    # Generate filename with draft year instead of timestamp
+    current_year = datetime.now().year
+    results_file = os.path.join(output_dir, f'team_aggregation_results_{current_year}.json')
     
     # Save results as JSON
     with open(results_file, 'w') as f:
@@ -497,7 +497,9 @@ def generate_team_aggregation_visualizations(
                 plt.legend()
                 plt.grid(True, alpha=0.3)
                 
-                plot_file = os.path.join(output_dir, f'team_score_distribution_{timestamp}.png')
+                # Save plot with draft year instead of timestamp
+                current_year = datetime.now().year
+                plot_file = os.path.join(output_dir, f'team_score_distribution_{current_year}.png')
                 plt.savefig(plot_file, dpi=300, bbox_inches='tight')
                 plt.close()
                 plot_files.append(plot_file)

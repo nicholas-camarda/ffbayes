@@ -1127,8 +1127,9 @@ def main():
             output_dir = Path('results/draft_strategy')
             output_dir.mkdir(parents=True, exist_ok=True)
             
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            default_filename = f'draft_strategy_pos{args.draft_position}_{timestamp}.json'
+            # Generate filename with draft year instead of timestamp
+            current_year = datetime.now().year
+            default_filename = f'draft_strategy_pos{args.draft_position}_{current_year}.json'
             default_path = output_dir / default_filename
             
             with open(default_path, 'w') as f:
@@ -1148,7 +1149,7 @@ def main():
         
         # Generate team file for Monte Carlo validation
         logger.info("Generating team file for Monte Carlo validation...")
-        team_file_path = generate_team_file_for_monte_carlo(draft_strategy, output_dir, timestamp)
+        team_file_path = generate_team_file_for_monte_carlo(draft_strategy, output_dir, current_year)
         logger.info(f"Team file saved to: {team_file_path}")
         
         logger.info("Draft strategy generation completed successfully")
@@ -1161,18 +1162,21 @@ def main():
     return 0
 
 
-def generate_team_file_for_monte_carlo(draft_strategy: Dict[str, Any], output_dir: Path, timestamp: str) -> Path:
+def generate_team_file_for_monte_carlo(draft_strategy: Dict[str, Any], output_dir: Path, draft_year: int) -> Path:
     """
-    Generate a team file from the draft strategy for Monte Carlo validation.
+    Generate a team file for Monte Carlo validation.
     
     Args:
-        draft_strategy: The complete draft strategy dictionary
+        draft_strategy: The draft strategy results
         output_dir: Directory to save the team file
-        timestamp: Timestamp for the filename
+        draft_year: Draft year for the filename
         
     Returns:
         Path to the generated team file
     """
+    # Generate filename with draft year instead of timestamp
+    team_file_path = output_dir / f'team_for_monte_carlo_{draft_year}.tsv'
+    
     # Extract the drafted team from the strategy
     strategy_data = draft_strategy.get('strategy', {})
     drafted_players = []
@@ -1281,7 +1285,6 @@ def generate_team_file_for_monte_carlo(draft_strategy: Dict[str, Any], output_di
     
     # Create DataFrame and save to TSV
     team_df = pd.DataFrame(drafted_players)
-    team_file_path = output_dir / f'team_for_monte_carlo_{timestamp}.tsv'
     team_df.to_csv(team_file_path, sep='\t', index=False)
     
     return team_file_path

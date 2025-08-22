@@ -308,9 +308,9 @@ class DraftStrategyComparison:
         
         plt.tight_layout()
         
-        # Save visualization
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{output_dir}/draft_strategy_comparison_{timestamp}.png"
+        # Save visualization with draft year instead of timestamp
+        current_year = datetime.now().year
+        filename = f"{output_dir}/draft_strategy_comparison_{current_year}.png"
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         logger.info(f"Saved comparison visualization: {filename}")
         

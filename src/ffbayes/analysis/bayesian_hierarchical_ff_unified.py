@@ -605,8 +605,9 @@ def unified_bayesian_model(path_to_data_directory, cores=DEFAULT_CORES, draws=DE
                 print("ArviZ not available for convergence diagnostics")
                 print("Install with: pip install arviz")
             
-            # Save trace
-            trace_file = f'results/bayesian-hierarchical-results/unified_trace_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pkl'
+            # Save trace with draft year instead of timestamp
+            current_year = datetime.now().year
+            trace_file = f'results/bayesian-hierarchical-results/unified_trace_{current_year}.pkl'
             with open(trace_file, 'wb') as f:
                 pickle.dump(trace, f)
             print(f"Unified trace saved to: {trace_file}")

@@ -560,12 +560,13 @@ def main(args=None):
             player_scores = outcome[col]
             logger.info(f"  {col}: {player_scores.mean():.1f} ± {player_scores.std():.1f} points")
     
-    # Save results
+    # Save results with draft year instead of timestamp
     logger.info("Saving results...")
     # CRITICAL FIX: Ensure Monte Carlo results go to the correct organized subfolder
     output_dir = Path('results/montecarlo_results')
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_file = output_dir / f'{todays_date.year}_projections_from_years{years}.tsv'
+    current_year = datetime.now().year
+    output_file = output_dir / f'{current_year}_projections_from_years{years}.tsv'
     
     outcome.to_csv(output_file, sep='\t')
     logger.info(f"Results saved to: {output_file}")

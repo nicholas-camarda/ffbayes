@@ -103,14 +103,18 @@ python -m ffbayes.analysis.bayesian_hierarchical_ff_unified
 
 ### **Organized Output Structure**
 
-The pipeline automatically organizes all outputs into dedicated subfolders for easy navigation and management:
+The pipeline automatically organizes all outputs into dedicated subfolders for easy navigation and management. **Files are named by draft year instead of timestamps** to prevent clutter and ensure easy access to the most recent results:
 
 **📊 Plots Directory (`plots/`)**
 ```
 plots/
 ├── team_aggregation/           # Team aggregation visualizations
+│   ├── team_score_distribution_2025.png    # Current year (updates with each run)
+│   ├── uncertainty_analysis_latest.png
+│   └── team_score_breakdown_latest.png
 ├── monte_carlo/               # Monte Carlo simulation visualizations  
 ├── draft_strategy_comparison/  # Draft strategy comparison charts
+│   └── draft_strategy_comparison_2025.png  # Current year (updates with each run)
 ├── bayesian_model/            # Bayesian model visualizations
 └── test_runs/                 # Test run outputs and debugging
 ```
@@ -119,9 +123,15 @@ plots/
 ```
 results/
 ├── team_aggregation/          # Team aggregation results and analysis
+│   └── team_aggregation_results_2025.json  # Current year (updates with each run)
 ├── montecarlo_results/        # Monte Carlo simulation outputs
+│   └── 2025_projections_from_years*.tsv    # Current year (updates with each run)
 ├── bayesian-hierarchical-results/  # Bayesian model results and traces
+│   ├── unified_model_results.json
+│   └── unified_trace_2025.pkl     # Current year (updates with each run)
 ├── draft_strategy/            # Draft strategy outputs and configurations
+│   ├── draft_strategy_pos*_2025.json       # Current year (updates with each run)
+│   └── team_for_monte_carlo_2025.tsv       # Current year (updates with each run)
 ├── draft_strategy_comparison/ # Draft strategy comparison reports
 └── model_comparison/          # Model comparison and evaluation results
 ```
@@ -131,6 +141,8 @@ results/
 - **🔍 Easy Navigation**: Users quickly find specific types of results
 - **📈 Scalability**: New output types automatically go to appropriate subfolders
 - **🧹 Clean Structure**: No mixed file types in root directories
+- **📅 Draft Year Naming**: Files named by year instead of timestamps (prevents clutter)
+- **🔄 File Updates**: Each run updates the same year file instead of creating new ones
 
 ### **Automatic Maintenance**
 - **Pipeline Execution**: Creates all required organized subfolders automatically
@@ -220,114 +232,3 @@ opp_qb = pm.Normal('defensive_differential_qb', opp_def[0], 100**2, shape=team_n
 home_adv = pm.Normal('home_additive_prior', 0, 100**2, shape=num_positions)
 away_adv = pm.Normal('away_additive_prior', 0, 100**2, shape=num_positions)
 ```
-
-**Likelihood Models**:
-1. **Difference from Average Model**: Predicts deviation from rolling average
-2. **Total Score Prediction Model**: Predicts absolute fantasy points
-
-### Current Performance
-- **MAE**: 3.69 (0.4% improvement over baseline)
-- **Strengths**: Sophisticated hierarchical structure, uncertainty quantification
-- **Weaknesses**: Only marginal improvement over simple baseline
-
-## Enhanced Model Features
-
-### Current Features (Implemented)
-- 7-game average baseline
-- Opponent defensive effects
-- Home/away advantages
-- Position-specific effects
-- Snap counts (offensive percentage)
-- Injury status (Out/Doubtful)
-- Practice status (Limited/DNP)
-
-### Planned Features
-- Weather data (temperature, wind, precipitation)
-- Vegas odds (spreads, over/under)
-- Advanced stats (target share, red zone usage)
-- Time series features (momentum, trends)
-
-## Data Sources and APIs
-
-### Weather Data
-- **API**: OpenWeatherMap Historical Weather API
-- **Features**: Temperature, wind speed, precipitation, humidity
-- **Integration**: Merge by game date and stadium location
-
-### Vegas Odds
-- **API**: ESPN API or SportsData.io
-- **Features**: Point spreads, over/under, implied totals
-- **Integration**: Merge by game ID and date
-
-### Advanced Stats
-- **API**: ESPN API, Pro Football Reference
-- **Features**: Target share, snap counts, red zone usage, air yards
-- **Integration**: Merge by player ID, season, week
-
-### Enhanced Model Architecture
-```python
-# Enhanced mean calculation
-mu = (
-    intercept + 
-    (avg_multiplier * player_avg) + 
-    defensive_effects + 
-    home_away_effects +
-    snap_effect * offense_pct +
-    injury_penalty * injury_status +
-    weather_effects +
-    vegas_effects +
-    time_series_effects
-)
-```
-
-
-
-## Pipeline Architecture
-
-### Pipeline Dependencies
-- **Data Collection**: `nfl_data_py` → Weekly player stats, schedules, injuries
-- **Data Validation**: `pyarrow`, `pandas` → Quality checks and completeness validation
-- **Monte Carlo**: `numpy`, `pandas` → Team projection simulations
-- **Bayesian Modeling**: `pymc`, `arviz` → Player prediction models
-- **Draft Strategy**: `requests`, `beautifulsoup4` → FantasyPros scraping and VOR calculations
-
-### Pipeline Orchestration
-- **Master Script**: `run_pipeline.py` orchestrates complete workflow
-- **Progress Monitoring**: `alive-progress` with comprehensive logging
-- **Error Handling**: Graceful degradation with detailed error reporting
-- **Step Execution**: Sequential execution with dependency management
-
-### Data Collection Implementation
-- **Primary Source**: `nfl_data_py` for NFL statistics and schedule data
-- **Secondary Sources**: FantasyPros for player rankings and projections
-- **Data Types**: Player stats, schedules, injuries, snap counts
-- **Quality Validation**: Completeness checks, statistical validation, outlier detection
-
-### Monte Carlo Simulation
-- **Purpose**: Team-level projections using historical data
-- **Method**: Random sampling from historical player performance
-- **Features**: Weighted year distribution, recursive retry mechanism
-- **Output**: Team score projections with uncertainty quantification
-
-## Environment Management
-- **Primary**: `ffbayes` conda environment with PyMC4 and modern packages
-- **Fallback**: PyMC3 environment for legacy compatibility
-- **Helper Scripts**: `run_with_conda.sh`, `Makefile` for easy execution
-- **Package Management**: `conda` with `pip` for specific package versions
-
-## Output Artifacts
-- **Datasets**: `datasets/*.csv`, `combined_datasets/*.csv`
-- **Results**: `results/montecarlo_results/*.tsv`
-- **Plots**: `plots/*.png`
-- **Draft Strategy**: `snake_draft_datasets/*.csv`, `*.xlsx`
-- **Pipeline Logs**: Comprehensive logging and progress monitoring
-
-## Development Tools
-- **Linting/Formatting**: Ruff with `pyproject.toml` configuration
-- **Version Control**: Git with organized `.gitignore`
-- **Documentation**: Agent OS product documentation and technical specs
-- **Testing**: Incremental testing approach with quick validation scripts
-
-
-
-

@@ -144,7 +144,9 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     payload = build_aggregation_from_tsv(latest)
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Generate filename with draft year instead of timestamp
+    current_year = datetime.now().year
+    ts = f"{current_year}"
     out_path = out_dir / f"team_aggregation_results_{ts}.json"
     with open(out_path, "w") as f:
         json.dump(payload, f, indent=2)
