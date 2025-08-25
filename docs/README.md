@@ -30,10 +30,10 @@ Welcome to the FFBayes documentation! This guide helps you find the right inform
 ### **Essential Commands**
 ```bash
 # Pre-draft strategy
-python src/ffbayes/run_pipeline_split.py pre_draft
+python -m ffbayes.run_pipeline_split pre_draft
 
 # Post-draft analysis  
-python src/ffbayes/run_pipeline_split.py post_draft
+python -m ffbayes.run_pipeline_split post_draft
 
 # Individual components
 python -m ffbayes.draft_strategy.traditional_vor_draft
@@ -42,8 +42,8 @@ python -m ffbayes.analysis.montecarlo_historical_ff
 
 ### **Key Files**
 - **Team File**: `my_ff_teams/drafted_team_2025.tsv`
-- **Main Output**: `results/2025/pre_draft/DRAFT_CHEATSHEET_POS10_2025.xlsx`
-- **Configuration**: Environment variables (see main README)
+- **Main Output**: `results/2025/pre_draft/vor_strategy/DRAFTING STRATEGY -- snake-draft_ppr-0.5_vor_top-120_2025.xlsx`
+- **Configuration**: JSON config files (see main README)
 
 ### **Common Issues**
 - **Player Names**: Must match database exactly (e.g., "Patrick Mahomes" not "P. Mahomes")
@@ -75,7 +75,7 @@ docs/
 
 1. **Read the [Main README](../README.md)** for complete setup instructions
 2. **Check [Pre/Post Draft Examples](PRE_POST_DRAFT_EXAMPLES.md)** to see what you'll get
-3. **Run the pipeline**: `python src/ffbayes/run_pipeline_split.py pre_draft`
+3. **Run the pipeline**: `python -m ffbayes.run_pipeline_split pre_draft`
 4. **Use the outputs** during your draft and throughout the season
 
 ---
