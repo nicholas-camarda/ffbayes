@@ -36,14 +36,18 @@ Raw NFL Data → Data Processing → Unified Dataset → Model Training → Stra
 The Monte Carlo engine simulates thousands of possible outcomes by sampling from historical player performance data.
 
 ### **Mathematical Foundation**
-```
-For each player i and simulation s:
-    y_{i,s} = Sample from Historical(Player_i, Position_i, Season_i)
-    
-Team Score_s = Σ y_{i,s} for all players in roster
 
-Final Distribution = {Team Score_1, Team Score_2, ..., Team Score_S}
-```
+For each player $i$ and simulation $s$:
+
+$$y_{i,s} = \text{Sample from Historical}(\text{Player}_i, \text{Position}_i, \text{Season}_i)$$
+
+Team Score for simulation $s$:
+
+$$\text{Team Score}_s = \sum_{i \in \text{roster}} y_{i,s}$$
+
+Final Distribution:
+
+$$\text{Final Distribution} = \{\text{Team Score}_1, \text{Team Score}_2, \ldots, \text{Team Score}_S\}$$
 
 ### **Implementation Details**
 - **Data Source**: 5 years of actual NFL weekly performance (2020-2024)
@@ -65,16 +69,20 @@ Final Distribution = {Team Score_1, Team Score_2, ..., Team Score_S}
 The Bayesian component adds intelligent uncertainty quantification to Monte Carlo projections, helping you understand prediction confidence.
 
 ### **Mathematical Foundation**
-```
-For each player i:
-    Prior: θ_i ~ Normal(μ_prior, σ_prior)
-    Likelihood: y_i ~ Normal(θ_i, σ_obs)
-    Posterior: θ_i | data ~ Normal(μ_post, σ_post)
-    
-    Where:
-    - μ_post = (μ_prior/σ_prior² + Σy_i/σ_obs²) / (1/σ_prior² + n/σ_obs²)
-    - σ_post = √(1 / (1/σ_prior² + n/σ_obs²))
-```
+
+For each player $i$:
+
+**Prior:** $\theta_i \sim \text{Normal}(\mu_{\text{prior}}, \sigma_{\text{prior}})$
+
+**Likelihood:** $y_i \sim \text{Normal}(\theta_i, \sigma_{\text{obs}})$
+
+**Posterior:** $\theta_i \mid \text{data} \sim \text{Normal}(\mu_{\text{post}}, \sigma_{\text{post}})$
+
+Where:
+
+$$\mu_{\text{post}} = \frac{\mu_{\text{prior}}/\sigma_{\text{prior}}^2 + \sum y_i/\sigma_{\text{obs}}^2}{1/\sigma_{\text{prior}}^2 + n/\sigma_{\text{obs}}^2}$$
+
+$$\sigma_{\text{post}} = \sqrt{\frac{1}{1/\sigma_{\text{prior}}^2 + n/\sigma_{\text{obs}}^2}}$$
 
 ### **Uncertainty Sources Modeled**
 1. **Data Quality**: How reliable is the historical data?
@@ -246,15 +254,14 @@ def contextual_projection(player, patterns):
 VOR quantifies how much better a player is than a freely available replacement at their position.
 
 ### **Mathematical Definition**
-```
-VOR = Player_Projection - Replacement_Player_Projection
 
-Where Replacement_Player is:
-- QB: 12th best QB (in 10-team league)
-- RB: 20th best RB
-- WR: 25th best WR  
-- TE: 12th best TE
-```
+$$\text{VOR} = \text{Player\_Projection} - \text{Replacement\_Player\_Projection}$$
+
+Where Replacement Player is:
+- **QB**: 12th best QB (in 10-team league)
+- **RB**: 20th best RB  
+- **WR**: 25th best WR
+- **TE**: 12th best TE
 
 ### **Implementation Details**
 - **Data Source**: FantasyPros ADP and projection data
