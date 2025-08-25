@@ -257,8 +257,9 @@ VOR quantifies how much better a player is than a freely available replacement a
 
 ### **Mathematical Definition**
 
-$$\text{VOR} = \text{Player\_Projection} - \text{Replacement\_Player\_Projection}$$
-
+```math
+\text{VOR} = \text{Player\_Projection} - \text{Replacement\_Player\_Projection}
+```
 Where Replacement Player is:
 - **QB**: 12th best QB (in 10-team league)
 - **RB**: 20th best RB  
