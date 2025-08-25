@@ -6,10 +6,10 @@ This document shows real examples of the outputs you'll receive from FFBayes, bo
 
 ### **What You Get: Complete Draft Strategy**
 
-When you run `python src/ffbayes/run_pipeline_split.py pre_draft`, you receive:
+When you run `python -m ffbayes.run_pipeline_split pre_draft`, you receive:
 
 #### **1. 📊 Draft Cheatsheet (Excel)**
-**File**: `results/2025/pre_draft/DRAFT_CHEATSHEET_POS10_2025.xlsx`
+**File**: `results/2025/pre_draft/vor_strategy/DRAFTING STRATEGY -- snake-draft_ppr-0.5_vor_top-120_2025.xlsx`
 
 | Pick | Primary Targets | Backup Options | Position Priority | Strategy | Risk Level |
 |------|----------------|----------------|-------------------|----------|------------|
@@ -19,7 +19,7 @@ When you run `python src/ffbayes/run_pipeline_split.py pre_draft`, you receive:
 | 31 | Travis Kelce, Mark Andrews, Kyle Pitts | Darren Waller, T.J. Hockenson, Dallas Goedert | TE > WR > RB | TE premium, elite option | Medium |
 
 #### **2. 📋 Player Rankings (Excel)**
-**File**: `results/2025/pre_draft/PLAYER_RANKINGS_POS10_2025.xlsx`
+**File**: `results/2025/pre_draft/vor_strategy/snake-draft_ppr-0.5_vor_top-120_2025.csv`
 
 | Rank | Name | Position | Projected Points | Uncertainty | Tier | VOR Rank |
 |------|------|----------|------------------|-------------|------|----------|
@@ -30,7 +30,7 @@ When you run `python src/ffbayes/run_pipeline_split.py pre_draft`, you receive:
 | 5 | CeeDee Lamb | WR | 16.2 | 0.11 | 1 | 5 |
 
 #### **3. 📝 Strategy Summary (Text)**
-**File**: `results/2025/pre_draft/DRAFT_STRATEGY_SUMMARY_POS10_2025.txt`
+**File**: `results/2025/pre_draft/draft_strategy/draft_strategy_pos10_2025.json`
 
 ```
 ============================================================
@@ -59,7 +59,7 @@ Pick 31: Travis Kelce | Mark Andrews
 ```
 
 #### **4. 📈 Strategy Comparison Visualizations**
-**Files**: `plots/2025/pre_draft/visualizations/`
+**Files**: `plots/2025/pre_draft/`
 
 - **VOR vs Bayesian Comparison**: Shows how different approaches rank players
 - **Position Distribution Analysis**: Visualizes position scarcity
@@ -73,10 +73,10 @@ Pick 31: Travis Kelce | Mark Andrews
 
 ### **What You Get: Team Analysis & Season Projections**
 
-When you run `python src/ffbayes/run_pipeline_split.py post_draft`, you receive:
+When you run `python -m ffbayes.run_pipeline_split post_draft`, you receive:
 
 #### **1. 🎯 Team Aggregation Analysis**
-**File**: `results/2025/post_draft/team_aggregation/team_aggregation_results_2025.json`
+**File**: `results/2025/post_draft/team_aggregation/team_analysis_results.json`
 
 ```json
 {
@@ -114,7 +114,7 @@ When you run `python src/ffbayes/run_pipeline_split.py post_draft`, you receive:
 ```
 
 #### **2. 📊 Monte Carlo Season Projections**
-**File**: `results/2025/post_draft/montecarlo_results/mc_projections_2025.tsv`
+**File**: `results/2025/post_draft/montecarlo_results/mc_projections_2025_trained_on_2020-2024.tsv`
 
 | Player | Position | Mean | Std | Min | Max | 10th % | 90th % |
 |--------|----------|------|-----|-----|-----|---------|---------|
@@ -124,7 +124,7 @@ When you run `python src/ffbayes/run_pipeline_split.py post_draft`, you receive:
 | Travis Kelce | TE | 14.8 | 5.2 | 9.6 | 20.0 | 12.2 | 17.4 |
 
 #### **3. 🔍 Model Comparison Results**
-**File**: `results/2025/post_draft/model_comparison/model_comparison_2025.json`
+**File**: `results/2025/post_draft/monte_carlo_validation/mc_validation_results.json`
 
 ```json
 {
@@ -234,28 +234,30 @@ Round 10 (Pick 91): Brandin Cooks, WR
 ## 🔧 **Customizing Your Experience**
 
 ### **Adjusting Risk Tolerance**
-```bash
-# Conservative approach
-export RISK_TOLERANCE=low
+Edit `config/user_config.json`:
 
-# Balanced approach  
-export RISK_TOLERANCE=medium
-
-# Aggressive approach
-export RISK_TOLERANCE=high
+```json
+{
+  "league_settings": {
+    "risk_tolerance": "low"    // or "medium" or "high"
+  }
+}
 ```
 
 ### **Changing League Settings**
-```bash
-# 12-team league, position 5
-export LEAGUE_SIZE=12
-export DRAFT_POSITION=5
+Edit `config/user_config.json`:
 
-# Full PPR scoring
-export VOR_PPR=1.0
-
-# Analyze top 150 players
-export VOR_TOP_RANK=150
+```json
+{
+  "league_settings": {
+    "draft_position": 5,       // Your draft position
+    "league_size": 12,         // League size
+    "ppr_value": 1.0          // Full PPR
+  },
+  "vor_settings": {
+    "top_rank": 150           // Analyze top 150 players
+  }
+}
 ```
 
 ### **Running Individual Components**
@@ -298,7 +300,7 @@ python -m ffbayes.visualization.create_pre_draft_visualizations
 
 **Ready to get started? Run:**
 ```bash
-python src/ffbayes/run_pipeline_split.py pre_draft
+python -m ffbayes.run_pipeline_split pre_draft
 ```
 
 ---
