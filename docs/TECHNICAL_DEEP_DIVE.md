@@ -43,7 +43,9 @@ $$y_{i,s} = \text{Sample from Historical}(\text{Player}_i, \text{Position}_i, \t
 
 Team Score for simulation $s$:
 
-$$\text{Team Score}_s = \sum_{i \in \text{roster}} y_{i,s}$$
+```math
+\text{Team Score}_s = \sum_{i \in \text{roster}} y_{i,s}
+```
 
 Final Distribution:
 
