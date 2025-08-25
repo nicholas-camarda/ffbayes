@@ -242,7 +242,7 @@ class TestPipelineScriptExecution(unittest.TestCase):
         
         for script_name in script_names:
             # Check if script exists in PATH
-            script_path = Path(f"/Users/ncamarda/mambaforge/envs/ffbayes/bin/{script_name}")
+            script_path = Path(f"src/ffbayes/{script_name.replace('.', '/')}.py")
             self.assertTrue(script_path.exists(), f"Console script {script_name} not found")
 
     def test_pipeline_module_execution(self):

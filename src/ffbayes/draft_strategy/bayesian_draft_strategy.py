@@ -25,6 +25,9 @@ import pandas as pd
 
 from ..utils.interface_standards import handle_exception, setup_logger
 
+# Production mode by default - test mode must be explicitly enabled
+QUICK_TEST = os.getenv('QUICK_TEST', 'false').lower() == 'true'
+
 
 @dataclass
 class DraftConfig:
@@ -123,7 +126,6 @@ class TierBasedStrategy:
         pick_options = {
             'primary_targets': [],
             'backup_options': [],
-            'fallback_options': [],
             'position_priority': '',
             'reasoning': '',
             'uncertainty_analysis': {},
@@ -180,15 +182,13 @@ class TierBasedStrategy:
         # Select players based on risk-adjusted ranking
         pick_options['primary_targets'] = sorted_players.head(3)['player_name'].tolist()
         pick_options['backup_options'] = sorted_players.iloc[3:7]['player_name'].tolist()
-        pick_options['fallback_options'] = sorted_players.iloc[7:10]['player_name'].tolist()
         
         # Add uncertainty analysis
         pick_options['uncertainty_analysis'] = {
             'risk_tolerance': risk_tolerance,
             'primary_avg_uncertainty': sorted_players.head(3)['uncertainty_score'].mean(),
             'backup_avg_uncertainty': sorted_players.iloc[3:7]['uncertainty_score'].mean(),
-            'fallback_avg_uncertainty': sorted_players.iloc[7:10]['uncertainty_score'].mean(),
-            'overall_uncertainty': sorted_players.head(10)['uncertainty_score'].mean()
+            'overall_uncertainty': sorted_players.head(7)['uncertainty_score'].mean()
         }
         
         return pick_options
@@ -249,7 +249,7 @@ class TierBasedStrategy:
         """Calculate confidence intervals for selected players."""
         confidence_intervals = {}
         
-        for option_type in ['primary_targets', 'backup_options', 'fallback_options']:
+        for option_type in ['primary_targets', 'backup_options']:
             players = pick_options.get(option_type, [])
             if not players:
                 continue
@@ -285,9 +285,27 @@ class TierBasedStrategy:
     
     def _get_available_players(self, team_picks: List[int], current_pick: int) -> pd.DataFrame:
         """Get players available at current pick (simplified simulation)."""
-        # For now, return all players (in real implementation, this would
-        # simulate which players are already drafted)
-        return self.predictions.copy()
+        # Simulate which players are already drafted by previous picks
+        # This is a simplified simulation - in reality, you'd track actual draft state
+        
+        # Calculate how many players should be drafted before this pick
+        players_drafted_before = current_pick - 1
+        
+        # Remove top players that would be drafted by other teams
+        # This is a rough approximation - in reality, draft order varies
+        available_predictions = self.predictions.copy()
+        
+        if players_drafted_before > 0:
+            # Remove top players that would likely be drafted
+            # Sort by predicted points and remove top N players
+            sorted_predictions = available_predictions.sort_values('predicted_points', ascending=False)
+            players_to_remove = min(players_drafted_before, len(sorted_predictions))
+            
+            if players_to_remove > 0:
+                # Remove the top players that would be drafted
+                available_predictions = sorted_predictions.iloc[players_to_remove:].copy()
+        
+        return available_predictions
     
     def _determine_position_priority(self, available_players: pd.DataFrame, 
                                    config: DraftConfig) -> str:
@@ -849,7 +867,6 @@ class BayesianDraftStrategy:
                 draft_strategy[pick_key] = {
                     'primary_targets': [],
                     'backup_options': [],
-                    'fallback_options': [],
                     'position_priority': 'Unknown',
                     'reasoning': f'Error: {str(e)}'
                 }
@@ -911,7 +928,7 @@ class BayesianDraftStrategy:
                 continue
             
             # Check required fields
-            required_fields = ['primary_targets', 'backup_options', 'fallback_options']
+            required_fields = ['primary_targets', 'backup_options']
             for field in required_fields:
                 if field not in pick_strategy:
                     validation_result['warnings'].append(f"{pick_key}: Missing field '{field}'")
@@ -971,123 +988,100 @@ def main():
         # Load actual predictions from Bayesian and Monte Carlo results
         logger.info("Loading predictions...")
         
-        # Load Bayesian predictions
-        bayesian_results_file = 'results/bayesian-hierarchical-results/modern_model_results.json'
+        # Load REAL Bayesian predictions
+        current_year = datetime.now().year
+        from ffbayes.utils.path_constants import get_hybrid_mc_dir
+        bayesian_results_file = str(get_hybrid_mc_dir(current_year) / 'hybrid_model_results.json')
         if not os.path.exists(bayesian_results_file):
             logger.error(f"Bayesian results not found: {bayesian_results_file}")
             logger.error("Please run 'ffbayes-bayes' first to generate predictions")
             return 1
         
-        # Load actual player data with positions
-        logger.info("Loading player data with positions...")
+        # Load REAL Bayesian predictions from the file
+        logger.info(f"Loading REAL Bayesian predictions from: {bayesian_results_file}")
+        with open(bayesian_results_file, 'r') as f:
+            bayesian_data = json.load(f)
         
-        # Find the most recent 5-year combined dataset
-        combined_datasets_dir = Path('datasets/combined_datasets')
-        if not combined_datasets_dir.exists():
-            logger.error("Combined datasets directory not found")
-            logger.error("Please run data collection first")
-            return 1
+        # Extract player predictions from Bayesian results - handle both old and new Hybrid MC format
+        if 'player_predictions' in bayesian_data:
+            # Old format (unified_model_results.json)
+            player_predictions_data = bayesian_data['player_predictions']
+            logger.info(f"Loaded {len(player_predictions_data)} player predictions from old Bayesian format")
+        else:
+            # New Hybrid MC format - player data is at top level
+            player_predictions_data = {}
+            for player_name, player_data in bayesian_data.items():
+                if isinstance(player_data, dict) and 'monte_carlo' in player_data:
+                    # Extract Monte Carlo predictions
+                    mc_data = player_data['monte_carlo']
+                    player_predictions_data[player_name] = {
+                        'mean': mc_data.get('mean', 0),
+                        'std': mc_data.get('std', 0),
+                        'position': player_data.get('position', 'UNK'),
+                        'team': player_data.get('team', 'UNK'),
+                        'confidence_interval': mc_data.get('confidence_interval', [0, 0])
+                    }
+            logger.info(f"Loaded {len(player_predictions_data)} player predictions from Hybrid MC format")
         
-        # Look for 5-year interval datasets (e.g., 2019-2024, 2018-2023, etc.)
-        dataset_files = list(combined_datasets_dir.glob('*season_modern.csv'))
-        
-        if not dataset_files:
-            logger.error("No combined datasets found")
-            logger.error("Please run data collection first")
-            return 1
-        
-        # Sort by modification time to get the most recent
-        dataset_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-        player_data_file = str(dataset_files[0])
-        
-        logger.info(f"Using most recent dataset: {player_data_file}")
-        
-        if not os.path.exists(player_data_file):
-            logger.error(f"Player data not found: {player_data_file}")
-            logger.error("Please run data collection first")
-            return 1
-        
-        # Load player data
-        player_data = pd.read_csv(player_data_file)
-        logger.info(f"Loaded player data: {player_data.shape}")
-        
-        # Get unique players with their positions and calculate season averages
-        current_season_data = player_data[player_data['Season'] == player_data['Season'].max()]
-        
-        # Calculate player projections from historical data
-        player_projections = current_season_data.groupby(['Name', 'Position']).agg({
-            'FantPtPPR': ['mean', 'std', 'count']
-        }).reset_index()
-        
-        # Flatten column names
-        player_projections.columns = ['player_name', 'position', 'mean_points', 'std_points', 'games_played']
-        
-        # Calculate uncertainty scores and confidence intervals
-        player_stats = []
-        for _, row in player_projections.iterrows():
-            mean_points = row['mean_points'] * 17  # Project to full season (17 games)
-            std_points = row['std_points'] * (17 ** 0.5) if row['std_points'] > 0 else mean_points * 0.15
+        # Convert Bayesian predictions to DataFrame format
+        bayesian_predictions_list = []
+        for player_name, prediction_data in player_predictions_data.items():
+            # Use actual position from Bayesian predictions
+            position = prediction_data.get('position')
+            if not position:
+                raise ValueError(f"Missing position data for player {player_name} in Bayesian predictions")
             
-            # Calculate confidence intervals
-            confidence_lower = mean_points - 1.96 * std_points
-            confidence_upper = mean_points + 1.96 * std_points
+            # Handle different confidence interval formats
+            if 'ci_lower' in prediction_data and 'ci_upper' in prediction_data:
+                ci_lower = prediction_data['ci_lower']
+                ci_upper = prediction_data['ci_upper']
+            elif 'confidence_interval' in prediction_data:
+                ci_lower = prediction_data['confidence_interval'][0]
+                ci_upper = prediction_data['confidence_interval'][1]
+            else:
+                # Fallback to mean ± 2*std
+                ci_lower = prediction_data['mean'] - 2 * prediction_data['std']
+                ci_upper = prediction_data['mean'] + 2 * prediction_data['std']
             
-            # Calculate uncertainty score (coefficient of variation)
-            uncertainty_score = std_points / mean_points if mean_points > 0 else 0.5
-            uncertainty_score = min(max(uncertainty_score, 0.05), 0.5)
-            
-            # Only include players with reasonable projections and enough games
-            if mean_points > 50 and row['games_played'] >= 3:
-                player_stats.append({
-                    'player_name': row['player_name'],
-                    'position': row['position'],
-                    'predicted_points': mean_points,
-                    'confidence_interval_lower': max(0, confidence_lower),
-                    'confidence_interval_upper': confidence_upper,
-                    'uncertainty_score': uncertainty_score
-                })
+            bayesian_predictions_list.append({
+                'player_name': player_name,  # This is now the REAL player name
+                'position': position,        # This is now the REAL position
+                'team': prediction_data.get('team'),
+                'predicted_points': prediction_data['mean'],
+                'confidence_interval_lower': ci_lower,
+                'confidence_interval_upper': ci_upper,
+                'uncertainty_score': prediction_data['std'] / prediction_data['mean'] if prediction_data['mean'] > 0 else 0.1
+            })
         
-        bayesian_predictions = pd.DataFrame(player_stats)
-        logger.info(f"Processed {len(bayesian_predictions)} players with valid projections")
+        bayesian_predictions = pd.DataFrame(bayesian_predictions_list)
+        logger.info(f"Processed {len(bayesian_predictions)} players from REAL Bayesian predictions")
         logger.info(f"Position breakdown: {bayesian_predictions['position'].value_counts().to_dict()}")
         
-        # Generate team projections from Bayesian predictions (no Monte Carlo dependency)
-        logger.info("Generating team projections from Bayesian predictions...")
-        
-        # Create team projections based on Bayesian predictions
-        # This is independent of Monte Carlo results and can be validated later
+        # Create team projections from Bayesian predictions (Monte Carlo comes AFTER draft strategy)
+        logger.info("Creating team projections from Bayesian predictions...")
         total_team_points = bayesian_predictions['predicted_points'].sum()
         
-        # Generate synthetic team projections for strategy generation
-        # These will be validated against Monte Carlo results later
+        # Create realistic team projections based on Bayesian uncertainty
+        # Monte Carlo validation will happen AFTER this step in the pipeline
         num_simulations = 1000
-        team_totals = pd.Series([total_team_points] * num_simulations)
-        
-        # Add some realistic variance based on player uncertainty
-        player_uncertainties = bayesian_predictions['uncertainty_score'].fillna(0.1)
-        uncertainty_factor = player_uncertainties.mean()
-        
-        # Create team projection data with realistic variance
         monte_carlo_data = []
+        
         for i in range(num_simulations):
-            # Add variance based on player uncertainty
-            variance = total_team_points * uncertainty_factor * 0.1  # 10% of uncertainty
-            simulated_total = total_team_points + np.random.normal(0, variance)
-            
-            # Calculate confidence intervals
-            lower_bound = max(0, simulated_total - 1.96 * variance)
-            upper_bound = simulated_total + 1.96 * variance
+            # Use Bayesian uncertainty to create realistic variance
+            team_variance = bayesian_predictions['uncertainty_score'].mean() * total_team_points * 0.1
+            simulated_total = total_team_points + np.random.normal(0, team_variance)
             
             monte_carlo_data.append({
                 'team_id': i + 1,
                 'projected_total': simulated_total,
-                'confidence_interval_lower': lower_bound,
-                'confidence_interval_upper': upper_bound
+                'confidence_interval_lower': max(0, simulated_total - 1.96 * team_variance),
+                'confidence_interval_upper': simulated_total + 1.96 * team_variance
             })
         
         monte_carlo_results = pd.DataFrame(monte_carlo_data)
-        logger.info(f"Generated {len(monte_carlo_results)} team projections from Bayesian predictions")
-        logger.info(f"Team projection: {total_team_points:.1f} points ± {total_team_points * uncertainty_factor * 0.1:.1f}")
+        logger.info(f"Created {len(monte_carlo_results)} team projections from Bayesian predictions")
+        logger.info(f"Team projection: {total_team_points:.1f} points ± {bayesian_predictions['uncertainty_score'].mean() * total_team_points * 0.1:.1f}")
+        logger.info("Note: Monte Carlo validation will validate these projections in the next pipeline step")
         
         # Create draft config
         draft_config = DraftConfig(
@@ -1123,8 +1117,10 @@ def main():
                 json.dump(draft_strategy, f, indent=2)
             logger.info(f"Strategy saved to {output_path}")
         else:
-            # Default to results/draft_strategy/ directory
-            output_dir = Path('results/draft_strategy')
+            # Default to draft strategy directory
+            from ffbayes.utils.path_constants import get_draft_strategy_dir
+            current_year = datetime.now().year
+            output_dir = get_draft_strategy_dir(current_year)
             output_dir.mkdir(parents=True, exist_ok=True)
             
             # Generate filename with draft year instead of timestamp
@@ -1149,7 +1145,8 @@ def main():
         
         # Generate team file for Monte Carlo validation
         logger.info("Generating team file for Monte Carlo validation...")
-        team_file_path = generate_team_file_for_monte_carlo(draft_strategy, output_dir, current_year)
+        draft_year = datetime.now().year # Use current year for team file
+        team_file_path = generate_team_file_for_monte_carlo(draft_strategy, output_dir, draft_year)
         logger.info(f"Team file saved to: {team_file_path}")
         
         logger.info("Draft strategy generation completed successfully")
@@ -1167,127 +1164,58 @@ def generate_team_file_for_monte_carlo(draft_strategy: Dict[str, Any], output_di
     Generate a team file for Monte Carlo validation.
     
     Args:
-        draft_strategy: The draft strategy results
+        draft_strategy: The draft strategy results (not used for team data)
         output_dir: Directory to save the team file
         draft_year: Draft year for the filename
         
     Returns:
         Path to the generated team file
     """
-    # Generate filename with draft year instead of timestamp
-    team_file_path = output_dir / f'team_for_monte_carlo_{draft_year}.tsv'
+    # CRITICAL: In production mode, require real team file from draft
+    # Only in QUICK_TEST mode allow fallback to test team file
     
-    # Extract the drafted team from the strategy
-    strategy_data = draft_strategy.get('strategy', {})
-    drafted_players = []
+    # First check for real team file (from actual draft)
+    from ffbayes.utils.path_constants import get_default_team_file, get_teams_dir
+    real_team_file = get_teams_dir() / f'drafted_team_{draft_year}.tsv'
     
-    # Look for drafted players in the strategy
-    for pick_info in strategy_data.values():
-        if isinstance(pick_info, dict) and 'selected_player' in pick_info:
-            player = pick_info['selected_player']
-            if isinstance(player, dict) and 'name' in player:
-                drafted_players.append({
-                    'Name': player['name'],
-                    'Position': player.get('position', 'RB'),  # Default to RB if not specified
-                    'Tm': player.get('team', 'UNK')  # Default to UNK if not specified
-                })
+    if real_team_file.exists():
+        # Use real team from actual draft
+        team_file_path = real_team_file
+        print(f"✅ Using real draft team file: {team_file_path}")
+    elif QUICK_TEST:
+        # QUICK_TEST mode: fallback to test team file
+        test_team_file = get_default_team_file()
+        if test_team_file.exists():
+            team_file_path = test_team_file
+            print(f"⚠️  QUICK_TEST mode: Using test team file: {team_file_path}")
+        else:
+            raise FileNotFoundError(
+                f"Test team file not found: {test_team_file}. "
+                "QUICK_TEST mode requires test team file."
+            )
+    else:
+        # Production mode: fail if no real team file exists
+        raise FileNotFoundError(
+            f"Real team file not found: {real_team_file}. "
+            "Production pipeline requires actual draft team file. "
+            "No draft has occurred yet or team file is missing. "
+            "Run the draft first or check team file location."
+        )
     
-    # If no drafted players found, create a team from top predictions
-    if not drafted_players:
-        print("Warning: No drafted players found in strategy, creating team from recent active players")
-        
-        # Create a team with REAL, RECENT players from the database
-        try:
-            # Load the player data to get real player names
-            player_data = pd.read_csv('datasets/combined_datasets/2020-2024season_modern.csv')
-            
-            # CRITICAL FIX: Only use players who have data in recent years (2023-2024)
-            # This ensures Monte Carlo simulation will actually work
-            recent_data = player_data[player_data['Season'].isin([2023, 2024])]
-            print(f"   Found {len(recent_data)} player-season records in 2023-2024")
-            
-            # Get unique players by position who exist in recent data
-            qb_players = recent_data[recent_data['Position'] == 'QB']['Name'].unique()
-            rb_players = recent_data[recent_data['Position'] == 'RB']['Name'].unique()
-            wr_players = recent_data[recent_data['Position'] == 'WR']['Name'].unique()
-            te_players = recent_data[recent_data['Position'] == 'TE']['Name'].unique()
-            
-            print("   Available players by position:")
-            print(f"     QB: {len(qb_players)} players")
-            print(f"     RB: {len(rb_players)} players")
-            print(f"     WR: {len(wr_players)} players")
-            print(f"     TE: {len(te_players)} players")
-            
-            # Create a balanced team with REAL, RECENT players
-            drafted_players = []
-            
-            if len(qb_players) > 0:
-                # Pick a QB who exists in recent data
-                qb_name = qb_players[0]
-                qb_team = recent_data[(recent_data['Name'] == qb_name) & (recent_data['Position'] == 'QB')]['Tm'].iloc[0]
-                drafted_players.append({
-                    'Name': qb_name,
-                    'Position': 'QB',
-                    'Tm': qb_team
-                })
-                print(f"   Selected QB: {qb_name} ({qb_team})")
-            
-            if len(rb_players) > 0:
-                # Pick 2 RBs who exist in recent data
-                for i in range(min(2, len(rb_players))):
-                    rb_name = rb_players[i]
-                    rb_team = recent_data[(recent_data['Name'] == rb_name) & (recent_data['Position'] == 'RB')]['Tm'].iloc[0]
-                    drafted_players.append({
-                        'Name': rb_name,
-                        'Position': 'RB',
-                        'Tm': rb_team
-                    })
-                    print(f"   Selected RB{i+1}: {rb_name} ({rb_team})")
-            
-            if len(wr_players) > 0:
-                # Pick 2 WRs who exist in recent data
-                for i in range(min(2, len(wr_players))):
-                    wr_name = wr_players[i]
-                    wr_team = recent_data[(recent_data['Name'] == wr_name) & (recent_data['Position'] == 'WR')]['Tm'].iloc[0]
-                    drafted_players.append({
-                        'Name': wr_name,
-                        'Position': 'WR',
-                        'Tm': wr_team
-                    })
-                    print(f"   Selected WR{i+1}: {wr_name} ({wr_team})")
-            
-            if len(te_players) > 0:
-                # Pick a TE who exists in recent data
-                te_name = te_players[0]
-                te_team = recent_data[(recent_data['Name'] == te_name) & (recent_data['Position'] == 'TE')]['Tm'].iloc[0]
-                drafted_players.append({
-                    'Name': te_name,
-                    'Position': 'TE',
-                    'Tm': te_team
-                })
-                print(f"   Selected TE: {te_name} ({te_team})")
-            
-            print(f"   Created team with {len(drafted_players)} active players from 2023-2024")
-        
-        except Exception as e:
-            print(f"Error loading player data: {e}")
-            print("Creating fallback sample team with active players")
-            
-            # Fallback to sample team with ACTIVE players
-            drafted_players = [
-                {'Name': 'Patrick Mahomes', 'Position': 'QB', 'Tm': 'KC'},  # Active in 2023-2024
-                {'Name': 'Christian McCaffrey', 'Position': 'RB', 'Tm': 'SF'},  # Active in 2023-2024
-                {'Name': 'Saquon Barkley', 'Position': 'RB', 'Tm': 'PHI'},  # Active in 2023-2024
-                {'Name': 'Tyreek Hill', 'Position': 'WR', 'Tm': 'MIA'},  # Active in 2023-2024
-                {'Name': 'Justin Jefferson', 'Position': 'WR', 'Tm': 'MIN'},  # Active in 2023-2024
-                {'Name': 'Travis Kelce', 'Position': 'TE', 'Tm': 'KC'},  # Active in 2023-2024
-            ]
+    # Copy the team file to post_draft/montecarlo_results for validation
+    from ffbayes.utils.path_constants import get_monte_carlo_dir
+    monte_carlo_dir = get_monte_carlo_dir(draft_year)
+    monte_carlo_dir.mkdir(parents=True, exist_ok=True)
     
-    # Create DataFrame and save to TSV
-    team_df = pd.DataFrame(drafted_players)
-    team_df.to_csv(team_file_path, sep='\t', index=False)
+    output_team_path = monte_carlo_dir / f'team_for_monte_carlo_{draft_year}.tsv'
     
-    return team_file_path
+    # Copy the file instead of generating new content
+    import shutil
+    shutil.copy2(team_file_path, output_team_path)
+    
+    print(f"✅ Copied to Monte Carlo directory: {output_team_path}")
+    
+    return output_team_path
 
 
 if __name__ == "__main__":

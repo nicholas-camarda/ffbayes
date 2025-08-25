@@ -9,9 +9,12 @@ dependencies:
   - numpy>=1.20
   - matplotlib>=3.5
   - scikit-learn>=1.0
-  - nfl-data-py>=0.2
   - alive-progress>=3.0
   - pytest>=7.0
   - jupyter
   - ipykernel
-
+  - pip
+  - pip:
+    - nfl-data-py>=0.2
+    - fuzzywuzzy
+    - python-levenshtein

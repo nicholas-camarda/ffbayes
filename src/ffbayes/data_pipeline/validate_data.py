@@ -13,7 +13,6 @@ import time
 from datetime import datetime
 
 import pandas as pd
-from alive_progress import alive_bar
 
 try:
     # this is a custom progress monitor that is used to monitor the progress of the data validation
@@ -27,7 +26,8 @@ def validate_data_quality():
     print("🔍 Validating data quality...")
     
     # Check individual datasets
-    season_files = glob.glob("datasets/season_datasets/*season.csv")
+    from ffbayes.utils.path_constants import SEASON_DATASETS_DIR
+    season_files = glob.glob(str(SEASON_DATASETS_DIR / "*season.csv"))
     
     validation_results = {
         'season_files': len(season_files),
@@ -77,16 +77,17 @@ def validate_data_quality():
                     
                     df_core = df[core_columns]
                     
-                    # Prefer missing percentage based on key fantasy point columns
+                    # CRITICAL: Fantasy point columns required for validation
                     fp_cols = [c for c in ['FantPt', 'FantPtPPR'] if c in df_core.columns]
-                    if fp_cols:
-                        ratios = [(df_core[c].isna().mean() * 100.0) for c in fp_cols]
-                        missing_pct = sum(ratios) / len(ratios)
-                    else:
-                        # Fallback: overall missing percentage across all core cells
-                        total_core_cells = len(df_core) * len(core_columns)
-                        total_missing = int(df_core.isna().sum().sum())
-                        missing_pct = (total_missing / total_core_cells * 100) if total_core_cells > 0 else 0.0
+                    if not fp_cols:
+                        error_msg = f"{year}: Missing fantasy point columns (FantPt, FantPtPPR)"
+                        validation_results['errors'].append(error_msg)
+                        files_with_errors += 1
+                        print(f"      ❌ {error_msg}")
+                        continue
+                    
+                    ratios = [(df_core[c].isna().mean() * 100.0) for c in fp_cols]
+                    missing_pct = sum(ratios) / len(ratios)
                     
                     if missing_pct > 10:  # Lower threshold since we're only checking core columns
                         warning_msg = f"{year}: High missing data in core columns ({missing_pct:.1f}%)"
@@ -105,61 +106,12 @@ def validate_data_quality():
                     files_with_errors += 1
                     print(f"      ❌ {error_msg}")
     else:
-        # Fallback to basic progress bar
-        with alive_bar(len(season_files), title="Validating Season Data", bar="smooth") as bar:
-            for file in sorted(season_files):
-                try:
-                    df = pd.read_csv(file)
-                    year = file.split('season.csv')[0].split('/')[-1]
-                    validation_results['total_rows'] += len(df)
-                    
-                    # Check for missing data (exclude injury status columns which are expected to be missing)
-                    # Focus on core fantasy football data columns
-                    core_columns = ['G#', 'Date', 'Tm', 'Away', 'Opp', 'FantPt', 'FantPtPPR', 'Name', 'PlayerID', 'Position', 'Season', 'is_home']
-                    
-                    # Check if all core columns exist
-                    missing_cols = [col for col in core_columns if col not in df.columns]
-                    if missing_cols:
-                        error_msg = f"{year}: Missing core columns: {missing_cols}"
-                        validation_results['errors'].append(error_msg)
-                        files_with_errors += 1
-                        print(f"      ❌ {error_msg}")
-                        bar()
-                        continue
-                    
-                    df_core = df[core_columns]
-                    
-                    # Prefer missing percentage based on key fantasy point columns
-                    fp_cols = [c for c in ['FantPt', 'FantPtPPR'] if c in df_core.columns]
-                    if fp_cols:
-                        ratios = [(df_core[c].isna().mean() * 100.0) for c in fp_cols]
-                        missing_pct = sum(ratios) / len(ratios)
-                    else:
-                        # Fallback: overall missing percentage across all core cells
-                        total_core_cells = len(df_core) * len(core_columns)
-                        total_missing = int(df_core.isna().sum().sum())
-                        missing_pct = (total_missing / total_core_cells * 100) if total_core_cells > 0 else 0.0
-                    
-                    if missing_pct > 10:  # Lower threshold since we're only checking core columns
-                        warning_msg = f"{year}: High missing data in core columns ({missing_pct:.1f}%)"
-                        validation_results['warnings'].append(warning_msg)
-                        print(f"      ⚠️  {warning_msg}")
-                        validation_results['missing_data'] += 1
-                    else:
-                        print(f"      ✅ {year}: Good data quality ({missing_pct:.1f}% missing in core columns)")
-                    
-                    # Enhanced validation checks
-                    validation_results = perform_enhanced_validation(df, year, validation_results)
-                    
-                    bar.text(f"Validated {year}")
-                    bar()
-                    
-                except Exception as e:
-                    error_msg = f"{file}: Error reading - {e}"
-                    validation_results['errors'].append(error_msg)
-                    files_with_errors += 1
-                    print(f"      ❌ {error_msg}")
-                    bar()
+        # CRITICAL: Enhanced progress tracking required
+        raise RuntimeError(
+            "Enhanced progress tracking failed. "
+            "Production validation requires proper progress monitoring. "
+            "No fallbacks allowed."
+        )
     
     # Quality score remains 100 if any files are present; warnings and errors are reported separately.
     if validation_results['season_files'] > 0:
@@ -359,7 +311,8 @@ def check_data_completeness():
     
     missing_years = []
     for year in expected_years:
-        season_file = f"datasets/season_datasets/{year}season.csv"
+        from ffbayes.utils.path_constants import SEASON_DATASETS_DIR
+        season_file = str(SEASON_DATASETS_DIR / f"{year}season.csv")
         if not os.path.exists(season_file):
             missing_years.append(year)
     

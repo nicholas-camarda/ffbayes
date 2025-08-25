@@ -16,9 +16,14 @@ import pandas as pd
 def find_latest_mc_tsv() -> Optional[Path]:
     candidates = []
     # Search both results and plots directories for projections TSVs
+    from ffbayes.utils.training_config import get_monte_carlo_training_years
+    training_years = get_monte_carlo_training_years()
+    current_year = datetime.now().year
+    
+    from ffbayes.utils.path_constants import get_monte_carlo_dir, get_plots_dir
     for pattern in [
-        "results/montecarlo_results/*projections*.tsv",
-        "plots/*projections*.tsv",
+        str(get_monte_carlo_dir(current_year) / f"mc_projections_{current_year}_*.tsv"),
+        str(get_plots_dir(current_year) / "*projections*.tsv"),
     ]:
         candidates.extend(Path().glob(pattern))
     if not candidates:
@@ -28,7 +33,8 @@ def find_latest_mc_tsv() -> Optional[Path]:
 
 
 def find_latest_combined_dataset() -> Optional[Path]:
-    candidates = list(Path("datasets/combined_datasets").glob("*season_modern.csv"))
+    from ffbayes.utils.path_constants import COMBINED_DATASETS_DIR
+    candidates = list(Path(COMBINED_DATASETS_DIR).glob("*season_modern.csv"))
     if not candidates:
         return None
     candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
@@ -140,7 +146,9 @@ def main() -> int:
         print("❌ No Monte Carlo TSV found. Run Phase B first.")
         return 1
 
-    out_dir = Path("results/team_aggregation")
+    from ffbayes.utils.path_constants import get_team_aggregation_dir
+    current_year = datetime.now().year
+    out_dir = get_team_aggregation_dir(current_year)
     out_dir.mkdir(parents=True, exist_ok=True)
     payload = build_aggregation_from_tsv(latest)
 

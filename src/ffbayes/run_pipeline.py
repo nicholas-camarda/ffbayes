@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import Optional
 
 try:
-    from ffbayes.utils.enhanced_pipeline_orchestrator import EnhancedPipelineOrchestrator
+    from ffbayes.utils.enhanced_pipeline_orchestrator import \
+        EnhancedPipelineOrchestrator
 except Exception:
     EnhancedPipelineOrchestrator = None
 
@@ -50,52 +51,118 @@ def timeout_handler(signum, frame):
 
 def create_required_directories():
     """Create all required directories for the pipeline."""
-    print("📁 Creating required directories...")
+    from ffbayes.utils.path_constants import create_all_required_directories
+
+    # Use the centralized directory creation function
+    create_all_required_directories()
+    print()
+
+
+def cleanup_empty_directories():
+    """Clean up empty directories that may cause pipeline issues."""
+    print("🧹 Cleaning up empty directories...")
     print()
     
-    required_dirs = [
-        # Data directories
-        ("datasets/season_datasets", "Raw NFL season data files"),
-        ("datasets/combined_datasets", "Combined and processed datasets"), 
-        ("misc-datasets", "Additional datasets and projections"),
-        ("snake_draft_datasets", "Draft strategy and VOR calculations"),
-        
-        # Results directories
-        ("results/montecarlo_results", "Monte Carlo simulation outputs"), 
-        ("results/bayesian-hierarchical-results", "Bayesian model results and traces"),
-        ("results/team_aggregation", "Team aggregation results and analysis"),
-        ("results/draft_strategy", "Draft strategy outputs and configurations"),
-        ("results/draft_strategy_comparison", "Draft strategy comparison reports"),
-        ("results/model_comparison", "Model comparison and evaluation results"),
-        
-        # Output directories - organized subfolders
-        ("plots/team_aggregation", "Team aggregation visualizations and charts"),
-        ("plots/monte_carlo", "Monte Carlo simulation visualizations"),
-        ("plots/draft_strategy_comparison", "Draft strategy comparison charts"),
-        ("plots/bayesian_model", "Bayesian model visualizations and diagnostics"),
-        ("plots/test_runs", "Test run outputs and debugging visualizations"),
-        ("my_ff_teams", "Your fantasy team configurations")
+    # Directories to check for cleanup
+    cleanup_dirs = [
+        "results",
+        "plots"
     ]
     
-    created_count = 0
-    for dir_path, description in required_dirs:
-        path = Path(dir_path)
-        if not path.exists():
-            path.mkdir(parents=True, exist_ok=True)
-            print(f"✅ Created: {dir_path}")
-            print(f"   📝 Purpose: {description}")
-            created_count += 1
-        else:
-            print(f"📁 Exists: {dir_path}")
-            print(f"   📝 Purpose: {description}")
+    cleaned_count = 0
+    for base_dir in cleanup_dirs:
+        base_path = Path(base_dir)
+        if base_path.exists() and base_path.is_dir():
+            # Find empty subdirectories
+            for subdir in base_path.iterdir():
+                if subdir.is_dir():
+                    try:
+                        # Check if directory is empty
+                        if not any(subdir.iterdir()):
+                            # Directory is empty, but don't remove it - just log
+                            print(f"📁 Empty directory found: {subdir}")
+                            cleaned_count += 1
+                    except Exception as e:
+                        print(f"⚠️  Error checking {subdir}: {e}")
     
-    print()
-    if created_count > 0:
-        print(f"✅ Created {created_count} new directories")
+    if cleaned_count > 0:
+        print(f"📁 Found {cleaned_count} empty directories")
     else:
-        print("✅ All required directories already exist")
+        print("✅ No empty directories found")
     
     print()
+
+
+def validate_step_outputs(step_name):
+    """Validate that a pipeline step produced its expected outputs."""
+    log_write("🔍 Validating step outputs...")
+    
+    # Get current year for dynamic paths
+    current_year = datetime.now().year
+    
+    from ffbayes.utils.path_constants import (
+        COMBINED_DATASETS_DIR, SEASON_DATASETS_DIR, SNAKE_DRAFT_DATASETS_DIR,
+        get_draft_strategy_comparison_dir, get_draft_strategy_dir,
+        get_hybrid_mc_dir, get_monte_carlo_dir, get_plots_dir)
+    
+    validation_rules = {
+        "Data Collection": [
+            str(SEASON_DATASETS_DIR / "*.csv")
+        ],
+        "Data Validation": [
+            # Validation step doesn't produce files, just validates
+        ],
+        "Data Preprocessing": [
+            str(COMBINED_DATASETS_DIR / "*_modern.csv")
+        ],
+        "VOR Draft Strategy": [
+            str(SNAKE_DRAFT_DATASETS_DIR / "snake-draft_ppr-*.csv"),
+            str(SNAKE_DRAFT_DATASETS_DIR / "DRAFTING STRATEGY -- snake-draft_ppr-*.xlsx")
+        ],
+        "Bayesian Analysis": [
+            str(get_hybrid_mc_dir(current_year) / "hybrid_model_results.json")
+        ],
+        "Draft Strategy Generation": [
+            str(get_draft_strategy_dir(current_year) / "draft_strategy_pos*.json")
+        ],
+        "Monte Carlo Validation": [
+            str(get_monte_carlo_dir(current_year) / "*.tsv")
+        ],
+        "Model Comparison": [
+            str(get_plots_dir(current_year) / "model_comparison" / "model_comparison_results_*.json")
+        ],
+        "Draft Strategy Comparison": [
+            str(get_draft_strategy_comparison_dir(current_year) / "draft_strategy_comparison_report_*.txt")
+        ]
+    }
+    
+    if step_name not in validation_rules:
+        log_write("   ⚠️  No validation rules defined for this step")
+        return True
+    
+    expected_patterns = validation_rules[step_name]
+    if not expected_patterns:
+        log_write("   ✅ Step doesn't produce files (validation only)")
+        return True
+    
+    missing_files = []
+    for pattern in expected_patterns:
+        # Replace {current_year} placeholder with actual year
+        actual_pattern = pattern.format(current_year=current_year)
+        matching_files = list(Path(".").glob(actual_pattern))
+        if not matching_files:
+            missing_files.append(pattern)
+        else:
+            log_write(f"   ✅ Found: {actual_pattern}")
+    
+    if missing_files:
+        log_write("   ❌ Missing expected outputs:")
+        for pattern in missing_files:
+            log_write(f"      - {pattern}")
+        return False
+    
+    log_write("   ✅ All expected outputs found")
+    return True
 
 
 def run_step(step_name, script_path, description):
@@ -163,14 +230,21 @@ def run_step(step_name, script_path, description):
         
         elapsed_time = time.time() - start_time
         
-        if result.returncode == 0:
+        # Validate step outputs based on step name
+        output_validation_passed = validate_step_outputs(step_name)
+        
+        if result.returncode == 0 and output_validation_passed:
             log_write("-" * 40)
             log_write(f"✅ {step_name} completed successfully in {elapsed_time:.1f} seconds")
+        elif result.returncode == 0 and not output_validation_passed:
+            log_write("-" * 40)
+            log_write(f"❌ {step_name} failed: Expected outputs not found")
+            return False, elapsed_time
         else:
             log_write("-" * 40)
             log_write(f"❌ {step_name} failed with exit code {result.returncode}")
         
-        return result.returncode == 0, elapsed_time
+        return result.returncode == 0 and output_validation_passed, elapsed_time
         
     except subprocess.CalledProcessError as e:
         # Clear the alarm
@@ -240,8 +314,15 @@ def main():
     except Exception:
         pass
     
-    # Create required directories first
-    create_required_directories()
+    # Create required directories first with enhanced error handling
+    try:
+        create_required_directories()
+        # Clean up any empty directories that might cause issues
+        cleanup_empty_directories()
+    except Exception as e:
+        log_write(f"❌ Failed to create required directories: {e}")
+        log_write("🔄 Pipeline cannot continue without proper directory structure")
+        return 1
     
     # Check if enhanced orchestrator is available
     if EnhancedPipelineOrchestrator is not None and known_args.phase == "full":
@@ -250,8 +331,8 @@ def main():
         log_write("")
         
         try:
-            # Use enhanced orchestrator
-            orchestrator = EnhancedPipelineOrchestrator()
+            # Use enhanced orchestrator with integrated logging
+            orchestrator = EnhancedPipelineOrchestrator(main_log_file=LOG_FILE_HANDLE)
             
             # Execute pipeline with enhanced features
             success = orchestrator.execute_pipeline()
@@ -288,134 +369,20 @@ def main():
             return 0 if success else 1
             
         except Exception as e:
-            log_write(f"❌ Enhanced orchestrator failed: {e}")
-            log_write("🔄 Falling back to basic pipeline execution...")
-            log_write("")
-    
-    # Fallback to basic pipeline execution
-    log_write("🚀 Using Basic Pipeline Execution (Fallback)")
-    log_write("📊 Features: Sequential execution, basic error handling")
-    log_write("")
-    
-    pipeline_start = time.time()
-    
-    # Define basic pipeline steps (fallback) - CORRECTED ORDER - USING PYTHON MODULE EXECUTION
-    all_steps = [
-        {
-            "name": "Data Collection",
-            "script": "python -m ffbayes.data_pipeline.collect_data",
-            "description": "Collect raw NFL data from multiple sources"
-        },
-        {
-            "name": "Data Validation", 
-            "script": "python -m ffbayes.data_pipeline.validate_data",
-            "description": "Validate data quality and completeness"
-        },
-        {
-            "name": "Data Preprocessing",
-            "script": "python -m ffbayes.data_pipeline.preprocess_analysis_data",
-            "description": "Preprocess data for analysis"
-        },
-        {
-            "name": "Bayesian Analysis",
-            "script": "python -m ffbayes.analysis.bayesian_hierarchical_ff_unified",
-            "description": "Generate player-level predictions with uncertainty using PyMC4"
-        },
-        {
-            "name": "Draft Strategy Generation",
-            "script": "python -m ffbayes.draft_strategy.bayesian_draft_strategy --draft-position 3 --league-size 10 --risk-tolerance medium",
-            "description": "Generate optimal draft strategies using Bayesian predictions"
-        },
-        {
-            "name": "Monte Carlo Validation",
-            "script": "python -m ffbayes.analysis.montecarlo_historical_ff",
-            "description": "Validate drafted teams using Monte Carlo simulation (adversarial evaluation)"
-        }
-    ]
-    
-    # Phase selection
-    phase = known_args.phase
-    if phase == "draft":
-        pipeline_steps = all_steps[:5]
-    elif phase == "validate":
-        pipeline_steps = [all_steps[0], all_steps[1], all_steps[2], all_steps[5]]
-        # Append team-file if provided
-        if known_args.team_file:
-            pipeline_steps[-1]["script"] += f" --team-file {known_args.team_file}"
-    else:
-        # full
-        pipeline_steps = all_steps
-        if known_args.team_file:
-            pipeline_steps[-1]["script"] += f" --team-file {known_args.team_file}"
-    
-    # Track results
-    results = []
-    total_time = 0
-    
-    log_write(f"Selected phase: {phase}")
-    if phase == "validate" and not known_args.team_file:
-        log_write("⚠️  --team-file not provided; Monte Carlo will require it and may fail.")
-    
-    # Run each step with clear visibility
-    for i, step in enumerate(pipeline_steps, 1):
-        log_write(f"\n🔄 Step {i}/{len(pipeline_steps)}: {step['name']}")
-        
-        success, elapsed_time = run_step(
-            step['name'], 
-            step['script'], 
-            step['description']
-        )
-        
-        results.append({
-            'step': step['name'],
-            'success': success,
-            'time': elapsed_time
-        })
-        
-        total_time += elapsed_time
-        
-        if not success:
-            log_write(f"\n🚨 Pipeline failed at step {i}: {step['name']}")
-            log_write("🔄 Please fix the issue and re-run the pipeline")
-            break
-        
-        log_write(f"✅ Step {i} completed. Moving to next step...")
-        log_write("")
-    
-    # Pipeline summary
-    log_write(f"\n{'='*60}")
-    log_write("BASIC PIPELINE SUMMARY")
-    log_write(f"{'='*60}")
-    
-    successful_steps = sum(1 for r in results if r['success'])
-    total_steps = len(results)
-    
-    log_write(f"📊 Steps completed: {successful_steps}/{total_steps}")
-    log_write(f"⏱️  Total time: {total_time:.1f} seconds")
-    log_write(f"🎯 Success rate: {(successful_steps/total_steps)*100:.1f}%")
-    
-    # Enhanced status reporting
-    if successful_steps == total_steps:
-        log_write("\n🎉 Pipeline completed successfully!")
-        log_write("📈 Ready for fantasy football analysis!")
-    elif successful_steps == 0:
-        log_write("\n❌ Pipeline failed completely. Check all steps.")
-        log_write("🔧 Review error messages and fix issues before re-running.")
-    else:
-        log_write(f"\n⚠️  Pipeline partially completed ({successful_steps}/{total_steps} steps)")
-        log_write("🔧 Check failed steps and re-run as needed")
-    
-    log_write(f"\n🏁 Pipeline finished at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            log_write(f"❌ CRITICAL ERROR: Enhanced orchestrator failed: {e}")
+            log_write("🚨 Production pipeline requires enhanced orchestrator to work properly.")
+            log_write("❌ No fallbacks allowed - fix the orchestrator issue and retry.")
+            raise RuntimeError(
+                f"Enhanced orchestrator failed: {e}. "
+                "Production pipeline requires proper orchestration. "
+                "No fallbacks allowed."
+            )
 
-    # Close log file handle if open
-    try:
-        if LOG_FILE_HANDLE is not None:
-            LOG_FILE_HANDLE.close()
-    except Exception:
-        pass
+    # CRITICAL: No fallback execution allowed
+    # Production pipeline must use enhanced orchestrator
+    log_write("✅ Pipeline completed successfully with enhanced orchestrator")
     
-    # Return exit code for automation
-    return 0 if successful_steps == total_steps else 1
+    return True
 
 if __name__ == "__main__":
     main()

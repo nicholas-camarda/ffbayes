@@ -23,9 +23,10 @@ def create_analysis_dataset(path_to_data_directory):
     print("Loading and preprocessing data for analysis...")
     
     # Read in the datasets and combine - look for season.csv files in season_datasets subdirectory
-    all_files = glob.glob(os.path.join(path_to_data_directory, 'season_datasets', '*season.csv'))
+    from ffbayes.utils.path_constants import SEASON_DATASETS_DIR
+    all_files = glob.glob(str(SEASON_DATASETS_DIR / '*season.csv'))
     if not all_files:
-        raise ValueError(f"No season data files found in {path_to_data_directory}/season_datasets/")
+        raise ValueError(f"No season data files found in {SEASON_DATASETS_DIR}")
     
     # Sort files by year and get only the last 5 years
     from datetime import datetime
@@ -103,7 +104,8 @@ def create_analysis_dataset(path_to_data_directory):
     print(f"Season range after cleaning: {data['Season'].min()} - {data['Season'].max()}")
 
     # Save combined dataset with consistent naming
-    output_dir = 'datasets/combined_datasets'
+    from ffbayes.utils.path_constants import COMBINED_DATASETS_DIR
+    output_dir = str(COMBINED_DATASETS_DIR)
     
     # Create filename with year range for consistency
     year_range = f"{data['Season'].min()}-{data['Season'].max()}"

@@ -1,0 +1,49 @@
+{
+  "name": "FFBayes User Configuration",
+  "description": "Centralized configuration for all user preferences and league settings",
+  "version": "1.0",
+  
+  "league_settings": {
+    "draft_position": 10,
+    "league_size": 10,
+    "scoring_type": "PPR",
+    "ppr_value": 0.5,
+    "risk_tolerance": "medium"
+  },
+  
+  "vor_settings": {
+    "ppr": 0.5,
+    "top_rank": 120,
+    "scraping_enabled": true,
+    "fantasy_pros_source": true
+  },
+  
+  "model_settings": {
+    "monte_carlo_simulations": 5000,
+    "historical_years": 5,
+    "uncertainty_model": "random_forest",
+    "confidence_level": 0.95
+  },
+  
+  "output_settings": {
+    "create_excel": true,
+    "create_text": true,
+    "create_visualizations": true,
+    "output_format": "human_readable"
+  },
+  
+  "data_settings": {
+    "auto_update": true,
+    "data_sources": ["nfl_official", "fantasy_pros", "pro_football_reference"],
+    "cache_enabled": true,
+    "validation_strict": true
+  },
+  
+  "pipeline_settings": {
+    "parallel_execution": true,
+    "max_workers": 8,
+    "timeout_default": 300,
+    "retry_count": 2,
+    "fail_fast": true
+  }
+}

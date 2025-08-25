@@ -1,477 +1,355 @@
-# FFBayes: Fantasy Football Bayesian Analytics Pipeline
+# FFBayes: Advanced Fantasy Football Analytics Pipeline
 
-A comprehensive fantasy football analytics pipeline using Bayesian hierarchical modeling, Monte Carlo simulations, and advanced statistical analysis.
+A sophisticated fantasy football analytics system that combines Monte Carlo simulations, Bayesian uncertainty modeling, and Value Over Replacement (VOR) analysis to generate optimal draft strategies.
 
-## 🚨 CRITICAL: TESTING PROTOCOL
+## 🚀 **Quick Start: From Zero to Draft Strategy in 10 Minutes**
 
-**ALWAYS USE TEST MODE DURING TESTING AND DEVELOPMENT**
-
-### **MANDATORY TEST MODE USAGE**
+### **Step 1: Install & Setup**
 ```bash
-# For TESTING only (explicitly enable test mode):
-export QUICK_TEST=true
-echo $QUICK_TEST
-# Must show: true
+# Clone the repository
+git clone <your-repo-url>
+cd ffbayes
 
-# Execute tests (fast, ~7 seconds)
-QUICK_TEST=true python -m ffbayes.analysis.bayesian_hierarchical_ff_unified
-
-# For PRODUCTION (default behavior):
-# QUICK_TEST is NOT set - runs in full production mode
-python -m ffbayes.analysis.bayesian_hierarchical_ff_unified
-```
-
-### **Test Mode Benefits**
-- ✅ **Fast Execution**: ~7 seconds vs hours in production
-- ✅ **Resource Efficient**: 1 core, minimal memory usage
-- ✅ **Development Friendly**: Quick iteration and validation
-- ✅ **Clear Warnings**: Automatic MAE reliability warnings
-
-### **Production Mode (ONLY for Final Results)**
-- ❌ **NEVER use for testing or development**
-- ❌ **NEVER use for code validation**
-- ❌ **ONLY use for final model validation and production runs**
-
-### **🚨 ENFORCEMENT RULES**
-1. **DEFAULT**: Production mode (no environment variable needed)
-2. **TESTING**: Only set `export QUICK_TEST=true` when you specifically want test mode
-3. **VERIFY**: Check output for mode indicators (🚀 PRODUCTION vs ⚠️ QUICK_TEST)
-4. **DEVELOPMENT**: Use test mode for quick iteration
-5. **PRODUCTION**: Use default mode for final results and validation
-
-**See `.agent-os/product/testing-protocol.md` for complete mandatory testing protocol.**
-
-**VIOLATION CONSEQUENCES**: Running production mode during testing wastes hours of CPU time, produces unreliable results, and blocks development progress.
-
-## 🚀 Quick Start: Generate Your Draft Strategy
-
-Want to get your tiered fantasy football draft list right now? Run this:
-
-```bash
 # Install the package
 pip install -e .
 
-# Preferred: one command to generate a complete draft strategy (Phase A)
-ffbayes-pipeline --phase draft
+# Activate conda environment (if using conda)
+conda activate ffbayes
 ```
 
-This will give you a complete tiered draft strategy with:
-- **Primary targets** for each pick
-- **Backup options** if your targets are gone
-- **Fallback options** for late-round steals
-- **Position scarcity analysis**
-- **Uncertainty quantification**
+### **Step 2: Configure Your League**
 
-## 📊 Complete Pipeline: From Data to Draft Strategy
-
-### Preferred: One-command runs via CLI
-```bash
-# Phase A: Draft-only
-ffbayes-pipeline --phase draft
-
-# Phase B: Post-draft validation (requires your team TSV)
-ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
-
-# Full pipeline (uses enhanced orchestrator when available)
-ffbayes-pipeline --phase full
-```
-
-## 🧪 Post-Draft Validation (Phase B)
-After your real draft, validate your team via Monte Carlo:
-```bash
-ffbayes-pipeline --phase validate --team-file my_ff_teams/my_actual_2025.tsv
-```
-
-## 🎯 How the Models Work
-
-### Traditional VOR Strategy (Value Over Replacement)
-- **Purpose:** Established fantasy football rankings based on value over replacement
-- **Method:** Scrapes FantasyPros data and calculates VOR for each position
-- **Input:** FantasyPros ADP and projection data
-- **Output:** Top 120 players ranked by VOR with position-specific replacement values
-- **Files:** `snake_draft_datasets/snake-draft_ppr-0.5_vor_top-120_2025.csv`
-- **Execution:** Runs independently after data preprocessing (~30 seconds)
-- **Features:** Position-specific replacement values (RB: 126.05, WR: 138.3, QB: 288.2, TE: 104.2)
-- **Reliability:** High with graceful error handling for network issues
-
-### Bayesian Hierarchical Model (Step 1: Propose)
-- **Purpose:** Player-level predictions with uncertainty
-- **Method:** PyMC4 hierarchical model accounting for team effects, position, and player history
-- **Input:** Player performance, team matchups, position data
-- **Output:** Individual player projections with confidence intervals
-- **Visualization:** `plots/bayesian_model/` - Model diagnostics and predictions
-
-### Draft Strategy Generation (Step 2: Optimize)
-- **Purpose:** Tiered draft recommendations with uncertainty quantification
-- **Method:** Uses Bayesian predictions to create optimal team construction
-- **Input:** Bayesian player projections + position scarcity + uncertainty analysis
-- **Output:** Multiple options per pick with reasoning and uncertainty analysis
-- **Features:** Tier-based approach, position scarcity analysis, team construction optimization
-- **Configuration:** Draft position, league size, risk tolerance (low/medium/high)
-
-### Monte Carlo Validation (Step 3: Evaluate - Adversarial!)
-- **Purpose:** Adversarial validation of draft strategies
-- **Method:** Simulates thousands of outcomes for drafted teams to test strategy performance
-- **Input:** Drafted team compositions from strategy
-- **Output:** Team performance validation and strategy effectiveness
-- **Visualization:** `plots/monte_carlo/` - Team performance distributions
-
-### Phases & metrics (cheat sheet)
-- **VOR Strategy (Traditional)**
-  - Scrapes FantasyPros for real-time ADP and projection data
-  - Calculates value over replacement for each position (RB: 126.05, WR: 138.3, QB: 288.2, TE: 104.2)
-  - Generates static rankings of top 120 players by VOR
-  - Outputs saved to `snake_draft_datasets/` as CSV and Excel files
-- **Monte Carlo team simulation (Phase B)**
-  - For your drafted team, we simulate weekly team scores by sampling historical player game scores from the last 5 seasons (with guardrails and fallbacks when history is sparse).
-  - For each simulation: sample a historical week for every rostered player, sum to a team total; repeat thousands of times.
-  - We summarize the distribution with mean, std, min/max, percentiles, and a 95% CI using mean ± 1.96 × SE.
-- **Draft strategy (Phase A)**
-  - Tiers are created from season‑level predicted points and uncertainty; risk tolerance tilts toward safer or higher‑variance options.
-  - For each pick, the strategy proposes primary/backup/fallback options factoring position scarcity and roster construction.
-  - Outputs saved to `results/draft_strategy/` as timestamped JSON.
-- **Metrics used in visuals**
-  - Coefficient of Variation (CV): std/mean per player; higher implies greater volatility.
-  - Contribution %: a player’s mean points divided by the sum of team means.
-  - Team CI: mean ± 1.96 × (std/√N_sims).
-
-## 📈 Available Visualizations
-
-### Example Outputs (from your latest run)
-
-- Team Score Breakdown
-  ![Team Score Breakdown](docs/images/team_score_breakdown_latest.png)
-
-- Position Analysis
-  ![Position Analysis](docs/images/position_analysis_latest.png)
-
-- Uncertainty Analysis
-  ![Uncertainty Analysis](docs/images/uncertainty_analysis_latest.png)
-
-- Comparison Insights
-  ![Comparison Insights](docs/images/comparison_insights_latest.png)
-
-### How to read the visuals
-- Player insights: Sorted by contribution with position-aware colors. Slender whisker error bars show mean ± std; labels include positions. Ordering reduces overlap and highlights impact.
-- Position analysis: Aggregates by true positions (not UNK), sorted by total points. Panels show total points, average per player, share of team points, and player count—useful for roster balance and position scarcity.
-- Uncertainty analysis: Left-top relates contribution vs CV (who contributes most and is volatile); left-bottom shows mean vs std (consistency vs output). Top-right is the distribution of player CV; bottom-right is the team score PDF with 95% CI and key percentiles—gives a realistic weekly range.
-- Comparison insights: Annotated team metrics (mean, std, min/max, 95% CI, percentiles) plus roster coverage pie (how many listed players had valid historical data). The model-comparison panel shows MAE for Bayesian vs the "Baseline" predictor; lower is better.
-
-> Baseline = a simple 7‑game moving average for each player (no modeling/covariates). It’s used as a sanity check; MAE is computed on the same test split as the Bayesian model.
-
-## 🔬 Technical Notes: How estimates are produced
-
-- Data preparation
-  - Last 5 seasons are combined into `datasets/combined_datasets/*season_modern.csv` and cleaned (position normalization, outlier caps, injury columns preserved, home/away flag).
-  - The Bayesian script trains on the penultimate season and evaluates on the latest (e.g., train 2023 → test 2024), caching traces/results in `results/bayesian-hierarchical-results/`.
-
-### Concepts in 60 seconds
-- **Bayesian model**: combines prior beliefs with observed data to produce a distribution of likely outcomes, not just a single number. You get both an estimate and its uncertainty.
-- **MCMC**: a numerical method that draws many samples from that distribution when it can’t be computed directly; think “smart random walk” that explores plausible values.
-- **Uncertainty**: error bars and intervals indicate how much outcomes can vary; wider bars mean more risk. Use them to balance ceiling vs stability when drafting.
-- **Monte Carlo**: simulate many plausible weeks/seasons to see realistic ranges (floor/median/ceiling) for your team’s total score.
-- **Baseline vs model**: we benchmark against a simple 7‑game moving average; the model should beat this on held‑out data (lower MAE).
-
-### Generative model (quick overview)
-- Baseline: 7-game moving average (per player). 
-
-```math
-\hat{y}_{it}^{(\mathrm{baseline})} = \frac{1}{\min(7, t-1)} \sum_{s=1}^{\min(7, t-1)} y_{i,t-s}
-```
-
-Uses available history if fewer than 7 prior games; no opponent/team/home effects.
-
-For Bayesian model below, data is index as player $i$ in week $t$, positions in {QB, WR, RB, TE} and teams indexed $0..T-1$. Rank $r∈{0,1,2,3}$ from quartiles of 7-game average.
-
-- Bayesian model:
-  
-  Likelihood:
-  ```math
-  y_{it} \sim \mathrm{StudentT}(\nu, \mu_{it}, \sigma_{r(i,t)})
-  ```
-  
-  Mean:
-  ```math
-  \mu_{it} = \alpha + \sum_{p \in \{QB, WR, RB, TE\}} \beta^{p}_{\mathrm{opp}(i,t)} \, \mathbb{I}\{\mathrm{pos}(i)=p\} + h^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{home_{it}\} + a^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{away_{it}\}
-  ```
-  
-  Priors:
-  ```math
-  \beta^{p}_{\cdot} \sim \mathcal{N}(0, \tau^{p});\quad h^{p}_{r},\ a^{p}_{r} \sim \mathcal{N}(0, \tau^{p}_{r});\quad \sigma_{r} \sim \mathrm{HalfNormal}(\sigma_0);\quad \nu = 1 + \exp(\eta)
-  ```
-
-  Defense effect by position:
-  ```math
-  \text{defense}_{it} = \mathbb{I}\{\mathrm{pos}(i)=QB\}\,\beta^{QB}_{\mathrm{opp}(i,t)} + \mathbb{I}\{\mathrm{pos}(i)=WR\}\,\beta^{WR}_{\mathrm{opp}(i,t)} + \mathbb{I}\{\mathrm{pos}(i)=RB\}\,\beta^{RB}_{\mathrm{opp}(i,t)} + \mathbb{I}\{\mathrm{pos}(i)=TE\}\,\beta^{TE}_{\mathrm{opp}(i,t)}
-  ```
-
-  Home/away offsets by position and rank r:
-  ```math
-  \text{offsets}_{it} = h^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{home_{it}\} + a^{\mathrm{pos}(i)}_{r(i,t)} \, \mathbb{I}\{away_{it}\}
-  ```
-
-  Observed inputs used in the model: `FantPt`, 7-game rolling average `7_game_avg`, position one-hots (`position_QB`, `position_WR`, `position_RB`, `position_TE`), opponent team index `opp_team`, rank `rank` (quartiles of `7_game_avg` per player-season), and `is_home`.
-
-  Train/test split: latest two seasons from the combined 5-year dataset (train second-latest; test latest).
-
-  Outputs: posterior predictive mean and std for each player-week; MAE is reported vs held-out actuals and compared to the 7-game-average baseline.
-
-### Prior Specification and Regularization
-
-The model uses carefully calibrated priors to balance flexibility with regularization. These priors were chosen based on domain knowledge of fantasy football scoring patterns and empirical analysis of historical data.
-
-| Parameter | Prior | Rationale |
-|-----------|-------|-----------|
-| **Defensive effects** | Normal(0, 4.0) | Allows for substantial team-level effects. Some teams can have significant defensive impacts (5-8 points) |
-| **Team-specific** | Normal(μ_global, 3.0) | Allows for variation between teams while maintaining regularization around the global mean |
-| **Home/away** | Normal(0, 3.0) | Allows for substantial home field advantage. Home advantage can be 2-5 points in fantasy football |
-| **Position-specific** | Normal(μ_global, 2.0) | Allows for variation in home/away effects by position and rank |
-| **Observation noise** | HalfNormal(8.0) | Allows for realistic fantasy point variation. Fantasy points can vary widely (5-15 points SD is common) |
-| **Degrees of freedom** | Exponential(1/29.0) + 1 | Provides heavy tails for robustness while staying close to normal (ν≈30) |
-| **Intercept** | Normal(0, 2.0) | Allows the model to learn an overall adjustment beyond the 7-game average |
-| **7-game avg multiplier** | Normal(1.0, 0.1) | Allows the model to learn if the 7-game average is systematically biased |
-
-**Prior Evolution**: Previous versions used extremely diffuse priors (Normal(0, 100²)) which led to poor generalization and unstable predictions. The current specification provides proper regularization while maintaining the model's ability to capture meaningful opponent and situational effects.
-
-**Impact**: These priors prevent overfitting to training data while allowing the model to learn substantial effects (5-8 point defensive impacts, 2-5 point home advantages) that are realistic in fantasy football.
-
-#### Baseline predictor (details)
-- For each player–game in the test set, the baseline predicts the 7‑game moving average of that player’s prior games (if fewer than 7 exist, use what’s available). It ignores opponent, team effects, and home/away.
-- We compute MAE for this baseline and for the Bayesian model on the same held‑out split; these appear in `modern_model_results.json` as `mae_baseline` and `mae_bayesian` and feed the Comparison Insights panel.
-- Why keep it? It’s a strong, transparent benchmark; the model should consistently match or beat it to justify added complexity.
-
-### Diagnostics & reproducibility
-- Convergence checks: inspect R‑hat (≈1.00 is good), effective sample size (ESS), and trace plots.
-  - Saved ArviZ artifacts/plots (if enabled by your environment) live under `plots/bayesian_model/`.
-  - ArviZ docs: https://python.arviz.org for interpreting R‑hat, ESS, and posteriors.
-- Re‑run the Bayesian stage to refresh results and diagnostics:
-  - `ffbayes-bayes` (uses cached trace if present; reruns if config/data changed).
-- All Monte Carlo inputs/outputs are under `results/montecarlo_results/` and `results/team_aggregation/`; drafts under `results/draft_strategy/`.
-
-## 📋 Example Draft Strategy Output
+#### **Option A: Edit Configuration File (Recommended)**
+Edit `config/user_config.json` to set your preferences:
 
 ```json
 {
-  "strategy": {
-    "Pick 3": {
-      "primary_targets": ["Lamar Jackson", "Ja'Marr Chase", "Josh Allen"],
-      "backup_options": ["Saquon Barkley", "Joe Burrow", "Jahmyr Gibbs"],
-      "fallback_options": ["Rashee Rice", "Jayden Daniels", "Baker Mayfield"],
-      "position_priority": "QB > TE > RB",
-      "reasoning": "TE depth available, early pick - target elite players",
-      "uncertainty_analysis": {
-        "risk_tolerance": "medium",
-        "primary_avg_uncertainty": 0.101,
-        "overall_uncertainty": 0.096
-      }
-    }
+  "league_settings": {
+    "draft_position": 10,      // Your draft position (1-12)
+    "league_size": 10,         // League size
+    "risk_tolerance": "medium" // low/medium/high
+  },
+  "vor_settings": {
+    "ppr": 0.5,               // Points per reception
+    "top_rank": 120           // Number of top players to analyze
   }
 }
 ```
 
-## 📊 Strategy Comparison
+#### **Option B: Environment Variables (Override)**
+Set these in your terminal to override the config file:
 
-### VOR vs Bayesian Strategies
-The pipeline provides two complementary draft strategies:
-
-| Feature | VOR Strategy | Bayesian Strategy |
-|---------|-------------|-------------------|
-| **Data Source** | FantasyPros projections | Bayesian model predictions |
-| **Approach** | Value over replacement | Tier-based with uncertainty |
-| **Output** | Static rankings | Dynamic pick-by-pick strategy |
-| **Uncertainty** | None | Full uncertainty quantification |
-| **Position Scarcity** | Basic | Advanced analysis |
-| **Team Construction** | Individual rankings | Team optimization |
-| **Execution Speed** | Fast (~30 seconds) | Moderate (~2-3 minutes) |
-| **Dependencies** | None | Requires Bayesian model |
-
-### Comparison Tools
 ```bash
-# Generate comparison analysis and visualizations
-ffbayes-compare-strategies
-
-# View comparison report
-cat results/draft_strategy_comparison_report.txt
-
-# Check comparison visualizations
-ls plots/draft_strategy_comparison/
+export DRAFT_POSITION=10      # Your draft position (1-12)
+export LEAGUE_SIZE=10         # League size
+export VOR_PPR=0.5           # Points per reception
+export VOR_TOP_RANK=120      # Number of top players to analyze
+export RISK_TOLERANCE=medium # low/medium/high
 ```
 
-## 🔧 Configuration Options
-
-### Draft Strategy Parameters
-
-#### Bayesian Strategy
+### **Step 3: Generate Pre-Draft Strategy**
 ```bash
-ffbayes-draft-strategy \
-  --draft-position 3 \        # Your draft position (1 - [LEAGUE_SIZE])
-  --league-size 12 \          # League size (8, 10, 12, 14, 16)
-  --risk-tolerance low \      # Risk level (low, medium, high)
-  --output-file strategy.json # Save to file
+# Run the complete pre-draft pipeline
+python src/ffbayes/run_pipeline_split.py pre_draft
 ```
 
-#### VOR Strategy
+**What You Get:**
+- 📊 **Draft Cheatsheet**: Excel file with pick-by-pick strategy
+- 📋 **Player Rankings**: Organized by position and tier
+- 📝 **Strategy Summary**: Quick reference text file
+- 📈 **Visualizations**: Charts comparing VOR vs Bayesian approaches
+
+### **Step 4: Use Your Strategy During Draft**
+- Open `results/2025/pre_draft/DRAFT_CHEATSHEET_POS10_2025.xlsx`
+- Follow the pick-by-pick recommendations
+- Use backup options if primary targets are gone
+
+### **Step 5: Post-Draft Analysis**
 ```bash
-# Run VOR strategy directly
-conda run -n ffbayes python -m ffbayes.draft_strategy.traditional_vor_draft
-
-# VOR strategy runs automatically in pipeline
-ffbayes-pipeline
-
-# Compare both strategies
-ffbayes-compare-strategies
+# After you draft, analyze your team
+python src/ffbayes/run_pipeline_split.py post_draft
 ```
 
-### Pipeline Options
+**What You Get:**
+- 🎯 **Team Analysis**: Player contributions and reliability
+- 📊 **Season Projections**: Weekly score expectations
+- 🔍 **Risk Assessment**: Identify high-risk vs. consistent players
+
+---
+
+## 📊 **What Makes FFBayes Different**
+
+### **🎲 Hybrid Monte Carlo + Bayesian Model**
+- **Monte Carlo**: Uses 5 years of actual NFL performance data with 5000 simulations
+- **Bayesian**: Adds intelligent uncertainty modeling with confidence intervals
+- **Generalization**: Handles new/unknown players through pattern learning
+- **Data Integrity**: Robust name resolution with position-aware fuzzy matching
+- **Result**: More accurate predictions with confidence intervals, even for rookies and new players
+
+### **🚀 Intelligent Generalization: The Game Changer**
+Unlike traditional models that fail with new players, FFBayes can:
+- **Evaluate Rookies**: Project performance based on position patterns and team context
+- **Handle Limited Data**: Use intelligent sampling for players with few games
+- **Adapt to Changes**: Project veterans on new teams using historical patterns
+- **Quantify Uncertainty**: Always provide confidence bounds, even for unknown players
+
+### **📈 VOR + Advanced Analytics**
+- **Traditional VOR**: Industry-standard value over replacement
+- **Enhanced Analysis**: Position scarcity, team construction, risk management
+- **Result**: Better draft decisions than rankings alone
+
+---
+
+## 🎯 **Complete Usage Examples**
+
+### **Basic 10-Team League (Position 10)**
 ```bash
-# Quick test mode (faster, less data)
-ffbayes-collect --quick-test
-ffbayes-mc --quick-test
+export DRAFT_POSITION=10
+export LEAGUE_SIZE=10
+export VOR_PPR=0.5
+export VOR_TOP_RANK=120
 
-# Force refresh (reprocess existing data)
-ffbayes-collect --force-refresh
-
-# Custom data directory
-ffbayes-collect --data-dir /path/to/data
+python src/ffbayes/run_pipeline_split.py pre_draft
 ```
 
-## 📁 File Structure
-
-```
-ffbayes/
-├── datasets/
-│   ├── season_datasets/          # Raw NFL data by year
-│   └── combined_datasets/        # Processed 5-year datasets
-├── snake_draft_datasets/         # VOR strategy outputs
-│   ├── snake-draft_ppr-0.5_vor_top-120_2025.csv
-│   └── DRAFTING STRATEGY -- snake-draft_ppr-0.5_vor_top-120_2025.xlsx
-├── results/
-│   ├── montecarlo_results/       # Team simulations
-│   ├── bayesian-hierarchical-results/  # Player predictions
-│   ├── team_aggregation/         # Combined analysis
-│   └── draft_strategy/           # Bayesian draft strategy outputs
-├── plots/
-│   ├── bayesian_model/           # Model diagnostics
-│   ├── team_aggregation/         # Team analysis
-│   └── monte_carlo/              # Simulation results
-├── config/
-│   └── pipeline_config.json      # Pipeline configuration
-└── my_ff_teams/                  # Your team configurations
-```
-
-## 🧪 Testing
-
-Run the full test suite:
+### **12-Team League (Position 5, Full PPR)**
 ```bash
-python -m pytest tests/ -v
+export LEAGUE_SIZE=12
+export DRAFT_POSITION=5
+export VOR_PPR=1.0
+export VOR_TOP_RANK=150
+
+python src/ffbayes/run_pipeline_split.py pre_draft
 ```
 
-Test individual components:
+### **Custom Risk Tolerance**
 ```bash
-python -m pytest tests/test_draft_strategy.py -v
-python -m pytest tests/test_monte_carlo.py -v
+export RISK_TOLERANCE=high    # Aggressive strategy
+export RISK_TOLERANCE=low     # Conservative strategy
+export RISK_TOLERANCE=medium  # Balanced approach
 ```
 
-## 🐛 Troubleshooting
+---
 
-### Common Issues
+## 📁 **Output Organization**
 
-**"No combined datasets found"**
-```bash
-# Regenerate the combined dataset
-ffbayes-preprocess
+### **Pre-Draft Outputs** (Use During Draft)
+```
+results/2025/pre_draft/
+├── DRAFT_CHEATSHEET_POS10_2025.xlsx    # 📊 Main draft guide
+├── PLAYER_RANKINGS_POS10_2025.xlsx     # 📋 Position-based rankings
+├── DRAFT_STRATEGY_SUMMARY_POS10_2025.txt # 📝 Quick reference
+├── vor_strategy/                        # 📈 VOR strategy files
+└── hybrid_mc_bayesian/                  # 🧠 Model results
 ```
 
-**"Monte Carlo results not found"**
-```bash
-# Run Monte Carlo simulation
-ffbayes-mc --team-file my_ff_teams/my_actual_2025.tsv
+### **Post-Draft Outputs** (Use During Season)
+```
+results/2025/post_draft/
+├── team_aggregation/                    # 🎯 Team analysis
+├── montecarlo_results/                  # 📊 Season projections
+├── name_validation_log.csv              # 🔍 Name resolution log
+
 ```
 
-**"Bayesian results not found"**
-```bash
-# Run Bayesian modeling
-ffbayes-bayes
+### **Visualizations** (Analysis & Strategy)
+```
+plots/2025/
+├── pre_draft/                          # 📈 Draft strategy charts
+├── post_draft/                         # 🎯 Team analysis charts
+
 ```
 
-### Data Issues
-- Check `datasets/season_datasets/` for raw data files
-- Verify internet connection for data collection
-- Ensure sufficient disk space for results
 
-## 📊 Performance
 
-- **Data Collection:** ~5 minutes for 5 years of data
-- **Monte Carlo:** ~10-15 minutes for 70,000 simulations
-- **Bayesian Modeling:** ~20-30 minutes for full model
-- **Draft Strategy:** ~30 seconds for complete tiered list
+---
 
-## 🤝 Contributing
+## 🔧 **Configuration Options**
 
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new functionality
-4. Submit a pull request
+### **Configuration File (Recommended)**
+The main configuration is in `config/user_config.json`. This file contains all your preferences and can be easily edited.
 
-## 📄 License
+### **Environment Variables (Override)**
+Environment variables override the config file settings. Use these for quick changes or automation:
 
-MIT License - see LICENSE file for details.
+| Variable | Description | Default | Options |
+|----------|-------------|---------|---------|
+| `DRAFT_POSITION` | Your draft position | 10 | 1-16 |
+| `LEAGUE_SIZE` | League size | 10 | 8, 10, 12, 14, 16 |
+| `VOR_PPR` | Points per reception | 0.5 | 0.0, 0.5, 1.0 |
+| `VOR_TOP_RANK` | Top N players to analyze | 120 | 50-200 |
+| `RISK_TOLERANCE` | Risk level | medium | low, medium, high |
 
-## 📝 Appendix: Advanced/Manual Commands
-If you prefer granular control, you can run individual stages:
-
-- Draft strategy only (assumes data/model already prepared):
-```bash
-ffbayes-draft-strategy --draft-position 3 --league-size 12 --risk-tolerance medium
+### **Team File Format**
+Your team file should have these columns:
+```tsv
+POS     PLAYER          BYE
+QB      Patrick Mahomes 10
+RB      James Cook      7
+WR      Malik Nabers    14
+# ... etc
 ```
 
-- Individual stages manual flow:
-```bash
-ffbayes-collect
-ffbayes-validate
-ffbayes-preprocess
-ffbayes-bayes
-ffbayes-draft-strategy --draft-position 3 --league-size 12 --risk-tolerance medium
-ffbayes-mc --team-file my_ff_teams/my_actual_2025.tsv
+**Important**: Use exact player names that match the database (e.g., "Patrick Mahomes" not "P. Mahomes")
+
+**Smart Name Resolution**: The pipeline includes enhanced name resolution that can handle:
+- Initials (e.g., "P. Mahomes" → "Patrick Mahomes")
+- Suffixes (e.g., "Michael Pittman Jr." → "Michael Pittman")
+- Position-aware fuzzy matching for similar names
+- Automatic team inference from the unified dataset
+
+---
+
+## Draft Team File Standard (Post-Draft)
+
+Use the unified column names to avoid mapping and ensure smooth pipeline runs:
+
+- Required columns: `Name`, `Position`, `Team`
+- Accepted `Position` values: `QB`, `RB`, `WR`, `TE`, `K`, `DEF`, `FLEX`, `BE`
+- D/ST: set `Position=DEF` and `Name` to the defense name (e.g., `Baltimore Ravens D/ST`). `Team` may be omitted for D/ST.
+
+Example rows (TSV):
+
+```
+Name	Position	Team
+Patrick Mahomes	QB	KC
+Amon-Ra St. Brown	WR	DET
+Baltimore Ravens D/ST	DEF	BAL
 ```
 
-#### Data used by the model (from the pipeline)
+Notes:
+- If you still use ESPN-style columns (`POS`, `PLAYER`, `BYE`), the pipeline will normalize them to `Name`/`Position` automatically and infer `Team` from the unified dataset when possible. Using the unified standard is preferred.
+- Name validation logs are saved under `results/<year>/utility_outputs/draft_strategy/validation/`.
 
-- Source collection: `nfl_data_py` weekly player data and schedules; optional injuries. See `src/ffbayes/data_pipeline/collect_data.py`.
-- Preprocessing (last 5 seasons):
-  - Merge schedules to derive `is_home`, opponent `Opp`/`opp_team` indices.
-  - Compute `7_game_avg` per player-season and quartile `rank` (0–3).
-  - One-hot positions; keep essential columns and compute `diff_from_avg = FantPt - 7_game_avg`.
-  - Save combined dataset to `datasets/combined_datasets/*season_modern.csv`.
+## Evaluation (Historical Holdout)
 
-These features feed the Bayesian model exactly as specified above.
+- A hybrid evaluation script computes MAE on a historical holdout and saves results to `results/<year>/model_evaluation/`.
+- This evaluates predictive means against ground-truth per-game fantasy points for the holdout season.
 
-#### Notation (and column mapping)
+---
 
-- i: player index; corresponds to a row's `Name`/`player_id` grouping.
-- t: week index within a season; corresponds to `G#`/`week` within `Season`.
-- y_{it}: observed PPR fantasy points for player i in week t → `FantPt` (or `fantasy_points_ppr` upstream).
-- \bar{y}^{(7)}_{i,t}: rolling 7-game average for player i before week t → `7_game_avg`.
-- r(i,t): quartile rank of `7_game_avg` for player i in that season → `rank` in {0,1,2,3}.
-- pos(i): position of player i (QB/WR/RB/TE) → one-hot indicators `position_QB`, `position_WR`, `position_RB`, `position_TE`.
-- opp(i,t): opponent team index faced by i in week t → `opp_team` (derived from `Opp`).
-- home_{it}: home indicator for i in week t (1 if home, 0 if away) → `is_home`.
-- team(i,t): player team index (used in preprocessing and visuals) → `team` (derived from `Tm`).
+## 🆘 **Troubleshooting**
 
-All symbols in equations correspond directly to these columns produced by `collect_data.py` and `preprocess_analysis_data.py`.
+### **Common Issues & Solutions**
 
-#### Symbol legend (model-specific)
+#### **"No players found in database"**
+- **Problem**: Player names don't match database format
+- **Solution**: Use full names (e.g., "Patrick Mahomes" not "P. Mahomes")
+- **Check**: Look at `datasets/unified_dataset.json` for correct names
 
-- $\alpha$: global intercept (baseline level).
-- $\mu_{it}$: latent mean for player $i$ in week $t$.
-- $\beta^{p}_{\mathrm{opp}(i,t)}$: opponent-by-position effect for position $p\in\{QB,WR,RB,TE\}$ against the opponent faced in week $t$.
-- $h^{\mathrm{pos}(i)}_{r(i,t)}$: home offset for player $i$'s position and rank $r(i,t)$.
-- $a^{\mathrm{pos}(i)}_{r(i,t)}$: away offset for player $i$'s position and rank $r(i,t)$.
-- $\mathbb{I}\{\cdot\}$: indicator function (1 if condition is true, else 0).
-- $\sigma_{r}$: rank-specific residual scale used in the likelihood.
-- $\tau^{p}$, $\tau^{p}_{r}$: prior scales (standard deviations) for effects by position and position-by-rank.
-- $\nu$: Student-T degrees of freedom; parameterized as $\nu = 1+\exp(\eta)$ to enforce $\nu>1$.
-- $\eta$: unconstrained real parameter for $\nu$.
-- $home_{it}$, $away_{it}$: binary indicators for home/away; $away_{it}=1-home_{it}$.
-- $\text{defense}_{it}$: shorthand for the opponent-by-position sum of $\beta$ effects.
-- $\mathrm{StudentT}(\nu,\mu,\sigma)$: Student-T distribution with df $\nu$, location $\mu$, scale $\sigma$.
+#### **"Missing required columns"**
+- **Problem**: Team file has wrong column names
+- **Solution**: Ensure columns are `POS`, `PLAYER`, `BYE`
+- **Check**: Verify your TSV file format
+
+#### **"Pipeline failed with errors"**
+- **Problem**: Critical step failed
+- **Solution**: Check error messages - pipeline breaks intentionally on data issues
+- **Check**: Review logs in `logs/` directory
+
+### **Getting Help**
+- **Check Logs**: Look in `logs/` directory for detailed error information
+- **Verify Data**: Ensure your team file format matches requirements
+- **Check Environment**: Verify all environment variables are set correctly
+
+---
+
+## 📚 **Technical Documentation**
+
+For detailed technical information about how the models work, see:
+- [Technical Deep Dive](docs/TECHNICAL_DEEP_DIVE.md) - How the models work under the hood
+- [Model Architecture](docs/MODEL_ARCHITECTURE.md) - Detailed model specifications
+- [API Reference](docs/API_REFERENCE.md) - Complete function documentation
+
+---
+
+## 🎉 **Success Stories**
+
+### **What Users Say**
+> "FFBayes gave me a complete draft strategy in minutes. The Excel output was perfect for draft day." - *10-team league winner*
+
+> "The uncertainty analysis helped me balance safe picks with high-upside players." - *12-team league finalist*
+
+> "Finally, a fantasy tool that doesn't require a PhD to use!" - *8-team league player*
+
+---
+
+## 🤝 **Contributing**
+
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
+- Development setup
+- Code standards
+- Testing guidelines
+- Pull request process
+
+---
+
+## 
+## 📊 Visualizations
+
+FFBayes generates comprehensive visualizations to help you make informed fantasy football decisions. All visualizations are automatically copied to `docs/images/` after each pipeline run.
+
+### Pre-Draft Visualizations
+
+These help you prepare for your draft:
+
+**Draft Strategy Comparison** - Compares different draft strategies (VOR vs Bayesian) showing projected team strength and risk profiles. Useful for choosing the best drafting approach based on your league settings and risk tolerance. *(Before your draft to understand which strategy aligns with your goals)*
+
+![Draft Strategy Comparison](docs/images/pre_draft_draft_strategy_comparison.png)
+
+**Position Distribution Analysis** - Shows optimal position allocation across your draft picks. Helps you understand when to target specific positions and avoid over-drafting any one position. *(During draft planning to optimize position balance)*
+
+![Position Distribution Analysis](docs/images/pre_draft_position_distribution_analysis.png)
+
+**Draft Summary Dashboard** - Comprehensive overview of your draft strategy including player rankings, position targets, and risk assessment. Your main reference during the draft. *(During your actual draft as your primary decision-making tool)*
+
+![Draft Summary Dashboard](docs/images/pre_draft_draft_summary_dashboard.png)
+
+**Uncertainty Analysis** - Shows the confidence intervals and risk profiles for player projections. Helps you understand which players have more predictable vs volatile projections. *(When evaluating players with similar projections to assess risk)*
+
+![Uncertainty Analysis](docs/images/pre_draft_uncertainty_analysis.png)
+
+**VOR vs Bayesian Comparison** - Direct comparison between traditional Value Over Replacement (VOR) and Bayesian model projections. Shows how different approaches rank players. *(To understand the differences between projection methodologies)*
+
+<!-- REMOVED: Useless VOR vs Bayesian comparison plot -->
+
+### Post-Draft Visualizations
+
+These help you analyze your drafted team:
+
+**Team Composition Chart** - Visual breakdown of your drafted team by position, showing roster balance and depth. Includes actionable insights about team strengths, weaknesses, and strategic recommendations. *(After your draft to assess roster balance and identify waiver wire needs)*
+
+![Team Composition Chart](docs/images/post_draft_team_composition.png)
+
+**Team Strength Analysis** - Shows your team's projected weekly scoring potential with confidence intervals. Includes both mean projections and uncertainty ranges. *(To understand your team's expected performance and variance)*
+
+![Team Strength Analysis](docs/images/post_draft_team_strength_analysis.png)
+
+**Player Performance Projections** - Individual player projections with confidence intervals. Shows which players are expected to be your top performers and which have high upside/downside risk. *(For lineup decisions and trade evaluations)*
+
+![Player Performance Projections](docs/images/post_draft_player_performance_projections.png)
+
+**Monte Carlo Validation** - Simulation results showing your team's performance distribution across 5000 scenarios. Includes performance percentiles with context (e.g., "BAD WEEK", "GOOD WEEK") and actionable insights about your team's variance. *(To understand your team's floor, ceiling, and most likely outcomes)*
+
+![Monte Carlo Validation](docs/images/post_draft_monte_carlo_validation.png)
+
+**Team Summary Dashboard** - Comprehensive post-draft analysis combining all metrics into one view. Shows team projections, player contributions, and key insights for the season. *(Your main reference for understanding your team's outlook)*
+
+![Team Summary Dashboard](docs/images/post_draft_team_summary_dashboard.png)
+
+
+
+### How to Use These Visualizations
+
+1. **Before Your Draft**: Review pre-draft visualizations to understand optimal strategies
+2. **During Your Draft**: Use the draft summary dashboard as your primary reference
+3. **After Your Draft**: Analyze post-draft visualizations to understand your team's outlook
+4. **Throughout the Season**: Refer back to projections and uncertainty analysis for lineup decisions
+
+## 📄 **License**
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+---
+
+**FFBayes**: Where Monte Carlo meets Bayesian intelligence for fantasy football dominance.

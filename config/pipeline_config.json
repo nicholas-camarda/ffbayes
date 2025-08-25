@@ -36,76 +36,45 @@
       "parallel_group": "data_processing"
     },
     {
-      "name": "bayesian_analysis",
-      "script": "ffbayes.analysis.bayesian_hierarchical_ff_unified",
-      "description": "Run unified Bayesian hierarchical analysis with enhanced features",
-      "timeout": 900,
-      "retry_count": 2,
-      "dependencies": ["data_preprocessing"],
-      "critical": true,
-      "parallel_group": "modeling"
-    },
-    {
-      "name": "team_aggregation",
-      "script": "ffbayes.analysis.bayesian_team_aggregation",
-      "description": "Aggregate individual predictions to team totals",
-      "timeout": 300,
-      "retry_count": 2,
-      "dependencies": ["bayesian_analysis"],
-      "critical": true,
-      "parallel_group": "modeling"
-    },
-    {
       "name": "vor_draft_strategy",
       "script": "ffbayes.draft_strategy.traditional_vor_draft",
-      "description": "Generate traditional VOR-based draft strategy",
+      "description": "Generate traditional VOR-based draft strategy FIRST to create rankings",
       "timeout": 300,
       "retry_count": 2,
       "dependencies": ["data_preprocessing"],
-      "critical": false,
+      "critical": true,
       "parallel_group": "strategy"
+    },
+    {
+      "name": "create_unified_dataset",
+      "script": "ffbayes.data_pipeline.create_unified_dataset",
+      "description": "Create unified dataset with VOR rankings for all models",
+      "timeout": 120,
+      "retry_count": 2,
+      "dependencies": ["vor_draft_strategy"],
+      "critical": true,
+      "parallel_group": "data_processing"
+    },
+    {
+      "name": "hybrid_mc_analysis",
+      "script": "ffbayes.analysis.hybrid_mc_bayesian",
+      "description": "Run Hybrid Monte Carlo + Bayesian analysis with uncertainty layers",
+      "timeout": 900,
+      "retry_count": 2,
+      "dependencies": ["create_unified_dataset"],
+      "critical": true,
+      "parallel_group": "modeling"
     },
     {
       "name": "bayesian_draft_strategy",
       "script": "ffbayes.draft_strategy.bayesian_draft_strategy",
-      "args": "--draft-position 3 --league-size 10 --risk-tolerance medium",
+      "args": "--draft-position 10 --league-size 10 --risk-tolerance medium",
       "description": "Generate optimal draft strategies using Bayesian predictions",
       "timeout": 300,
       "retry_count": 2,
-      "dependencies": ["team_aggregation"],
+      "dependencies": ["hybrid_mc_analysis"],
       "critical": true,
       "parallel_group": "strategy"
-    },
-    {
-      "name": "monte_carlo_validation",
-      "script": "ffbayes.analysis.montecarlo_historical_ff",
-      "args": "--auto-team-file",
-      "description": "Validate drafted teams using Monte Carlo simulation (adversarial evaluation)",
-      "timeout": 600,
-      "retry_count": 2,
-      "dependencies": ["bayesian_draft_strategy"],
-      "critical": true,
-      "parallel_group": "validation"
-    },
-    {
-      "name": "model_comparison",
-      "script": "ffbayes.analysis.model_comparison_framework",
-      "description": "Compare Bayesian predictions with Monte Carlo validation results",
-      "timeout": 240,
-      "retry_count": 2,
-      "dependencies": ["monte_carlo_validation", "team_aggregation"],
-      "critical": false,
-      "parallel_group": "analysis"
-    },
-    {
-      "name": "visualization",
-      "script": "ffbayes.analysis.create_team_aggregation_visualizations",
-      "description": "Generate comprehensive visualizations",
-      "timeout": 180,
-      "retry_count": 2,
-      "dependencies": ["model_comparison"],
-      "critical": false,
-      "parallel_group": "analysis"
     },
     {
       "name": "draft_strategy_comparison",
@@ -114,6 +83,48 @@
       "timeout": 300,
       "retry_count": 2,
       "dependencies": ["vor_draft_strategy", "bayesian_draft_strategy"],
+      "critical": false,
+      "parallel_group": "analysis"
+    },
+    {
+      "name": "pre_draft_visualizations",
+      "script": "ffbayes.visualization.create_pre_draft_visualizations",
+      "description": "Generate comprehensive pre-draft visualizations for draft strategy",
+      "timeout": 180,
+      "retry_count": 2,
+      "dependencies": ["draft_strategy_comparison"],
+      "critical": false,
+      "parallel_group": "analysis"
+    },
+    {
+      "name": "team_aggregation",
+      "script": "ffbayes.analysis.bayesian_team_aggregation",
+      "description": "Aggregate individual predictions to team totals (POST-DRAFT ONLY)",
+      "timeout": 300,
+      "retry_count": 2,
+      "dependencies": ["hybrid_mc_analysis"],
+      "critical": false,
+      "parallel_group": "modeling"
+    },
+    {
+      "name": "monte_carlo_validation",
+      "script": "ffbayes.analysis.montecarlo_historical_ff",
+      "args": "",
+      "description": "Validate drafted teams using Monte Carlo simulation (POST-DRAFT ONLY)",
+      "timeout": 600,
+      "retry_count": 2,
+      "dependencies": ["bayesian_draft_strategy", "create_unified_dataset"],
+      "critical": false,
+      "parallel_group": "validation"
+    },
+
+    {
+      "name": "post_draft_visualizations",
+      "script": "ffbayes.visualization.create_post_draft_visualizations",
+      "description": "Generate comprehensive post-draft visualizations for team analysis",
+      "timeout": 180,
+      "retry_count": 2,
+      "dependencies": ["monte_carlo_validation", "team_aggregation"],
       "critical": false,
       "parallel_group": "analysis"
     }

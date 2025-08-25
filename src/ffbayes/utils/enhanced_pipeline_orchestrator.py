@@ -64,6 +64,7 @@ class PipelineStep:
 	critical: bool
 	parallel_group: str
 	args: str = ""
+	env: Optional[Dict[str, str]] = None
 	status: StepStatus = StepStatus.PENDING
 	start_time: Optional[float] = None
 	end_time: Optional[float] = None
@@ -89,11 +90,15 @@ class PipelineResult:
 class EnhancedPipelineOrchestrator:
 	"""Enhanced pipeline orchestrator with advanced features."""
 	
-	def __init__(self, config_file: str = "config/pipeline_config.json"):
+	def __init__(self, config_file: str = None, main_log_file=None):
+		if config_file is None:
+			from ffbayes.utils.path_constants import get_pipeline_config_file
+			config_file = str(get_pipeline_config_file())
 		"""Initialize the enhanced pipeline orchestrator.
 		
 		Args:
 			config_file: Path to pipeline configuration file
+			main_log_file: Optional file handle from main pipeline for integrated logging
 		"""
 		self.config_file = config_file
 		self.config = self._load_configuration()
@@ -102,6 +107,7 @@ class EnhancedPipelineOrchestrator:
 		self.results: List[PipelineResult] = []
 		self.pipeline_start_time: Optional[float] = None
 		self.pipeline_end_time: Optional[float] = None
+		self.main_log_file = main_log_file
 		
 		# Performance tracking
 		self.performance_metrics = {
@@ -118,6 +124,35 @@ class EnhancedPipelineOrchestrator:
 			'critical_failures': 0,
 			'graceful_degradation_active': False
 		}
+		
+		# Setup logging
+		self.logger = logging.getLogger(__name__)
+	
+	def _log_to_both(self, message: str, level: str = "info"):
+		"""Log message to both orchestrator logger and main pipeline log file.
+		
+		Args:
+			message: Message to log
+			level: Log level (info, warning, error, debug)
+		"""
+		# Log to orchestrator logger
+		if level == "info":
+			self.logger.info(message)
+		elif level == "warning":
+			self.logger.warning(message)
+		elif level == "error":
+			self.logger.error(message)
+		elif level == "debug":
+			self.logger.debug(message)
+		
+		# Also write to main pipeline log file if available
+		if self.main_log_file and hasattr(self.main_log_file, 'write'):
+			try:
+				timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+				self.main_log_file.write(f"{timestamp} - {message}\n")
+				self.main_log_file.flush()
+			except Exception:
+				pass  # Don't fail if main log file write fails
 	
 	def _load_configuration(self) -> Dict[str, Any]:
 		"""Load pipeline configuration from file.
@@ -208,7 +243,8 @@ class EnhancedPipelineOrchestrator:
 				timeout=step_config['timeout'],
 				retry_count=step_config['retry_count'],
 				critical=step_config['critical'],
-				parallel_group=step_config['parallel_group']
+				parallel_group=step_config['parallel_group'],
+				env=step_config.get('env', None)
 			)
 			steps.append(step)
 		return steps
@@ -372,18 +408,53 @@ class EnhancedPipelineOrchestrator:
 					)
 				cmd = [sys.executable, step.script]
 			
-			result = subprocess.run(
+			# Prepare environment variables
+			env = os.environ.copy()
+			if hasattr(step, 'env') and step.env:
+				env.update(step.env)
+			
+			# Ensure conda environment is properly activated
+			if 'CONDA_DEFAULT_ENV' in env and env['CONDA_DEFAULT_ENV'] == 'ffbayes':
+				# Use conda environment python
+				conda_prefix = env.get('CONDA_PREFIX')
+				if conda_prefix:
+					conda_python = os.path.join(conda_prefix, 'bin', 'python')
+					if os.path.exists(conda_python):
+						cmd[0] = conda_python
+			
+			# Stream output in real-time to both console and log
+			process = subprocess.Popen(
 				cmd,
-				capture_output=True,
+				stdout=subprocess.PIPE,
+				stderr=subprocess.STDOUT,
 				text=True,
-				timeout=step.timeout
+				env=env,
+				bufsize=1,
+				universal_newlines=True
 			)
+			
+			# Collect output while streaming to console
+			stdout_lines = []
+			while True:
+				output = process.stdout.readline()
+				if output == '' and process.poll() is not None:
+					break
+				if output:
+					output = output.strip()
+					if output:
+						print(output)  # Stream to console
+						stdout_lines.append(output)
+						self._log_to_both(f"[{step.name}] {output}", "info")
+			
+			# Wait for process to complete
+			return_code = process.wait()
+			result_stdout = '\n'.join(stdout_lines)
 			
 			step.end_time = time.time()
 			step.execution_time = step.end_time - step.start_time
-			step.exit_code = result.returncode
+			step.exit_code = return_code
 			
-			if result.returncode == 0:
+			if return_code == 0:
 				step.status = StepStatus.COMPLETED
 				logger.info(f"Step {step.name} completed successfully in {step.execution_time:.1f}s")
 				return PipelineResult(
@@ -391,12 +462,12 @@ class EnhancedPipelineOrchestrator:
 					success=True,
 					execution_time=step.execution_time,
 					retry_attempts=step.retry_attempts,
-					exit_code=result.returncode,
-					output=result.stdout
+					exit_code=return_code,
+					output=result_stdout
 				)
 			else:
 				step.status = StepStatus.FAILED
-				error_msg = f"Step failed with exit code {result.returncode}"
+				error_msg = f"Step failed with exit code {return_code}"
 				step.error_message = error_msg
 				logger.error(f"Step {step.name} failed: {error_msg}")
 				return PipelineResult(
@@ -405,8 +476,8 @@ class EnhancedPipelineOrchestrator:
 					execution_time=step.execution_time,
 					retry_attempts=step.retry_attempts,
 					error_message=error_msg,
-					exit_code=result.returncode,
-					stderr=result.stderr
+					exit_code=return_code,
+					stderr=""
 				)
 		except subprocess.TimeoutExpired:
 			step.status = StepStatus.TIMEOUT
@@ -609,7 +680,7 @@ class EnhancedPipelineOrchestrator:
 		# Non-critical step failed - check graceful degradation
 		if self.config['error_handling']['non_critical_failure_action'] == 'continue_with_warnings':
 			logger.warning(f"Non-critical step {step.name} failed. Continuing with warnings.")
-			step.status = StepStatus.SKIPPED
+			step.status = StepStatus.FAILED
 			return True
 		
 		return False
@@ -752,8 +823,8 @@ class EnhancedPipelineOrchestrator:
 				
 				self.performance_metrics['failed_steps'] += 1
 				
-				if step.status == StepStatus.SKIPPED:
-					completed_steps.add(step.name)
+				# Don't add failed steps to completed_steps - they failed!
+				# Only add to completed_steps if they actually succeeded
 			
 		except Exception as e:
 			logger.error(f"Error executing step {step.name}: {e}")
@@ -799,6 +870,17 @@ class EnhancedPipelineOrchestrator:
 		logger.info(f"Steps completed: {self.performance_metrics['completed_steps']}")
 		logger.info(f"Steps failed: {self.performance_metrics['failed_steps']}")
 		logger.info(f"Parallel efficiency: {self.performance_metrics['parallel_efficiency']:.2f}")
+		
+		# Manage visualizations after pipeline completion
+		try:
+			from datetime import datetime
+
+			from ffbayes.utils.visualization_manager import manage_visualizations
+			current_year = datetime.now().year
+			viz_results = manage_visualizations(current_year)
+			logger.info(f"Visualization management completed: {len(viz_results['copied_files'])} files copied")
+		except Exception as e:
+			logger.warning(f"Visualization management failed: {e}")
 	
 	def get_execution_summary(self) -> Dict[str, Any]:
 		"""Get comprehensive execution summary.
