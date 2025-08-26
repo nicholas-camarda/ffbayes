@@ -7,7 +7,7 @@ A sophisticated fantasy football analytics system that combines Monte Carlo simu
 ### **Step 1: Setup**
 ```bash
 # Clone and install
-git clone <your-repo-url>
+git clone https://github.com/nicholas-camarda/ffbayes.git
 cd ffbayes
 pip install -e .
 
@@ -39,7 +39,6 @@ python -m ffbayes.run_pipeline_split pre_draft
 **What You Get:**
 - 📊 **VOR Strategy**: Excel file with traditional rankings
 - 🧠 **Bayesian Strategy**: JSON with advanced predictions
-- 📈 **Visualizations**: Charts comparing approaches
 - 📋 **Draft Guide**: Complete strategy for your position
 
 ### **Step 4: Use During Draft**
@@ -66,7 +65,7 @@ python -m ffbayes.run_pipeline_split post_draft
 - 🎯 **Team Analysis**: Player contributions and reliability
 - 📊 **Season Projections**: Weekly score expectations with confidence intervals
 - 🔍 **Monte Carlo Validation**: 5000 simulations of your team's performance
-- 📈 **Visualizations**: Team composition, strength analysis, and projections
+- 📋 **Team Summary**: Comprehensive analysis and recommendations
 
 ---
 
@@ -123,7 +122,7 @@ results/2025/post_draft/
 plots/2025/
 ├── pre_draft/
 │   ├── draft_strategy_comparison/                                       # 📈 Strategy comparison
-│   └── visualizations/                                                  # 📊 Draft analysis charts
+│   └── analysis/                                                        # 📊 Draft analysis data
 └── post_draft/                                                          # 🎯 Team analysis charts
 ```
 
@@ -163,30 +162,30 @@ Defines the 12-step pipeline process:
 6. **Hybrid MC Analysis** - Run Monte Carlo + Bayesian model
 7. **Bayesian Strategy** - Generate advanced draft strategy
 8. **Strategy Comparison** - Compare VOR vs Bayesian
-9. **Pre-Draft Visualizations** - Create strategy charts
+9. **Pre-Draft Analysis** - Generate draft strategy
 10. **Team Aggregation** - Analyze drafted team
 11. **Monte Carlo Validation** - Validate team performance
-12. **Post-Draft Visualizations** - Create team analysis charts
+12. **Team Summary Export** - Save analysis to files
 
 ---
 
 ## 📊 **Visualizations**
 
-FFBayes generates comprehensive visualizations automatically copied to `docs/images/`:
+🚧 **UNDER CONSTRUCTION** 🚧
 
-### **Pre-Draft Visualizations**
-- **Draft Strategy Comparison** - VOR vs Bayesian approach comparison
-- **Position Distribution Analysis** - Optimal position allocation
-- **Draft Summary Dashboard** - Complete strategy overview
-- **Uncertainty Analysis** - Risk profiles and confidence intervals
-- **Positional Value vs Risk** - Risk-adjusted player rankings
+The visualization system is currently being updated to provide more comprehensive and actionable insights. New visualizations will include:
 
-### **Post-Draft Visualizations**
-- **Team Composition Chart** - Roster breakdown with insights
-- **Team Strength Analysis** - Weekly scoring projections
-- **Player Performance Projections** - Individual player outlook
-- **Monte Carlo Validation** - Team performance distribution
-- **Team Summary Dashboard** - Comprehensive team analysis
+### **Pre-Draft Visualizations** (Coming Soon)
+- **Model Performance Dashboard** - Model accuracy and validation metrics
+- **Draft Value Heatmap** - Positional value by draft round
+- **Risk-Reward Analysis** - Player uncertainty and upside potential
+- **Strategy Success Rates** - Historical performance of different approaches
+
+### **Post-Draft Visualizations** (Coming Soon)
+- **Team Composition Analysis** - Roster balance and depth assessment
+- **Performance Projections** - Weekly scoring expectations with confidence intervals
+- **Monte Carlo Validation** - Team performance distribution across simulations
+- **Trade Analysis Tools** - Player value comparison and trade evaluation
 
 ---
 
@@ -282,6 +281,30 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ---
 
+## 
+## 📊 Visualizations
+
+🚧 **UNDER CONSTRUCTION** 🚧
+
+The visualization system is currently being updated to provide more comprehensive and actionable insights for fantasy football decision-making.
+
+### Coming Soon
+
+**Pre-Draft Analysis Tools** - Model performance validation, draft value analysis, and strategy optimization
+
+**Post-Draft Team Insights** - Roster analysis, performance projections, and trade evaluation tools
+
+**Model Validation Metrics** - Accuracy assessment and uncertainty quantification for better decision-making
+
+### Current Status
+
+The visualization pipeline is being rebuilt to provide:
+- More actionable insights
+- Better data validation
+- Improved user experience
+- Comprehensive model performance metrics
+
+Stay tuned for updates as we enhance the visualization capabilities!
 ## 📄 **License**
 
 MIT License - see [LICENSE](LICENSE) file for details.
