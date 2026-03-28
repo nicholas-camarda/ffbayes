@@ -1,10 +1,5 @@
 {
-  "pipeline": {
-    "name": "Fantasy Football Analytics Pipeline",
-    "version": "1.0.0",
-    "description": "Comprehensive fantasy football analytics pipeline with Monte Carlo and Bayesian analysis"
-  },
-  "pipeline_steps": [
+  "steps": [
     {
       "name": "data_collection",
       "script": "ffbayes.data_pipeline.collect_data",
@@ -21,7 +16,9 @@
       "description": "Validate collected data quality",
       "timeout": 120,
       "retry_count": 2,
-      "dependencies": ["data_collection"],
+      "dependencies": [
+        "data_collection"
+      ],
       "critical": true,
       "parallel_group": "data_processing"
     },
@@ -31,7 +28,9 @@
       "description": "Preprocess data for analysis",
       "timeout": 180,
       "retry_count": 2,
-      "dependencies": ["data_validation"],
+      "dependencies": [
+        "data_validation"
+      ],
       "critical": true,
       "parallel_group": "data_processing"
     },
@@ -41,7 +40,9 @@
       "description": "Generate traditional VOR-based draft strategy FIRST to create rankings",
       "timeout": 300,
       "retry_count": 2,
-      "dependencies": ["data_preprocessing"],
+      "dependencies": [
+        "data_preprocessing"
+      ],
       "critical": true,
       "parallel_group": "strategy"
     },
@@ -51,7 +52,9 @@
       "description": "Create unified dataset with VOR rankings for all models",
       "timeout": 120,
       "retry_count": 2,
-      "dependencies": ["vor_draft_strategy"],
+      "dependencies": [
+        "vor_draft_strategy"
+      ],
       "critical": true,
       "parallel_group": "data_processing"
     },
@@ -61,7 +64,9 @@
       "description": "Run Hybrid Monte Carlo + Bayesian analysis with uncertainty layers",
       "timeout": 900,
       "retry_count": 2,
-      "dependencies": ["create_unified_dataset"],
+      "dependencies": [
+        "create_unified_dataset"
+      ],
       "critical": true,
       "parallel_group": "modeling"
     },
@@ -72,7 +77,9 @@
       "description": "Generate optimal draft strategies using Bayesian predictions",
       "timeout": 300,
       "retry_count": 2,
-      "dependencies": ["hybrid_mc_analysis"],
+      "dependencies": [
+        "hybrid_mc_analysis"
+      ],
       "critical": true,
       "parallel_group": "strategy"
     },
@@ -83,29 +90,11 @@
       "description": "Generate hybrid VOR + Bayesian draft strategy with Excel output",
       "timeout": 300,
       "retry_count": 2,
-      "dependencies": ["hybrid_mc_analysis"],
+      "dependencies": [
+        "hybrid_mc_analysis"
+      ],
       "critical": true,
       "parallel_group": "strategy"
-    },
-    {
-      "name": "draft_strategy_comparison",
-      "script": "ffbayes.analysis.draft_strategy_comparison",
-      "description": "Compare VOR and Bayesian draft strategies with analysis and visualizations",
-      "timeout": 300,
-      "retry_count": 2,
-      "dependencies": ["vor_draft_strategy", "bayesian_draft_strategy"],
-      "critical": false,
-      "parallel_group": "analysis"
-    },
-    {
-      "name": "pre_draft_visualizations",
-      "script": "ffbayes.visualization.create_pre_draft_visualizations",
-      "description": "Generate comprehensive pre-draft visualizations for draft strategy",
-      "timeout": 180,
-      "retry_count": 2,
-      "dependencies": ["draft_strategy_comparison"],
-      "critical": false,
-      "parallel_group": "analysis"
     },
     {
       "name": "team_aggregation",
@@ -113,7 +102,9 @@
       "description": "Aggregate individual predictions to team totals (POST-DRAFT ONLY)",
       "timeout": 300,
       "retry_count": 2,
-      "dependencies": ["hybrid_mc_analysis"],
+      "dependencies": [
+        "hybrid_mc_analysis"
+      ],
       "critical": false,
       "parallel_group": "modeling"
     },
@@ -124,90 +115,25 @@
       "description": "Validate drafted teams using Monte Carlo simulation (POST-DRAFT ONLY)",
       "timeout": 600,
       "retry_count": 2,
-      "dependencies": ["bayesian_draft_strategy", "create_unified_dataset"],
+      "dependencies": [
+        "bayesian_draft_strategy",
+        "create_unified_dataset"
+      ],
       "critical": false,
       "parallel_group": "validation"
     },
-
     {
       "name": "post_draft_visualizations",
       "script": "ffbayes.visualization.create_post_draft_visualizations",
       "description": "Generate comprehensive post-draft visualizations for team analysis",
       "timeout": 180,
       "retry_count": 2,
-      "dependencies": ["monte_carlo_validation", "team_aggregation"],
+      "dependencies": [
+        "monte_carlo_validation",
+        "team_aggregation"
+      ],
       "critical": false,
       "parallel_group": "analysis"
     }
-  ],
-  "global_config": {
-    "max_parallel_steps": 1,
-    "pipeline_timeout": 7200,
-    "default_timeout": 300,
-    "default_retry_count": 2,
-    "retry_delay": 5,
-    "progress_monitoring": true,
-    "error_recovery": true
-  },
-  "parallel_groups": {
-    "data_processing": {
-      "max_concurrent": 1,
-      "timeout": 600
-    },
-    "modeling": {
-      "max_concurrent": 1,
-      "timeout": 1200
-    },
-    "strategy": {
-      "max_concurrent": 1,
-      "timeout": 600
-    },
-    "validation": {
-      "max_concurrent": 1,
-      "timeout": 900
-    },
-    "analysis": {
-      "max_concurrent": 1,
-      "timeout": 600
-    }
-  },
-  "error_handling": {
-    "retry_strategies": {
-      "exponential_backoff": true,
-      "max_backoff_multiplier": 3,
-      "jitter": true
-    },
-    "critical_failure_action": "stop_pipeline",
-    "non_critical_failure_action": "continue_with_warnings",
-    "max_total_retries": 5
-  },
-  "monitoring": {
-    "alert_thresholds": {
-      "cpu_usage_warning": 0.8,
-      "memory_usage_warning": 0.8,
-      "disk_usage_warning": 0.9
-    },
-    "resource_check_interval": 30,
-    "performance_tracking": true,
-    "resource_usage_tracking": true,
-    "progress_update_interval": 30
-  },
-  "output": {
-    "results_directory": "~/ProjectsRuntime/ffbayes/results",
-    "plots_directory": "~/ProjectsRuntime/ffbayes/plots",
-    "logs_directory": "~/ProjectsRuntime/ffbayes/logs",
-    "cloud_results_directory": "~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results",
-    "cloud_plots_directory": "~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/plots",
-    "cloud_docs_images_directory": "~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/docs/images",
-    "cleanup_old_files": true
-  },
-  "environment": {
-    "python_path": "python",
-    "conda_environment": "ffbayes",
-    "working_directory": "~/Projects/ffbayes",
-    "environment_variables": {
-      "MAX_CORES": "4",
-      "USE_MULTIPROCESSING": "true"
-    }
-  }
+  ]
 }

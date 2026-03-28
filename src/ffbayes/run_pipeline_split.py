@@ -27,7 +27,8 @@ class SplitPipelineRunner:
         """
         self.pipeline_type = pipeline_type
         self.current_year = datetime.now().year
-        from ffbayes.utils.path_constants import (get_post_draft_config_file,
+        from ffbayes.utils.path_constants import (get_logs_dir,
+                                                  get_post_draft_config_file,
                                                   get_pre_draft_config_file)
         if pipeline_type == "pre_draft":
             self.config_file = str(get_pre_draft_config_file())
@@ -37,8 +38,7 @@ class SplitPipelineRunner:
         self.created_dirs = set()  # Track which directories we actually create
 
         # Initialize simple file logging
-        logs_dir = Path("logs")
-        logs_dir.mkdir(parents=True, exist_ok=True)
+        logs_dir = get_logs_dir()
         timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
         self.log_path = logs_dir / f"pipeline-{self.pipeline_type}-{timestamp}.log"
         self.log_file = self.log_path.open('a', encoding='utf-8')
@@ -264,8 +264,8 @@ class SplitPipelineRunner:
                 print("\n🖼️  Managing visualizations...")
                 self._log("\n🖼️  Managing visualizations...")
                 viz_results = manage_visualizations(self.current_year)
-                print(f"✅ Visualization management complete: {len(viz_results['copied_files'])} files copied to docs/images/")
-                self._log(f"✅ Visualization management complete: {len(viz_results['copied_files'])} files copied to docs/images/")
+                print(f"✅ Visualization management complete: {len(viz_results['copied_files'])} files published to cloud workspace/")
+                self._log(f"✅ Visualization management complete: {len(viz_results['copied_files'])} files published to cloud workspace/")
             except Exception as e:
                 print(f"⚠️  Visualization management failed: {e}")
                 self._log(f"⚠️  Visualization management failed: {e}")

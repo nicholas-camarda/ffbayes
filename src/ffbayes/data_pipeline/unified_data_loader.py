@@ -11,13 +11,21 @@ Usage:
 
 
 import pandas as pd
+from pathlib import Path
 
 
-def load_unified_dataset(data_directory='datasets'):
+def load_unified_dataset(data_directory=None):
     """Load the unified dataset created by create_unified_dataset.py."""
     from ffbayes.utils.path_constants import get_unified_dataset_path
-    dataset_path = get_unified_dataset_path()
-    
+
+    if data_directory in (None, '', 'datasets'):
+        dataset_path = get_unified_dataset_path()
+    else:
+        candidate = Path(data_directory).expanduser()
+        if candidate.is_dir():
+            candidate = candidate / 'unified_dataset' / 'unified_dataset.json'
+        dataset_path = candidate
+
     if not dataset_path.exists():
         raise FileNotFoundError(
             f"Unified dataset not found at {dataset_path}. "

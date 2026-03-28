@@ -18,7 +18,7 @@ import pandas as pd
 from sklearn.metrics import mean_absolute_error
 
 
-def load_unified_dataset(data_directory='datasets'):
+def load_unified_dataset(data_directory=None):
     """Load the unified dataset."""
     from ffbayes.data_pipeline.unified_data_loader import load_unified_dataset
     return load_unified_dataset(data_directory)
@@ -137,7 +137,7 @@ def evaluate_baseline_model(data, test_season=None):
         'test_season': test_season
     }
 
-def run_baseline_model(data_directory='datasets', target_players=None):
+def run_baseline_model(data_directory=None, target_players=None):
     """Run the complete baseline model pipeline."""
     print("=" * 60)
     print("Baseline (Naive) Fantasy Football Model")

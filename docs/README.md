@@ -2,6 +2,8 @@
 
 Welcome to the FFBayes documentation! This guide helps you find the right information for your needs.
 
+All generated outputs are written to `~/ProjectsRuntime/ffbayes` during execution and then mirrored to `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes` for published deliverables.
+
 ## 📚 **Documentation Guide**
 
 ### **🚀 New Users: Start Here**
@@ -41,8 +43,8 @@ python -m ffbayes.analysis.montecarlo_historical_ff
 ```
 
 ### **Key Files**
-- **Team File**: `my_ff_teams/drafted_team_2025.tsv`
-- **Main Output**: `results/2025/pre_draft/vor_strategy/DRAFTING STRATEGY -- snake-draft_ppr-0.5_vor_top-120_2025.xlsx`
+- **Team File**: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/data/raw/my_ff_teams/drafted_team_<year>.tsv`
+- **Main Output**: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/vor_strategy/DRAFTING STRATEGY -- snake-draft_ppr-<ppr>_vor_top-<top_rank>_<year>.xlsx`
 - **Configuration**: JSON config files (see main README)
 
 ### **Common Issues**
@@ -85,7 +87,6 @@ docs/
 - **User Issues**: Check the troubleshooting section in the main README
 - **Technical Questions**: See the Technical Deep Dive documentation
 - **Development**: Review the Development Setup and Contributing guides
-- **Bugs**: Check the logs in the `logs/` directory
+- **Bugs**: Check the logs in `~/ProjectsRuntime/ffbayes/logs/`
 
 ---
-

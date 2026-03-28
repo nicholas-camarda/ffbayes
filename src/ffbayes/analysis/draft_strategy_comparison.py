@@ -868,13 +868,17 @@ def main():
     parser = argparse.ArgumentParser(description="Compare VOR and Bayesian draft strategies")
     parser.add_argument('--vor-file', type=str, default=None, help='Path to VOR CSV file')
     parser.add_argument('--bayesian-file', type=str, default=None, help='Path to Bayesian strategy JSON')
-    parser.add_argument('--scenario-glob', type=str, default=None, help='Glob pattern for Bayesian JSONs to batch-compare (e.g., results/draft_strategy/draft_strategy_pos*.json)')
+    parser.add_argument('--scenario-glob', type=str, default=None, help='Glob pattern for Bayesian JSONs to batch-compare (e.g., draft_strategy_pos*.json)')
     args = parser.parse_args()
 
     if args.scenario_glob:
         # Support both absolute and relative patterns
         pattern = args.scenario_glob
-        matched = list(Path().glob(pattern)) if any(ch in pattern for ch in ['/', '*', '?']) else list(Path('results/draft_strategy').glob(pattern))
+        if any(ch in pattern for ch in ['/', '*', '?']):
+            matched = list(Path().glob(pattern))
+        else:
+            from ffbayes.utils.path_constants import get_draft_strategy_dir
+            matched = list(get_draft_strategy_dir(datetime.now().year).glob(pattern))
         matched = sorted(matched)
         print(f"Found {len(matched)} scenario files for comparison")
         for json_path in matched:

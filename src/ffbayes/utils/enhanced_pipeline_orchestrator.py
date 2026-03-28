@@ -435,16 +435,21 @@ class EnhancedPipelineOrchestrator:
 			
 			# Collect output while streaming to console
 			stdout_lines = []
-			while True:
-				output = process.stdout.readline()
-				if output == '' and process.poll() is not None:
-					break
-				if output:
-					output = output.strip()
+			try:
+				while True:
+					output = process.stdout.readline()
+					if output == '' and process.poll() is not None:
+						break
 					if output:
-						print(output)  # Stream to console
-						stdout_lines.append(output)
-						self._log_to_both(f"[{step.name}] {output}", "info")
+						output = output.strip()
+						if output:
+							print(output)  # Stream to console
+							stdout_lines.append(output)
+							self._log_to_both(f"[{step.name}] {output}", "info")
+			except (BrokenPipeError, IOError) as e:
+				# Handle broken pipe gracefully
+				logger.warning(f"Pipe communication issue with {step.name}: {e}")
+				# Continue to wait for process completion
 			
 			# Wait for process to complete
 			return_code = process.wait()
@@ -878,7 +883,7 @@ class EnhancedPipelineOrchestrator:
 			from ffbayes.utils.visualization_manager import manage_visualizations
 			current_year = datetime.now().year
 			viz_results = manage_visualizations(current_year)
-			logger.info(f"Visualization management completed: {len(viz_results['copied_files'])} files copied")
+			logger.info(f"Visualization management completed: {len(viz_results['copied_files'])} files published to cloud workspace")
 		except Exception as e:
 			logger.warning(f"Visualization management failed: {e}")
 	

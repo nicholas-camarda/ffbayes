@@ -12,7 +12,9 @@ import numpy as np
 import pandas as pd
 from alive_progress import alive_bar
 
-PROJECT_ROOT = Path.cwd()
+from ffbayes.utils.path_constants import get_project_root
+
+PROJECT_ROOT = get_project_root()
 
 # Use dynamic years based on available data
 

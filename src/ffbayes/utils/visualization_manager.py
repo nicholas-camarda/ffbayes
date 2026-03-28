@@ -1,14 +1,33 @@
 """
 Visualization Management Utilities
 
-This module handles automatic copying of pipeline visualizations to docs/images
-and updating the README with explanations of what each visualization shows.
+This module publishes pipeline artifacts from the runtime tree into the cloud
+SideProjects workspace. It mirrors results and plots into the cloud tree and
+copies rendered PNGs into the cloud docs/images directory.
 """
 
 import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List
+
+
+def _copy_tree(source_dir: Path, destination_dir: Path) -> List[str]:
+    """Copy a directory tree while preserving relative paths."""
+    copied_files: List[str] = []
+    if not source_dir.exists():
+        return copied_files
+
+    for file_path in source_dir.rglob('*'):
+        if not file_path.is_file():
+            continue
+        relative_path = file_path.relative_to(source_dir)
+        dest_path = destination_dir / relative_path
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(file_path, dest_path)
+        copied_files.append(str(dest_path))
+
+    return copied_files
 
 # Visualization descriptions for README
 VISUALIZATION_DESCRIPTIONS = {
@@ -72,90 +91,43 @@ VISUALIZATION_DESCRIPTIONS = {
 
 
 def copy_visualizations_to_docs(current_year: int = None) -> List[str]:
-    """
-    Copy all pipeline visualizations to docs/images folder.
-    
-    Args:
-        current_year: Year to copy visualizations for (defaults to current year)
-        
-    Returns:
-        List of copied file paths
-    """
+    """Copy rendered visualization PNGs into the cloud docs/images folder."""
     if current_year is None:
         current_year = datetime.now().year
-    
-    # Source directories
+
     from ffbayes.utils.path_constants import (get_post_draft_plots_dir,
-                                              get_pre_draft_plots_dir)
+                                              get_pre_draft_plots_dir,
+                                              get_cloud_docs_images_dir)
     pre_draft_dir = get_pre_draft_plots_dir(current_year) / "visualizations"
     post_draft_dir = get_post_draft_plots_dir(current_year)
+    docs_images_dir = get_cloud_docs_images_dir()
 
-    
-    # Destination directory
-    docs_images_dir = Path("docs/images")
-    docs_images_dir.mkdir(exist_ok=True)
-    
     copied_files = []
-    
-    # Copy pre-draft visualizations
+
     if pre_draft_dir.exists():
-        for file_path in pre_draft_dir.glob("*.png"):
+        for file_path in pre_draft_dir.rglob("*.png"):
             dest_path = docs_images_dir / f"pre_draft_{file_path.stem}.png"
             shutil.copy2(file_path, dest_path)
             copied_files.append(str(dest_path))
-    
-    # Copy post-draft visualizations
+
     if post_draft_dir.exists():
-        for file_path in post_draft_dir.glob("*.png"):
+        for file_path in post_draft_dir.rglob("*.png"):
             dest_path = docs_images_dir / f"post_draft_{file_path.stem}.png"
             shutil.copy2(file_path, dest_path)
             copied_files.append(str(dest_path))
-    
 
-    
     return copied_files
 
 
 def update_readme_with_visualizations() -> bool:
     """
-    Update the README.md file to include visualization explanations.
+    Deprecated helper preserved for compatibility.
     
     Returns:
-        True if README was updated successfully
+        False, because README is no longer mutated automatically
     """
-    readme_path = Path("README.md")
-    if not readme_path.exists():
-        print("⚠️  README.md not found")
-        return False
-    
-    # Read current README
-    with open(readme_path, 'r') as f:
-        readme_content = f.read()
-    
-    # Check if visualizations section already exists
-    if "## 📊 Visualizations" in readme_content:
-        print("📝 Visualizations section already exists in README")
-        return True
-    
-    # Create visualizations section
-    viz_section = create_visualizations_section()
-    
-    # Add to README (before the last section)
-    sections = readme_content.split("\n## ")
-    if len(sections) > 1:
-        # Insert before the last section
-        sections.insert(-1, f"\n## {viz_section}")
-        new_content = "\n## ".join(sections)
-    else:
-        # Append to end
-        new_content = readme_content + "\n\n" + viz_section
-    
-    # Write updated README
-    with open(readme_path, 'w') as f:
-        f.write(new_content)
-    
-    print("✅ Updated README.md with visualization explanations")
-    return True
+    print("ℹ️  README publication is disabled; visualizations are published to cloud outputs instead")
+    return False
 
 
 def create_visualizations_section() -> str:
@@ -163,7 +135,7 @@ def create_visualizations_section() -> str:
     
     section = """📊 Visualizations
 
-FFBayes generates comprehensive visualizations to help you make informed fantasy football decisions. All visualizations are automatically copied to `docs/images/` after each pipeline run.
+FFBayes generates comprehensive visualizations to help you make informed fantasy football decisions. All visualizations are automatically published into the cloud workspace after each successful pipeline run.
 
 ### Pre-Draft Visualizations
 
@@ -233,12 +205,14 @@ All visualizations are automatically updated after each pipeline run, ensuring y
 
 def cleanup_old_visualizations() -> int:
     """
-    Remove old visualization files from docs/images that are no longer relevant.
+    Remove old visualization files from the cloud docs/images tree that are no longer relevant.
     
     Returns:
         Number of files removed
     """
-    docs_images_dir = Path("docs/images")
+    from ffbayes.utils.path_constants import get_cloud_docs_images_dir
+
+    docs_images_dir = get_cloud_docs_images_dir()
     if not docs_images_dir.exists():
         return 0
     
@@ -255,9 +229,9 @@ def cleanup_old_visualizations() -> int:
     return removed_count
 
 
-def manage_visualizations(current_year: int = None) -> Dict[str, any]:
+def manage_visualizations(current_year: int = None) -> Dict[str, Any]:
     """
-    Main function to manage all visualization operations.
+    Main function to publish visualizations and related outputs.
     
     Args:
         current_year: Year to process (defaults to current year)
@@ -268,28 +242,56 @@ def manage_visualizations(current_year: int = None) -> Dict[str, any]:
     if current_year is None:
         current_year = datetime.now().year
     
-    print(f"🖼️  Managing visualizations for {current_year}...")
-    
-    # Copy new visualizations
-    copied_files = copy_visualizations_to_docs(current_year)
-    
-    # Update README
-    readme_updated = update_readme_with_visualizations()
-    
-    # Cleanup old files
+    print(f"🖼️  Publishing visualizations for {current_year}...")
+
+    from ffbayes.utils.path_constants import (
+        get_cloud_post_draft_dir,
+        get_cloud_post_draft_plots_dir,
+        get_cloud_pre_draft_dir,
+        get_cloud_pre_draft_plots_dir,
+        get_post_draft_dir,
+        get_post_draft_plots_dir,
+        get_pre_draft_dir,
+        get_pre_draft_plots_dir,
+    )
+
+    published_result_files = []
+    published_plot_files = []
+
+    published_result_files.extend(
+        _copy_tree(get_pre_draft_dir(current_year), get_cloud_pre_draft_dir(current_year))
+    )
+    published_result_files.extend(
+        _copy_tree(get_post_draft_dir(current_year), get_cloud_post_draft_dir(current_year))
+    )
+    published_plot_files.extend(
+        _copy_tree(get_pre_draft_plots_dir(current_year), get_cloud_pre_draft_plots_dir(current_year))
+    )
+    published_plot_files.extend(
+        _copy_tree(get_post_draft_plots_dir(current_year), get_cloud_post_draft_plots_dir(current_year))
+    )
+
+    # Copy rendered PNGs into the published docs tree.
+    docs_image_files = copy_visualizations_to_docs(current_year)
+
+    # Cleanup old files from the cloud docs tree.
     removed_count = cleanup_old_visualizations()
     
     results = {
-        "copied_files": copied_files,
-        "readme_updated": readme_updated,
+        "copied_files": published_result_files + published_plot_files + docs_image_files,
+        "published_docs_images": docs_image_files,
+        "published_result_files": published_result_files,
+        "published_plot_files": published_plot_files,
+        "readme_updated": False,
         "removed_old_files": removed_count,
         "year": current_year
     }
     
     print("✅ Visualization management complete:")
-    print(f"   📁 Copied {len(copied_files)} files to docs/images/")
-    print(f"   📝 README updated: {readme_updated}")
-    print(f"   🗑️  Removed {removed_count} old files")
+    print(f"   📁 Published {len(published_result_files)} result files to cloud")
+    print(f"   📁 Published {len(published_plot_files)} plot files to cloud")
+    print(f"   🖼️  Copied {len(docs_image_files)} docs images to cloud")
+    print(f"   🗑️  Removed {removed_count} old cloud docs images")
     
     return results
 

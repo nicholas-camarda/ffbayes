@@ -4,17 +4,54 @@ Path Constants - Centralized path management for FFBayes
 Eliminates hardcoded paths throughout the package.
 """
 
+import os
 from pathlib import Path
 
 # Base directories
-BASE_DIR = Path.cwd()
+def get_project_root() -> Path:
+    """Return the canonical project root for the ffbayes repository."""
+    env_root = os.getenv("FFBAYES_PROJECT_ROOT")
+    if env_root:
+        return Path(env_root).expanduser().resolve()
+    return Path(__file__).resolve().parents[3]
+
+
+def get_runtime_root() -> Path:
+    """Return the canonical runtime root for the active project."""
+    env_root = os.getenv("FFBAYES_RUNTIME_ROOT")
+    if env_root:
+        return Path(env_root).expanduser().resolve()
+    return Path.home() / "ProjectsRuntime" / "ffbayes"
+
+
+def get_cloud_root() -> Path:
+    """Return the canonical cloud root for backed-up project artifacts."""
+    env_root = os.getenv("FFBAYES_CLOUD_ROOT")
+    if env_root:
+        return Path(env_root).expanduser().resolve()
+    return Path.home() / "Library" / "CloudStorage" / "OneDrive-Personal" / "SideProjects" / "ffbayes"
+
+
+BASE_DIR = get_project_root()
+RUNTIME_DIR = get_runtime_root()
+PROJECTS_ROOT_DIR = Path.home() / "Projects"
+SIDE_PROJECTS_ROOT_DIR = get_cloud_root()
+RAW_DATA_DIR = get_cloud_root() / "data" / "raw"
+PROCESSED_DATA_CLOUD_DIR = get_cloud_root() / "data" / "processed"
+RAW_SEASON_DATASETS_DIR = RAW_DATA_DIR / "season_datasets"
+RAW_COMBINED_DATASETS_DIR = RAW_DATA_DIR / "combined_datasets"
+RUNTIME_RESULTS_DIR = RUNTIME_DIR / "results"
+RUNTIME_PLOTS_DIR = RUNTIME_DIR / "plots"
+CLOUD_RESULTS_DIR = get_cloud_root() / "results"
+CLOUD_PLOTS_DIR = get_cloud_root() / "plots"
+CLOUD_DOCS_IMAGES_DIR = get_cloud_root() / "docs" / "images"
 SRC_DIR = BASE_DIR / "src"
 CONFIG_DIR = BASE_DIR / "config"
-LOGS_DIR = BASE_DIR / "logs"
-PLOTS_DIR = BASE_DIR / "plots"
+LOGS_DIR = RUNTIME_DIR / "logs"
+PLOTS_DIR = RUNTIME_PLOTS_DIR
 
 # Data directories
-DATASETS_DIR = BASE_DIR / "datasets"
+DATASETS_DIR = RUNTIME_DIR / "datasets"
 SEASON_DATASETS_DIR = DATASETS_DIR / "season_datasets"
 COMBINED_DATASETS_DIR = DATASETS_DIR / "combined_datasets"
 SNAKE_DRAFT_DATASETS_DIR = DATASETS_DIR / "snake_draft_datasets"
@@ -26,7 +63,7 @@ def get_results_dir(year: int = None) -> Path:
     if year is None:
         from datetime import datetime
         year = datetime.now().year
-    path = BASE_DIR / "results" / str(year)
+    path = RUNTIME_RESULTS_DIR / str(year)
     ensure_dir_exists(path)
     return path
 
@@ -36,9 +73,39 @@ def get_pre_draft_dir(year: int = None) -> Path:
     ensure_dir_exists(path)
     return path
 
+def get_pre_draft_analysis_dir(year: int = None) -> Path:
+    """Get pre-draft analysis directory (for features CSVs, etc.)."""
+    path = get_pre_draft_dir(year) / "analysis"
+    ensure_dir_exists(path)
+    return path
+
 def get_post_draft_dir(year: int = None) -> Path:
     """Get post-draft results directory."""
     path = get_results_dir(year) / "post_draft"
+    ensure_dir_exists(path)
+    return path
+
+
+def get_cloud_results_dir(year: int = None) -> Path:
+    """Get published results directory for a specific year."""
+    if year is None:
+        from datetime import datetime
+        year = datetime.now().year
+    path = CLOUD_RESULTS_DIR / str(year)
+    ensure_dir_exists(path)
+    return path
+
+
+def get_cloud_pre_draft_dir(year: int = None) -> Path:
+    """Get published pre-draft results directory."""
+    path = get_cloud_results_dir(year) / "pre_draft"
+    ensure_dir_exists(path)
+    return path
+
+
+def get_cloud_post_draft_dir(year: int = None) -> Path:
+    """Get published post-draft results directory."""
+    path = get_cloud_results_dir(year) / "post_draft"
     ensure_dir_exists(path)
     return path
 
@@ -63,6 +130,12 @@ def get_draft_strategy_dir(year: int = None) -> Path:
     ensure_dir_exists(path)
     return path
 
+def get_draft_strategy_comparison_dir(year: int = None) -> Path:
+    """Get draft strategy comparison directory."""
+    path = get_pre_draft_dir(year) / "draft_strategy_comparison"
+    ensure_dir_exists(path)
+    return path
+
 def get_team_aggregation_dir(year: int = None) -> Path:
     """Get team aggregation directory."""
     path = get_post_draft_dir(year) / "team_aggregation"
@@ -83,7 +156,7 @@ def get_plots_dir(year: int = None) -> Path:
     if year is None:
         from datetime import datetime
         year = datetime.now().year
-    path = PLOTS_DIR / str(year)
+    path = RUNTIME_PLOTS_DIR / str(year)
     ensure_dir_exists(path)
     return path
 
@@ -99,12 +172,68 @@ def get_post_draft_plots_dir(year: int = None) -> Path:
     ensure_dir_exists(path)
     return path
 
+
+def get_cloud_plots_dir(year: int = None) -> Path:
+    """Get published plots directory for a specific year."""
+    if year is None:
+        from datetime import datetime
+        year = datetime.now().year
+    path = CLOUD_PLOTS_DIR / str(year)
+    ensure_dir_exists(path)
+    return path
+
+
+def get_cloud_pre_draft_plots_dir(year: int = None) -> Path:
+    """Get published pre-draft plots directory."""
+    path = get_cloud_plots_dir(year) / "pre_draft"
+    ensure_dir_exists(path)
+    return path
+
+
+def get_cloud_post_draft_plots_dir(year: int = None) -> Path:
+    """Get published post-draft plots directory."""
+    path = get_cloud_plots_dir(year) / "post_draft"
+    ensure_dir_exists(path)
+    return path
+
 # Team files
 def get_teams_dir() -> Path:
     """Get teams directory."""
-    path = BASE_DIR / "my_ff_teams"
+    path = RAW_DATA_DIR / "my_ff_teams"
     ensure_dir_exists(path)
     return path
+
+
+def get_logs_dir() -> Path:
+    """Get logs directory."""
+    path = LOGS_DIR
+    ensure_dir_exists(path)
+    return path
+
+
+def get_misc_datasets_dir() -> Path:
+    """Get directory for user-managed raw helper datasets."""
+    path = RAW_DATA_DIR / "misc-datasets"
+    ensure_dir_exists(path)
+    return path
+
+
+def get_raw_season_datasets_dir() -> Path:
+    """Get cloud raw season dataset directory."""
+    ensure_dir_exists(RAW_SEASON_DATASETS_DIR)
+    return RAW_SEASON_DATASETS_DIR
+
+
+def get_raw_combined_datasets_dir() -> Path:
+    """Get cloud raw combined dataset directory."""
+    ensure_dir_exists(RAW_COMBINED_DATASETS_DIR)
+    return RAW_COMBINED_DATASETS_DIR
+
+
+def get_cloud_docs_images_dir() -> Path:
+    """Get cloud-published documentation image directory."""
+    ensure_dir_exists(CLOUD_DOCS_IMAGES_DIR)
+    return CLOUD_DOCS_IMAGES_DIR
 
 def get_default_team_file() -> Path:
     """Get default team file path."""
@@ -212,19 +341,32 @@ def create_all_required_directories(year: int = None) -> None:
     
     # Core directories
     ensure_dir_exists(LOGS_DIR)
+    ensure_dir_exists(RUNTIME_RESULTS_DIR)
+    ensure_dir_exists(RUNTIME_PLOTS_DIR)
     ensure_dir_exists(DATASETS_DIR)
+    ensure_dir_exists(RAW_DATA_DIR)
+    ensure_dir_exists(PROCESSED_DATA_CLOUD_DIR)
+    ensure_dir_exists(RAW_SEASON_DATASETS_DIR)
+    ensure_dir_exists(RAW_COMBINED_DATASETS_DIR)
     ensure_dir_exists(SEASON_DATASETS_DIR)
     ensure_dir_exists(COMBINED_DATASETS_DIR)
     ensure_dir_exists(SNAKE_DRAFT_DATASETS_DIR)
     ensure_dir_exists(UNIFIED_DATASET_DIR)
+    ensure_dir_exists(CLOUD_RESULTS_DIR)
+    ensure_dir_exists(CLOUD_PLOTS_DIR)
+    ensure_dir_exists(CLOUD_DOCS_IMAGES_DIR)
     
     # Year-based results directories
     ensure_dir_exists(get_results_dir(year))
     ensure_dir_exists(get_pre_draft_dir(year))
     ensure_dir_exists(get_post_draft_dir(year))
+    ensure_dir_exists(get_cloud_results_dir(year))
+    ensure_dir_exists(get_cloud_pre_draft_dir(year))
+    ensure_dir_exists(get_cloud_post_draft_dir(year))
     ensure_dir_exists(get_vor_strategy_dir(year))
     ensure_dir_exists(get_hybrid_mc_dir(year))
     ensure_dir_exists(get_draft_strategy_dir(year))
+    ensure_dir_exists(get_draft_strategy_comparison_dir(year))
     ensure_dir_exists(get_team_aggregation_dir(year))
     ensure_dir_exists(get_monte_carlo_dir(year))
     
@@ -232,8 +374,12 @@ def create_all_required_directories(year: int = None) -> None:
     ensure_dir_exists(get_plots_dir(year))
     ensure_dir_exists(get_pre_draft_plots_dir(year))
     ensure_dir_exists(get_post_draft_plots_dir(year))
+    ensure_dir_exists(get_cloud_plots_dir(year))
+    ensure_dir_exists(get_cloud_pre_draft_plots_dir(year))
+    ensure_dir_exists(get_cloud_post_draft_plots_dir(year))
     
     # Team directory
     ensure_dir_exists(get_teams_dir())
+    ensure_dir_exists(get_misc_datasets_dir())
     
     print(f"✅ All required directories created for year {year}")

@@ -27,6 +27,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Dict, Optional
 
+import numpy as np
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup as BS
@@ -242,11 +243,17 @@ def save_vor_data(vor_df: pd.DataFrame, config: Dict) -> str:
     
     return str(output_path)
 
-def load_combined_dataset(data_directory):
-    """Load the most recent combined dataset from the data directory."""
+def load_combined_dataset(data_directory=None):
+    """Load the most recent combined dataset from the canonical data directory."""
     logger.info("🔄 Loading combined dataset...")
-    
-    output_dir = Path(data_directory) / 'combined_datasets'
+    from ffbayes.utils.path_constants import COMBINED_DATASETS_DIR
+
+    if data_directory in (None, '', 'datasets'):
+        output_dir = COMBINED_DATASETS_DIR
+    else:
+        data_root = Path(data_directory).expanduser()
+        output_dir = data_root / 'combined_datasets'
+
     analysis_files = list(output_dir.glob('*season_modern.csv'))
     
     if not analysis_files:
@@ -407,9 +414,11 @@ def add_vor_rankings(data, vor_file_path):
         
         logger.info("   🔍 Performing fuzzy name matching...")
         
-        # Initialize VOR ranking column
+        # Initialize VOR ranking/values columns
         data['vor_global_rank'] = 121  # Default worst rank
         data['vor_match_confidence'] = 0.0  # Track match quality
+        if 'vor_value' not in data.columns:
+            data['vor_value'] = np.nan
         
         # Track matching statistics
         exact_matches = 0
@@ -440,10 +449,20 @@ def add_vor_rankings(data, vor_file_path):
                     exact_matches += 1
                     data.loc[player_mask, 'vor_global_rank'] = int(vor_match['VALUERANK'])
                     data.loc[player_mask, 'vor_match_confidence'] = confidence / 100.0
+                    if 'VOR' in vor_match:
+                        try:
+                            data.loc[player_mask, 'vor_value'] = float(vor_match['VOR'])
+                        except Exception:
+                            pass
                 elif confidence >= 85:  # Medium confidence match
                     fuzzy_matches += 1
                     data.loc[player_mask, 'vor_global_rank'] = int(vor_match['VALUERANK'])
                     data.loc[player_mask, 'vor_match_confidence'] = confidence / 100.0
+                    if 'VOR' in vor_match:
+                        try:
+                            data.loc[player_mask, 'vor_value'] = float(vor_match['VOR'])
+                        except Exception:
+                            pass
                 else:
                     no_matches += 1
         
@@ -468,6 +487,101 @@ def add_vor_rankings(data, vor_file_path):
         data['vor_match_confidence'] = 0.0
         return data
 
+
+def add_predraft_composites(data, risk_tolerance: str = 'medium'):
+    """Compute and embed pre-draft composite features into unified dataset.
+
+    - Uses historical per-game data to compute player-season metrics, collapsed to player-level
+      by taking the latest available season per player.
+    - Uses VOR numeric values (vor_value) when available to compute RAV and tier cliffs.
+    """
+    logger.info("🔄 Adding pre-draft composite features (RAV, tier cliffs, role strength, momentum)...")
+    from ffbayes.analysis.advanced_stats_calculator import (
+        calculate_advanced_stats_from_existing_data,
+    )
+
+    alpha_map = {'low': 0.25, 'medium': 0.5, 'high': 0.75}
+    alpha = alpha_map.get(str(risk_tolerance).lower(), 0.5)
+
+    df = data.copy()
+
+    # Build advanced stats per game, then collapse to latest player-season
+    try:
+        enriched = calculate_advanced_stats_from_existing_data(df)
+    except Exception as e:
+        logger.warning(f"Advanced stats calculation failed; continuing with minimal features: {e}")
+        enriched = df.copy()
+        for c in ['consistency_score', 'floor_ceiling_spread', 'team_usage_pct', 'recent_form', 'season_trend']:
+            if c not in enriched.columns:
+                enriched[c] = np.nan
+
+    # Aggregate per player-season
+    agg = (
+        enriched.groupby(['Name', 'Position', 'Season'])
+        .agg(
+            consistency_score=('consistency_score', 'mean'),
+            floor_ceiling_spread=('floor_ceiling_spread', 'mean'),
+            team_usage_pct=('team_usage_pct', 'mean'),
+            recent_form=('recent_form', 'mean'),
+            season_trend=('season_trend', 'mean'),
+        )
+        .reset_index()
+    )
+
+    # Take latest season metrics per player
+    latest_idx = agg.groupby('Name')['Season'].transform('max') == agg['Season']
+    latest = agg[latest_idx].drop(columns=['Season']).copy()
+    latest = latest.rename(columns={
+        'consistency_score': 'consistency_score_latest',
+        'floor_ceiling_spread': 'floor_ceiling_spread_latest',
+        'team_usage_pct': 'team_usage_pct_latest',
+        'recent_form': 'recent_form_latest',
+        'season_trend': 'season_trend_latest',
+    })
+
+    # Role strength z per position using latest team_usage_pct
+    if 'team_usage_pct_latest' in latest.columns:
+        latest['role_strength_z'] = np.nan
+        for pos, sub in latest.groupby('Position'):
+            vals = sub['team_usage_pct_latest']
+            mu = vals.mean()
+            sd = vals.std(ddof=0)
+            if sd and not np.isclose(sd, 0.0):
+                latest.loc[sub.index, 'role_strength_z'] = (vals - mu) / sd
+            else:
+                latest.loc[sub.index, 'role_strength_z'] = 0.0
+    else:
+        latest['role_strength_z'] = np.nan
+
+    # Merge latest features to all rows by Name
+    df = df.merge(latest, on=['Name', 'Position'], how='left')
+
+    # Compute RAV if we have vor_value; else leave NaN
+    if 'vor_value' in df.columns:
+        cv = df['consistency_score_latest'].fillna(0.0)
+        df['RAV'] = df['vor_value'].fillna(0.0) / (1.0 + alpha * cv)
+    else:
+        df['RAV'] = np.nan
+
+    # Tier cliff distance by position based on vor_value
+    df['tier_cliff_distance'] = np.nan
+    if 'vor_value' in df.columns:
+        # Build unique per-player vor_value table (prefer latest row per player)
+        player_vor = df[['Name', 'Position', 'vor_value']].drop_duplicates().dropna(subset=['vor_value'])
+        for pos, sub in player_vor.groupby('Position'):
+            sub_sorted = sub.sort_values('vor_value', ascending=False)
+            idx = sub_sorted['Name'].tolist()
+            values = sub_sorted['vor_value'].values
+            if len(values) > 1:
+                diffs = values[:-1] - values[1:]
+                cliff_map = {idx[i]: diffs[i] for i in range(len(diffs))}
+                # Last in rank has NaN
+                cliff_map[idx[-1]] = np.nan
+                mask = df['Name'].isin(cliff_map.keys()) & (df['Position'] == pos)
+                df.loc[mask, 'tier_cliff_distance'] = df.loc[mask, 'Name'].map(cliff_map)
+
+    return df
+
 def calculate_basic_features(data):
     """Calculate basic features needed by all models."""
     logger.info("📊 Calculating basic features...")
@@ -491,7 +605,98 @@ def calculate_basic_features(data):
     logger.info(f"✅ Basic features calculated. Shape: {data.shape}")
     return data
 
-def create_unified_dataset(data_directory='datasets'):
+def add_adp_data(data: pd.DataFrame, adp_df: pd.DataFrame) -> pd.DataFrame:
+    """Merge ADP into unified dataset using fuzzy matching, per player-position.
+
+    Adds columns: adp (float), adp_rank (int), adp_match_confidence (0..1)
+    """
+    logger.info("🔄 Adding ADP data to unified dataset...")
+    df = data.copy()
+    try:
+        from fuzzywuzzy import fuzz
+    except Exception as e:
+        logger.error(f"Fuzzy matching unavailable: {e}")
+        raise
+
+    # Prepare ADP frame
+    adp = adp_df.copy()
+    if 'AVG' in adp.columns:
+        adp['adp'] = pd.to_numeric(adp['AVG'], errors='coerce')
+    else:
+        # If schema differs, attempt to find plausible ADP column
+        candidates = [c for c in adp.columns if c.lower() in ('avg', 'adp')]
+        adp['adp'] = pd.to_numeric(adp[candidates[0]], errors='coerce') if candidates else np.nan
+    adp = adp.dropna(subset=['adp'])
+    adp['adp_rank'] = adp['adp'].rank(method='first')
+
+    def normalize_name(name):
+        if pd.isna(name):
+            return ""
+        name = str(name).strip()
+        suffixes = [' Jr.', ' Sr.', ' III', ' IV', ' V', ' II', ' I']
+        for s in suffixes:
+            if name.endswith(s):
+                name = name[:-len(s)]
+                break
+        return ' '.join(name.split()).lower()
+
+    def find_best_match(player_name, player_pos, adp_data, threshold=85):
+        norm_name = normalize_name(player_name)
+        if not norm_name:
+            return None
+        best = None
+        best_score = 0
+        pos_col = 'POS' if 'POS' in adp_data.columns else ('position' if 'position' in adp_data.columns else None)
+        pos_matches = adp_data if pos_col is None else adp_data[adp_data[pos_col] == player_pos]
+        for _, row in pos_matches.iterrows():
+            vor_name = normalize_name(row.get('PLAYER', row.get('player', '')))
+            scores = [
+                fuzz.ratio(norm_name, vor_name),
+                fuzz.partial_ratio(norm_name, vor_name),
+                fuzz.token_sort_ratio(norm_name, vor_name),
+                fuzz.token_set_ratio(norm_name, vor_name),
+            ]
+            score = max(scores)
+            if score > best_score and score >= threshold:
+                best_score = score
+                best = row
+        return (best, best_score) if best is not None else None
+
+    # Initialize columns
+    if 'adp' not in df.columns:
+        df['adp'] = np.nan
+    if 'adp_rank' not in df.columns:
+        df['adp_rank'] = np.nan
+    if 'adp_match_confidence' not in df.columns:
+        df['adp_match_confidence'] = 0.0
+
+    unique_players = df[['Name', 'Position']].drop_duplicates()
+    exact = fuzzy = missing = 0
+    for _, r in unique_players.iterrows():
+        name = r['Name']
+        pos = r['Position']
+        match = find_best_match(name, pos, adp)
+        if match is None:
+            missing += 1
+            continue
+        m, conf = match
+        mask = (df['Name'] == name) & (df['Position'] == pos)
+        try:
+            df.loc[mask, 'adp'] = float(m['adp'])
+            df.loc[mask, 'adp_rank'] = int(m['adp_rank'])
+            df.loc[mask, 'adp_match_confidence'] = conf / 100.0
+            if conf >= 95:
+                exact += 1
+            else:
+                fuzzy += 1
+        except Exception:
+            missing += 1
+
+    total = len(unique_players)
+    logger.info(f"   ✅ ADP matches exact: {exact}, fuzzy: {fuzzy}, missing: {missing}, rate: {((exact+fuzzy)/max(1,total))*100:.1f}%")
+    return df
+
+def create_unified_dataset(data_directory=None):
     """Create unified, clean dataset for all models."""
     logger.info("=" * 60)
     logger.info("Creating Unified Fantasy Football Dataset")
@@ -533,13 +738,22 @@ def create_unified_dataset(data_directory='datasets'):
         # Step 5: Add VOR rankings
         logger.info("Step 5: Adding VOR rankings...")
         data = add_vor_rankings(data, vor_file_path)
-        
-        # Step 6: Calculate basic features
-        logger.info("Step 6: Calculating basic features...")
+
+        # Step 6: Merge ADP to unified dataset
+        logger.info("Step 6: Merging ADP into unified dataset...")
+        data = add_adp_data(data, adp_data)
+
+        # Step 7: Calculate basic features
+        logger.info("Step 7: Calculating basic features...")
         data = calculate_basic_features(data)
-        
-        # Step 7: Save unified dataset
-        logger.info("Step 7: Saving unified dataset...")
+
+        # Step 8: Compute and embed pre-draft composite features (RAV, cliffs, role, momentum)
+        logger.info("Step 8: Computing pre-draft composite features...")
+        risk_tol = os.getenv('RISK_TOLERANCE', 'medium')
+        data = add_predraft_composites(data, risk_tolerance=risk_tol)
+
+        # Step 9: Save unified dataset
+        logger.info("Step 9: Saving unified dataset...")
         from ffbayes.utils.path_constants import (
             get_unified_dataset_csv_path,
             get_unified_dataset_excel_path,

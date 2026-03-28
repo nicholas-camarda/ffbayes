@@ -25,17 +25,23 @@ __pycache__/
 # Data & Artifacts
 datasets/
 combined_datasets/
-misc-datasets/
+misc-datasets
 old*
 old *
 snake_draft_datasets/
+docs/images/
+
+# Workspace roots / local-only placeholders
+logs
+plots
+results
+my_ff_teams
+.playwright-mcp/
+AGENTS.md
 
 
 # Outputs
 *.tsv
-logs/
-plots/
-results/
 
 # Track Agent OS product docs
 !.agent-os/product/

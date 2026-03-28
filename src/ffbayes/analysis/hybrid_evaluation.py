@@ -26,7 +26,7 @@ def get_output_dir() -> Path:
 
 def load_unified() -> pd.DataFrame:
 	from ffbayes.data_pipeline.unified_data_loader import load_unified_dataset
-	return load_unified_dataset('datasets')
+	return load_unified_dataset()
 
 
 def load_hybrid_predictions() -> dict:
