@@ -7,6 +7,7 @@ Collects raw NFL data from multiple sources with sophisticated processing.
 
 
 # Import progress monitoring utilities
+import json
 import signal
 import shutil
 import time
@@ -19,7 +20,9 @@ from alive_progress import alive_bar
 
 from ffbayes.utils.path_constants import (COMBINED_DATASETS_DIR,
                                           RAW_COMBINED_DATASETS_DIR,
+                                          RAW_DATA_DIR,
                                           RAW_SEASON_DATASETS_DIR,
+                                          RUNTIME_DIR,
                                           SEASON_DATASETS_DIR)
 
 try:
@@ -68,6 +71,74 @@ def mirror_raw_dataset(source_file: Path, destination_dir: Path) -> Path:
     destination_file = destination_dir / source_file.name
     shutil.copy2(source_file, destination_file)
     return destination_file
+
+
+def _summarize_csv_file(file_path: Path) -> dict:
+    """Summarize a CSV file for collection provenance."""
+    data = pd.read_csv(file_path)
+    return {
+        "path": str(file_path),
+        "rows": int(len(data)),
+        "columns": list(data.columns),
+        "size_bytes": int(file_path.stat().st_size),
+    }
+
+
+def build_collection_manifest(
+    requested_years,
+    successful_years,
+    runtime_season_dir: Path = SEASON_DATASETS_DIR,
+    raw_season_dir: Path = RAW_SEASON_DATASETS_DIR,
+    runtime_combined_dir: Path = COMBINED_DATASETS_DIR,
+    raw_combined_dir: Path = RAW_COMBINED_DATASETS_DIR,
+) -> dict:
+    """Build a provenance manifest for the collection step."""
+    runtime_season_files = sorted(runtime_season_dir.glob("*season.csv"))
+    raw_season_files = sorted(raw_season_dir.glob("*season.csv"))
+    runtime_combined_file = runtime_combined_dir / "combined_data.csv"
+    raw_combined_file = raw_combined_dir / "combined_data.csv"
+
+    manifest = {
+        "requested_years": list(requested_years),
+        "successful_years": list(successful_years),
+        "runtime": {
+            "season_files": [
+                _summarize_csv_file(file_path) for file_path in runtime_season_files
+            ],
+            "combined_file": (
+                _summarize_csv_file(runtime_combined_file)
+                if runtime_combined_file.exists()
+                else None
+            ),
+        },
+        "cloud_raw": {
+            "season_files": [
+                _summarize_csv_file(file_path) for file_path in raw_season_files
+            ],
+            "combined_file": (
+                _summarize_csv_file(raw_combined_file)
+                if raw_combined_file.exists()
+                else None
+            ),
+        },
+    }
+
+    return manifest
+
+
+def write_collection_manifest(
+    manifest: dict,
+    runtime_manifest_path: Path = RUNTIME_DIR / "collection_manifest.json",
+    raw_manifest_path: Path = RAW_DATA_DIR / "collection_manifest.json",
+) -> tuple[Path, Path]:
+    """Write the collection manifest to runtime and cloud raw locations."""
+    runtime_manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_manifest_path.parent.mkdir(parents=True, exist_ok=True)
+
+    payload = json.dumps(manifest, indent=2, sort_keys=True)
+    runtime_manifest_path.write_text(payload + "\n", encoding="utf-8")
+    raw_manifest_path.write_text(payload + "\n", encoding="utf-8")
+    return runtime_manifest_path, raw_manifest_path
 
 
 def timeout_handler(signum, frame):
@@ -715,6 +786,11 @@ def main(args=None):
     # Combine datasets
     if successful_years:
         interface.handle_errors(combine_datasets, SEASON_DATASETS_DIR, COMBINED_DATASETS_DIR, successful_years)
+
+    manifest = build_collection_manifest(years, successful_years)
+    runtime_manifest_path, raw_manifest_path = write_collection_manifest(manifest)
+    logger.info(f"Collection manifest saved to: {runtime_manifest_path}")
+    logger.info(f"Collection manifest mirrored to: {raw_manifest_path}")
     
     elapsed_time = time.time() - start_time
     logger.info(f"Collection completed in {elapsed_time:.1f} seconds")
