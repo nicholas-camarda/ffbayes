@@ -58,11 +58,9 @@ class ModelComparisonFramework:
         if file_path is None:
             # Search for latest Monte Carlo results with year-based paths
             current_year = datetime.now().year
-            from ffbayes.utils.training_config import \
-                get_monte_carlo_training_years
+            from ffbayes.utils.training_config import get_monte_carlo_training_years
             training_years = get_monte_carlo_training_years()
-            from ffbayes.utils.path_constants import (get_monte_carlo_dir,
-                                                      get_team_aggregation_dir)
+            from ffbayes.utils.path_constants import get_monte_carlo_dir, get_team_aggregation_dir
             
             search_patterns = [
                 str(get_monte_carlo_dir(current_year) / f'mc_projections_{current_year}_*.tsv'),
@@ -160,8 +158,7 @@ class ModelComparisonFramework:
         if file_path is None:
             # Search for latest Bayesian results
             current_year = datetime.now().year
-            from ffbayes.utils.path_constants import (get_bayesian_model_dir,
-                                                      get_hybrid_mc_dir)
+            from ffbayes.utils.path_constants import get_bayesian_model_dir, get_hybrid_mc_dir
             
             search_patterns = [
                 str(get_hybrid_mc_dir(current_year) / "hybrid_model_results.json"),
@@ -307,11 +304,10 @@ class ModelComparisonFramework:
         try:
             import numpy as np
 
-            from ffbayes.data_pipeline.unified_data_loader import \
-                load_unified_dataset
+            from ffbayes.data_pipeline.unified_data_loader import load_unified_dataset
 
             # Load historical weekly data
-            df = load_unified_dataset('datasets')
+            df = load_unified_dataset()
             if not {'Name', 'FantPt', 'G#', 'Season'}.issubset(df.columns):
                 raise ValueError("Unified dataset missing required columns")
             

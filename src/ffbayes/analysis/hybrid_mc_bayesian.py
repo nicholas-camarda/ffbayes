@@ -39,7 +39,7 @@ from ffbayes.data_pipeline.unified_data_loader import load_unified_dataset
 class HybridMCBayesianModel:
     """Hybrid Monte Carlo + Bayesian uncertainty model."""
     
-    def __init__(self, data_directory='datasets'):
+    def __init__(self, data_directory=None):
         """Initialize the hybrid model."""
         self.data_directory = data_directory
         self.data = None

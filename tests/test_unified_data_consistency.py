@@ -1,78 +1,79 @@
-#!/usr/bin/env python3
-"""
-test_unified_data_consistency.py - Test Unified Data Consistency
-Verify that all models can access the same player data consistently.
-"""
+import importlib
+from pathlib import Path
 
-def test_unified_data_consistency():
-    """Test that all models can access the same unified dataset."""
-    print("=" * 60)
-    print("Testing Unified Data Consistency Across All Models")
-    print("=" * 60)
-    
-    try:
-        # Test 1: Load unified dataset directly
-        print("\n🔍 Test 1: Direct unified dataset loading")
-        from ffbayes.data_pipeline.unified_data_loader import load_unified_dataset
-        data = load_unified_dataset()
-        print(f"✅ Unified dataset loaded: {data.shape}")
-        
-        # Test 2: Check specific player data
-        print("\n🔍 Test 2: Player data consistency")
-        test_players = ['Christian McCaffrey', 'Josh Allen', 'Saquon Barkley']
-        
-        for player in test_players:
-            player_data = data[data['Name'] == player]
-            if len(player_data) > 0:
-                years = sorted(player_data['Season'].unique())
-                positions = player_data['Position'].unique()
-                print(f"   ✅ {player}: {len(player_data)} rows, years: {years}, positions: {positions}")
-            else:
-                print(f"   ❌ {player}: Not found in unified dataset")
-        
-        # Test 3: Check that all models can access the same data
-        print("\n🔍 Test 3: Model data access consistency")
-        
-        # Baseline model access
-        from src.ffbayes.analysis.baseline_naive_model import load_unified_dataset as baseline_loader
-        baseline_data = baseline_loader()
-        print(f"   ✅ Baseline model: {baseline_data.shape}")
-        
-        # Monte Carlo model access
-        from src.ffbayes.analysis.montecarlo_historical_ff import get_combined_data
-        mc_data = get_combined_data('datasets')
-        print(f"   ✅ Monte Carlo model: {mc_data.shape}")
-        
-        # Bayesian model access
-        from ffbayes.data_pipeline.unified_data_loader import load_unified_dataset as bayesian_loader
-        bayesian_data = bayesian_loader()
-        print(f"   ✅ Bayesian model: {bayesian_data.shape}")
-        
-        # Test 4: Verify data is identical
-        print("\n🔍 Test 4: Data identity verification")
-        if (data.equals(baseline_data) and 
-            data.equals(mc_data) and 
-            data.equals(bayesian_data)):
-            print("   ✅ All models access identical data")
-        else:
-            print("   ❌ Data inconsistency detected between models")
-        
-        # Test 5: Check key features
-        print("\n🔍 Test 5: Key features verification")
-        key_features = ['Name', 'Position', 'FantPt', 'Season', '7_game_avg', 'rank', 'is_home']
-        for feature in key_features:
-            if feature in data.columns:
-                print(f"   ✅ {feature}: Available")
-            else:
-                print(f"   ❌ {feature}: Missing")
-        
-        print("\n🎉 Unified data consistency test completed successfully!")
-        return True
-        
-    except Exception as e:
-        print(f"\n💥 Test failed: {e}")
-        return False
+import pandas as pd
 
-if __name__ == "__main__":
-    success = test_unified_data_consistency()
-    exit(0 if success else 1)
+from ffbayes.data_pipeline.unified_data_loader import load_unified_dataset
+
+
+def _reload_path_constants(monkeypatch, tmp_path):
+    project_root = tmp_path / 'Projects' / 'ffbayes'
+    runtime_root = tmp_path / 'ProjectsRuntime' / 'ffbayes'
+    cloud_root = tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'SideProjects' / 'ffbayes'
+
+    monkeypatch.setenv('FFBAYES_PROJECT_ROOT', str(project_root))
+    monkeypatch.setenv('FFBAYES_RUNTIME_ROOT', str(runtime_root))
+    monkeypatch.setenv('FFBAYES_CLOUD_ROOT', str(cloud_root))
+
+    import ffbayes.utils.path_constants as path_constants
+
+    return importlib.reload(path_constants)
+
+
+def test_unified_loader_prefers_runtime_dataset(monkeypatch, tmp_path):
+    (tmp_path / 'workspace').mkdir()
+    monkeypatch.chdir(tmp_path / 'workspace')
+    path_constants = _reload_path_constants(monkeypatch, tmp_path)
+
+    runtime_dataset = path_constants.get_unified_dataset_path()
+    runtime_dataset.parent.mkdir(parents=True, exist_ok=True)
+    expected = pd.DataFrame(
+        {
+            'Name': ['Runtime Player'],
+            'Position': ['QB'],
+            'Season': [2026],
+            'FantPt': [21.5],
+        }
+    )
+    expected.to_json(runtime_dataset)
+
+    # A poison file in the cwd should be ignored.
+    poison_dataset = Path.cwd() / 'datasets' / 'unified_dataset' / 'unified_dataset.json'
+    poison_dataset.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(
+        {
+            'Name': ['Poison Player'],
+            'Position': ['RB'],
+            'Season': [2026],
+            'FantPt': [1.0],
+        }
+    ).to_json(poison_dataset)
+
+    loaded_default = load_unified_dataset()
+    loaded_legacy = load_unified_dataset('datasets')
+
+    assert loaded_default.equals(expected)
+    assert loaded_legacy.equals(expected)
+
+
+def test_unified_loader_supports_explicit_override(monkeypatch, tmp_path):
+    (tmp_path / 'workspace').mkdir()
+    monkeypatch.chdir(tmp_path / 'workspace')
+    _reload_path_constants(monkeypatch, tmp_path)
+
+    override_root = tmp_path / 'explicit_override'
+    override_dataset = override_root / 'unified_dataset' / 'unified_dataset.json'
+    override_dataset.parent.mkdir(parents=True, exist_ok=True)
+    expected = pd.DataFrame(
+        {
+            'Name': ['Override Player'],
+            'Position': ['WR'],
+            'Season': [2026],
+            'FantPt': [18.25],
+        }
+    )
+    expected.to_json(override_dataset)
+
+    loaded_override = load_unified_dataset(str(override_root))
+
+    assert loaded_override.equals(expected)

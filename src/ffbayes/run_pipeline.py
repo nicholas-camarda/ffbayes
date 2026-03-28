@@ -5,6 +5,7 @@ Runs the complete pipeline in the proper sequence with enhanced orchestration.
 """
 
 import argparse
+from glob import glob
 import os
 import shlex
 import signal
@@ -15,9 +16,46 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+
+def ensure_conda_environment():
+    """Ensure the ffbayes conda environment is activated."""
+    import subprocess
+    import sys
+
+    # Check if we're already in the ffbayes environment
+    if 'ffbayes' in sys.executable or 'CONDA_DEFAULT_ENV' in os.environ and os.environ['CONDA_DEFAULT_ENV'] == 'ffbayes':
+        print("✅ Already in ffbayes conda environment")
+        return True
+
+    print("🔧 Attempting to activate ffbayes conda environment...")
+
+    try:
+        # Try to activate the conda environment
+        result = subprocess.run([
+            'conda', 'run', '-n', 'ffbayes', 'python', '-c',
+            'import sys; print(sys.executable)'
+        ], capture_output=True, text=True, check=True)
+
+        conda_python = result.stdout.strip()
+        print(f"✅ Found ffbayes environment: {conda_python}")
+
+        # Restart the script in the correct environment
+        print("🔄 Restarting script in ffbayes environment...")
+        os.execv(conda_python, [conda_python] + sys.argv)
+
+    except subprocess.CalledProcessError:
+        print("❌ Failed to activate ffbayes conda environment")
+        print("💡 Please run: conda activate ffbayes")
+        print("💡 Then run this script again")
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Error activating conda environment: {e}")
+        print("💡 Please run: conda activate ffbayes")
+        print("💡 Then run this script again")
+        sys.exit(1)
+
 try:
-    from ffbayes.utils.enhanced_pipeline_orchestrator import \
-        EnhancedPipelineOrchestrator
+    from ffbayes.utils.enhanced_pipeline_orchestrator import EnhancedPipelineOrchestrator
 except Exception:
     EnhancedPipelineOrchestrator = None
 
@@ -60,13 +98,15 @@ def create_required_directories():
 
 def cleanup_empty_directories():
     """Clean up empty directories that may cause pipeline issues."""
+    from ffbayes.utils.path_constants import RUNTIME_PLOTS_DIR, RUNTIME_RESULTS_DIR
+
     print("🧹 Cleaning up empty directories...")
     print()
     
     # Directories to check for cleanup
     cleanup_dirs = [
-        "results",
-        "plots"
+        RUNTIME_RESULTS_DIR,
+        RUNTIME_PLOTS_DIR,
     ]
     
     cleaned_count = 0
@@ -101,9 +141,15 @@ def validate_step_outputs(step_name):
     current_year = datetime.now().year
     
     from ffbayes.utils.path_constants import (
-        COMBINED_DATASETS_DIR, SEASON_DATASETS_DIR, SNAKE_DRAFT_DATASETS_DIR,
-        get_draft_strategy_comparison_dir, get_draft_strategy_dir,
-        get_hybrid_mc_dir, get_monte_carlo_dir, get_plots_dir)
+        COMBINED_DATASETS_DIR,
+        SEASON_DATASETS_DIR,
+        SNAKE_DRAFT_DATASETS_DIR,
+        get_draft_strategy_comparison_dir,
+        get_draft_strategy_dir,
+        get_hybrid_mc_dir,
+        get_monte_carlo_dir,
+        get_plots_dir,
+    )
     
     validation_rules = {
         "Data Collection": [
@@ -149,7 +195,7 @@ def validate_step_outputs(step_name):
     for pattern in expected_patterns:
         # Replace {current_year} placeholder with actual year
         actual_pattern = pattern.format(current_year=current_year)
-        matching_files = list(Path(".").glob(actual_pattern))
+        matching_files = glob(actual_pattern)
         if not matching_files:
             missing_files.append(pattern)
         else:
@@ -289,6 +335,7 @@ def run_step(step_name, script_path, description):
 
 def main():
     """Run the complete fantasy football analytics pipeline with enhanced orchestration."""
+    ensure_conda_environment()
     print("🏈 FANTASY FOOTBALL ANALYTICS PIPELINE")
     print("=" * 60)
     print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -302,8 +349,9 @@ def main():
 
     # Initialize logging to file named with phase and timestamp
     try:
-        logs_dir = Path('logs')
-        logs_dir.mkdir(parents=True, exist_ok=True)
+        from ffbayes.utils.path_constants import get_logs_dir
+
+        logs_dir = get_logs_dir()
         start_ts = datetime.now().strftime('%Y%m%d-%H%M%S')
         log_path = logs_dir / f"pipeline-{known_args.phase}-{start_ts}.log"
         global LOG_FILE_HANDLE
@@ -386,4 +434,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

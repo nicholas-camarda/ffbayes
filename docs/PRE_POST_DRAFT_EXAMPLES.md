@@ -2,6 +2,8 @@
 
 This document shows real examples of the outputs you'll receive from FFBayes, both before and after your draft.
 
+Example paths below point at the runtime tree (`~/ProjectsRuntime/ffbayes/...`). Published copies are mirrored into `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/...`.
+
 ## 🎯 **Pre-Draft Pipeline Outputs**
 
 ### **What You Get: Complete Draft Strategy**
@@ -9,7 +11,7 @@ This document shows real examples of the outputs you'll receive from FFBayes, bo
 When you run `python -m ffbayes.run_pipeline_split pre_draft`, you receive:
 
 #### **1. 📊 Draft Cheatsheet (Excel)**
-**File**: `results/2025/pre_draft/vor_strategy/DRAFTING STRATEGY -- snake-draft_ppr-0.5_vor_top-120_2025.xlsx`
+**File**: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/vor_strategy/DRAFTING STRATEGY -- snake-draft_ppr-0.5_vor_top-120_<year>.xlsx`
 
 | Pick | Primary Targets | Backup Options | Position Priority | Strategy | Risk Level |
 |------|----------------|----------------|-------------------|----------|------------|
@@ -19,7 +21,7 @@ When you run `python -m ffbayes.run_pipeline_split pre_draft`, you receive:
 | 31 | Travis Kelce, Mark Andrews, Kyle Pitts | Darren Waller, T.J. Hockenson, Dallas Goedert | TE > WR > RB | TE premium, elite option | Medium |
 
 #### **2. 📋 Player Rankings (Excel)**
-**File**: `results/2025/pre_draft/vor_strategy/snake-draft_ppr-0.5_vor_top-120_2025.csv`
+**File**: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/vor_strategy/snake-draft_ppr-0.5_vor_top-120_<year>.csv`
 
 | Rank | Name | Position | Projected Points | Uncertainty | Tier | VOR Rank |
 |------|------|----------|------------------|-------------|------|----------|
@@ -30,12 +32,12 @@ When you run `python -m ffbayes.run_pipeline_split pre_draft`, you receive:
 | 5 | CeeDee Lamb | WR | 16.2 | 0.11 | 1 | 5 |
 
 #### **3. 📝 Strategy Summary (Text)**
-**File**: `results/2025/pre_draft/draft_strategy/draft_strategy_pos10_2025.json`
+**File**: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/draft_strategy/draft_strategy_pos10_<year>.json`
 
 ```
 ============================================================
 FANTASY FOOTBALL DRAFT STRATEGY - POSITION 10
-Generated: 2025-08-24 20:48
+Generated: <timestamp>
 ============================================================
 
 OVERALL STRATEGY:
@@ -59,7 +61,7 @@ Pick 31: Travis Kelce | Mark Andrews
 ```
 
 #### **4. 📈 Strategy Comparison Visualizations**
-**Files**: `plots/2025/pre_draft/`
+**Files**: `~/ProjectsRuntime/ffbayes/plots/<year>/pre_draft/`
 
 - **VOR vs Bayesian Comparison**: Shows how different approaches rank players
 - **Position Distribution Analysis**: Visualizes position scarcity
@@ -76,7 +78,7 @@ Pick 31: Travis Kelce | Mark Andrews
 When you run `python -m ffbayes.run_pipeline_split post_draft`, you receive:
 
 #### **1. 🎯 Team Aggregation Analysis**
-**File**: `results/2025/post_draft/team_aggregation/team_analysis_results.json`
+**File**: `~/ProjectsRuntime/ffbayes/results/<year>/post_draft/team_aggregation/team_analysis_results.json`
 
 ```json
 {
@@ -114,7 +116,7 @@ When you run `python -m ffbayes.run_pipeline_split post_draft`, you receive:
 ```
 
 #### **2. 📊 Monte Carlo Season Projections**
-**File**: `results/2025/post_draft/montecarlo_results/mc_projections_2025_trained_on_2020-2024.tsv`
+**File**: `~/ProjectsRuntime/ffbayes/results/<year>/post_draft/montecarlo_results/mc_projections_<year>_trained_on_2020-2024.tsv`
 
 | Player | Position | Mean | Std | Min | Max | 10th % | 90th % |
 |--------|----------|------|-----|-----|-----|---------|---------|
@@ -124,7 +126,7 @@ When you run `python -m ffbayes.run_pipeline_split post_draft`, you receive:
 | Travis Kelce | TE | 14.8 | 5.2 | 9.6 | 20.0 | 12.2 | 17.4 |
 
 #### **3. 🔍 Model Comparison Results**
-**File**: `results/2025/post_draft/monte_carlo_validation/mc_validation_results.json`
+**File**: `~/ProjectsRuntime/ffbayes/results/<year>/post_draft/monte_carlo_validation/mc_validation_results.json`
 
 ```json
 {
@@ -145,7 +147,7 @@ When you run `python -m ffbayes.run_pipeline_split post_draft`, you receive:
 ```
 
 #### **4. 📈 Post-Draft Visualizations**
-**Files**: `plots/2025/post_draft/`
+**Files**: `~/ProjectsRuntime/ffbayes/plots/<year>/post_draft/`
 
 - **Team Score Distribution**: Weekly score expectations
 - **Position Analysis**: How each position contributes
@@ -159,7 +161,7 @@ When you run `python -m ffbayes.run_pipeline_split post_draft`, you receive:
 ### **Pre-Draft: During Your Draft**
 
 #### **1. Open Your Draft Cheatsheet**
-- **File**: `DRAFT_CHEATSHEET_POS10_2025.xlsx`
+- **File**: `DRAFT_CHEATSHEET_POS10_<year>.xlsx`
 - **When**: Before each pick
 - **What to do**: Look at your current pick number, see primary targets
 
@@ -170,7 +172,7 @@ When you run `python -m ffbayes.run_pipeline_split post_draft`, you receive:
 - **Strategy**: Why this approach makes sense
 
 #### **3. Use Player Rankings**
-- **File**: `PLAYER_RANKINGS_POS10_2025.xlsx`
+- **File**: `PLAYER_RANKINGS_POS10_<year>.xlsx`
 - **When**: Need to compare players at same position
 - **What to do**: Sort by projected points, consider uncertainty
 

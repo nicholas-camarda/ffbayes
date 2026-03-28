@@ -67,10 +67,17 @@ def get_standard_paths(project_root: Optional[Path] = None) -> StandardPaths:
 	
 	Directories are not created here; run_pipeline.py is responsible for creation.
 	"""
-	root = Path(project_root) if project_root else Path.cwd()
-	plots_root = root / "plots"
-	results_root = root / "results"
-	datasets_root = root / "datasets"
+	if project_root:
+		root = Path(project_root)
+		plots_root = root / "plots"
+		results_root = root / "results"
+		datasets_root = root / "datasets"
+	else:
+		from ffbayes.utils.path_constants import get_results_dir, get_plots_dir, DATASETS_DIR
+		current_year = None
+		plots_root = get_plots_dir(current_year)
+		results_root = get_results_dir(current_year)
+		datasets_root = DATASETS_DIR
 	return StandardPaths(
 		plots_root=plots_root,
 		results_root=results_root,

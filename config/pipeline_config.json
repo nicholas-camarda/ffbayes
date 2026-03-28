@@ -77,6 +77,17 @@
       "parallel_group": "strategy"
     },
     {
+      "name": "hybrid_draft_strategy",
+      "script": "ffbayes.draft_strategy.hybrid_draft_strategy",
+      "args": "--draft-position 10 --league-size 10 --risk-tolerance medium",
+      "description": "Generate hybrid VOR + Bayesian draft strategy with Excel output",
+      "timeout": 300,
+      "retry_count": 2,
+      "dependencies": ["hybrid_mc_analysis"],
+      "critical": true,
+      "parallel_group": "strategy"
+    },
+    {
       "name": "draft_strategy_comparison",
       "script": "ffbayes.analysis.draft_strategy_comparison",
       "description": "Compare VOR and Bayesian draft strategies with analysis and visualizations",
@@ -182,15 +193,18 @@
     "progress_update_interval": 30
   },
   "output": {
-    "results_directory": "results",
-    "plots_directory": "plots",
-    "logs_directory": "logs",
+    "results_directory": "~/ProjectsRuntime/ffbayes/results",
+    "plots_directory": "~/ProjectsRuntime/ffbayes/plots",
+    "logs_directory": "~/ProjectsRuntime/ffbayes/logs",
+    "cloud_results_directory": "~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results",
+    "cloud_plots_directory": "~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/plots",
+    "cloud_docs_images_directory": "~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/docs/images",
     "cleanup_old_files": true
   },
   "environment": {
     "python_path": "python",
     "conda_environment": "ffbayes",
-    "working_directory": ".",
+    "working_directory": "~/Projects/ffbayes",
     "environment_variables": {
       "MAX_CORES": "4",
       "USE_MULTIPROCESSING": "true"

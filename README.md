@@ -2,6 +2,13 @@
 
 A sophisticated fantasy football analytics system that combines Monte Carlo simulations, Bayesian uncertainty modeling, and Value Over Replacement (VOR) analysis to generate optimal draft strategies and post-draft team analysis.
 
+## Workspace Contract
+
+- Source code lives in `~/Projects/ffbayes`
+- Runtime artifacts live in `~/ProjectsRuntime/ffbayes`
+- Raw scraped inputs and published deliverables live in `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes`
+- Successful runs mirror results and plots from runtime into the cloud tree
+
 ## 🚀 **Quick Start**
 
 ### **Step 1: Setup**
@@ -42,12 +49,12 @@ python -m ffbayes.run_pipeline_split pre_draft
 - 📋 **Draft Guide**: Complete strategy for your position
 
 ### **Step 4: Use During Draft**
-- Open `results/2025/pre_draft/vor_strategy/DRAFTING STRATEGY -- snake-draft_ppr-0.5_vor_top-120_2025.xlsx`
+- Open `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/vor_strategy/DRAFTING STRATEGY -- snake-draft_ppr-<ppr>_vor_top-<top_rank>_<year>.xlsx`
 - Follow the pick-by-pick recommendations
 - Use backup options if primary targets are gone
 
 ### **Step 5: Post-Draft Analysis**
-After drafting, save your team to `my_ff_teams/drafted_team_2025.tsv`:
+After drafting, save your team to `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/data/raw/my_ff_teams/drafted_team_<year>.tsv`:
 
 ```tsv
 Name	Position	Team
@@ -94,37 +101,31 @@ Unlike traditional models that fail with new players, FFBayes can:
 ## 📁 **Output Organization**
 
 ### **Pre-Draft Outputs** (Use During Draft)
-```
-results/2025/pre_draft/
-├── vor_strategy/
-│   ├── DRAFTING STRATEGY -- snake-draft_ppr-0.5_vor_top-120_2025.xlsx    # 📊 Main draft guide
-│   └── snake-draft_ppr-0.5_vor_top-120_2025.csv                         # 📋 Raw VOR data
-├── draft_strategy/
-│   └── draft_strategy_pos10_2025.json                                   # 🧠 Bayesian strategy
-└── hybrid_mc_bayesian/
-    ├── hybrid_model_results.json                                        # 🎲 Model predictions
-    └── hybrid_model_summary.json                                        # 📊 Summary stats
-```
+Runtime working tree: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/`
+
+- `vor_strategy/` - Excel draft guide and raw VOR data
+- `draft_strategy/` - Bayesian strategy JSON
+- `hybrid_mc_bayesian/` - Monte Carlo + Bayesian model outputs
+
+Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/pre_draft/`
 
 ### **Post-Draft Outputs** (Use During Season)
-```
-results/2025/post_draft/
-├── team_aggregation/
-│   └── team_analysis_results.json                                       # 🎯 Team analysis
-├── montecarlo_results/
-│   └── mc_projections_2025_trained_on_2020-2024.tsv                    # 📊 Season projections
-└── monte_carlo_validation/
-    └── mc_validation_results.json                                       # 🔍 Validation results
-```
+Runtime working tree: `~/ProjectsRuntime/ffbayes/results/<year>/post_draft/`
+
+- `team_aggregation/` - Team analysis JSON
+- `montecarlo_results/` - Season projections TSV
+- `monte_carlo_validation/` - Validation JSON
+
+Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/post_draft/`
 
 ### **Visualizations** (Analysis & Strategy)
-```
-plots/2025/
-├── pre_draft/
-│   ├── draft_strategy_comparison/                                       # 📈 Strategy comparison
-│   └── analysis/                                                        # 📊 Draft analysis data
-└── post_draft/                                                          # 🎯 Team analysis charts
-```
+Runtime plots: `~/ProjectsRuntime/ffbayes/plots/<year>/`
+
+- `pre_draft/` - Strategy comparison, analysis, and draft decision support
+- `post_draft/` - Team analysis charts
+
+Published plots: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/plots/<year>/`
+Published preview images: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/docs/images/`
 
 ---
 
@@ -206,7 +207,7 @@ python -m ffbayes.run_pipeline_split pre_draft
 
 ### **Post-Draft Analysis**
 ```bash
-# After saving your team to my_ff_teams/drafted_team_2025.tsv:
+# After saving your team to the cloud raw data tree:
 python -m ffbayes.run_pipeline_split post_draft
 ```
 
@@ -226,7 +227,7 @@ python -m ffbayes.run_pipeline_split post_draft
 
 #### **"Pipeline failed with errors"**
 - **Problem**: Critical step failed
-- **Solution**: Check logs in `logs/` directory for detailed error information
+- **Solution**: Check logs in `~/ProjectsRuntime/ffbayes/logs/` for detailed error information
 - **Check**: Verify your team file format matches requirements
 
 #### **"Missing required columns"**

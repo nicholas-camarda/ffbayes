@@ -50,7 +50,8 @@ class BasePlot(ABC):
         
         Args:
             title: Plot title
-            output_dir: Directory to save plots (defaults to plots/2025/pre_draft/visualizations/)
+            output_dir: Directory to save plots (defaults to the runtime
+                plots tree under `~/ProjectsRuntime/ffbayes/plots/<year>/pre_draft/visualizations/`)
         """
         self.title = title
         self.output_dir = output_dir or self._get_default_output_dir()

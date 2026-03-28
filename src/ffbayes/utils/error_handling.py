@@ -81,7 +81,7 @@ class ErrorHandler:
                 context=context,
                 diagnostics={
                     "file_path": str(file_path),
-                    "current_dir": str(Path.cwd()),
+                    "working_directory": str(Path.cwd()),
                     "file_exists": False
                 }
             )
@@ -413,7 +413,7 @@ class ErrorHandler:
                     "step_name": step_name,
                     "missing_outputs": missing_outputs,
                     "expected_outputs": expected_outputs,
-                    "current_directory": str(Path.cwd())
+                    "working_directory": str(Path.cwd())
                 }
             )
     

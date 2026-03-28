@@ -7,7 +7,6 @@ ELIMINATED ALL DUPLICATES - only unique, valuable insights remain.
 import json
 import os
 from datetime import datetime
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -479,8 +478,10 @@ class ConsolidatedHybridVisualizer:
         fig.savefig(chart_path, dpi=300, bbox_inches='tight')
         print(f"✅ Saved: {chart_path}")
         
-        # Also save to docs
-        docs_dir = Path('docs/images/hybrid_visualizations')
+        # Also save to the published cloud docs tree
+        from ffbayes.utils.path_constants import get_cloud_docs_images_dir
+
+        docs_dir = get_cloud_docs_images_dir() / 'hybrid_visualizations'
         docs_dir.mkdir(parents=True, exist_ok=True)
         docs_path = docs_dir / 'vor_validation_chart.png'
         fig.savefig(docs_path, dpi=300, bbox_inches='tight')
@@ -503,8 +504,10 @@ class ConsolidatedHybridVisualizer:
         fig.savefig(essential_path, dpi=300, bbox_inches='tight')
         print(f"✅ Saved: {essential_path}")
         
-        # Also save to docs
-        docs_dir = Path('docs/images/hybrid_visualizations')
+        # Also save to the published cloud docs tree
+        from ffbayes.utils.path_constants import get_cloud_docs_images_dir
+
+        docs_dir = get_cloud_docs_images_dir() / 'hybrid_visualizations'
         docs_dir.mkdir(parents=True, exist_ok=True)
         docs_path = docs_dir / 'essential_insights_chart.png'
         fig.savefig(docs_path, dpi=300, bbox_inches='tight')

@@ -8,6 +8,7 @@ Collects raw NFL data from multiple sources with sophisticated processing.
 
 # Import progress monitoring utilities
 import signal
+import shutil
 import time
 from datetime import datetime
 from pathlib import Path
@@ -16,11 +17,10 @@ import nfl_data_py as nfl
 import pandas as pd
 from alive_progress import alive_bar
 
-# Set up project paths - scripts should be run from project root
-PROJECT_ROOT = Path.cwd()  # Current working directory should be project root
-DATASETS_DIR = PROJECT_ROOT / 'datasets'
-SEASON_DATASETS_DIR = DATASETS_DIR / 'season_datasets'
-COMBINED_DATASETS_DIR = DATASETS_DIR / 'combined_datasets'
+from ffbayes.utils.path_constants import (COMBINED_DATASETS_DIR,
+                                          RAW_COMBINED_DATASETS_DIR,
+                                          RAW_SEASON_DATASETS_DIR,
+                                          SEASON_DATASETS_DIR)
 
 try:
     from ffbayes.utils.progress_monitor import ProgressMonitor
@@ -60,6 +60,14 @@ DEFENSE_SCORING = {
 class TimeoutError(Exception):
     """Custom timeout exception."""
     pass
+
+
+def mirror_raw_dataset(source_file: Path, destination_dir: Path) -> Path:
+    """Mirror a collected dataset into the cloud raw tree."""
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    destination_file = destination_dir / source_file.name
+    shutil.copy2(source_file, destination_file)
+    return destination_file
 
 
 def timeout_handler(signum, frame):
@@ -567,6 +575,9 @@ def collect_data_by_year(year):
     filename = SEASON_DATASETS_DIR / f'{year}season.csv'
     processed_df.to_csv(filename, index=False)
     print(f"   💾 Saved to {filename}")
+
+    raw_filename = mirror_raw_dataset(filename, RAW_SEASON_DATASETS_DIR)
+    print(f"   ☁️  Mirrored raw season dataset to {raw_filename}")
     
     return processed_df
 
@@ -600,6 +611,9 @@ def combine_datasets(directory_path, output_directory_path, years_to_process):
         combined_df.to_csv(output_file, index=False)
         print(f"   💾 Combined dataset saved: {len(combined_df):,} rows")
         print(f"   📁 Check {output_directory_path} for combined dataset")
+
+        raw_output_file = mirror_raw_dataset(output_file, RAW_COMBINED_DATASETS_DIR)
+        print(f"   ☁️  Mirrored raw combined dataset to {raw_output_file}")
         return combined_df
     else:
         print("   ❌ No valid datasets to combine")
