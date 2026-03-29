@@ -48,6 +48,7 @@ ffbayes-compare = "ffbayes.analysis.model_comparison_framework:main"
 ffbayes-viz = "ffbayes.visualization.create_team_aggregation_visualizations:main"
 ffbayes-draft-strategy = "ffbayes.draft_strategy.bayesian_draft_strategy:main"
 ffbayes-compare-strategies = "ffbayes.analysis.draft_strategy_comparison:main"
+ffbayes-bayesian-vor = "ffbayes.analysis.bayesian_vor_comparison:main"
 
 [tool.ruff.lint]
 select = [
