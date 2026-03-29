@@ -5,9 +5,10 @@ A sophisticated fantasy football analytics system that combines Monte Carlo simu
 ## Workspace Contract
 
 - Source code lives in `~/Projects/ffbayes`
-- Runtime data, logs, and per-run artifacts live in `~/ProjectsRuntime/ffbayes`
+- Runtime data, logs, and per-run artifacts live in `~/ProjectsRuntime/ffbayes` unless you override `FFBAYES_RUNTIME_ROOT`
 - Raw scraped inputs and processed analysis data stay in the runtime tree by default
-- Published deliverables are mirrored into `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes` only when you run `ffbayes-publish`
+- Published deliverables are mirrored into `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes` only when you run `ffbayes publish`
+- `FFBAYES_PROJECT_ROOT`, `FFBAYES_RUNTIME_ROOT`, and `FFBAYES_CLOUD_ROOT` let you relocate the source, runtime, or publish trees
 
 ## 🚀 **Quick Start**
 
@@ -37,45 +38,49 @@ Edit `config/user_config.json` to set your preferences:
 }
 ```
 
-### **Step 3: Run Pre-Draft Analysis**
-```bash
-# Generate complete draft strategy
-python -m ffbayes.run_pipeline_split pre_draft
-```
-
-You can also use the consolidated CLI:
+### **Step 3: Run the pipeline**
+The unified CLI exposes the current commands through `ffbayes` and `ffbayes-cli`.
 
 ```bash
-ffbayes collect --years 2021,2022,2023
+# Data collection and preprocessing
+ffbayes collect --years 2021,2022,2023 --allow-stale-season
+ffbayes validate
 ffbayes preprocess
+
+# Draft-day workflow
 ffbayes pre-draft
+ffbayes draft-strategy --draft-position 10 --league-size 10 --risk-tolerance medium
+ffbayes draft-backtest
+ffbayes compare-strategies
+ffbayes bayesian-vor
+
+# Post-draft workflow
+ffbayes validate-team
 ffbayes post-draft
+
+# Publish runtime outputs to the cloud mirror
 ffbayes publish --year 2025 --phase pre_draft
 ```
 
-The collection step now uses `nflreadpy` through a thin adapter that converts
-Polars frames to pandas before they reach the rest of the pipeline, so the
-collector output schema stays the same.
-The collector now refreshes season files on each run instead of reusing older
-CSV output, and the latest-season freshness check is schema-aware rather than
-depending on backend-specific error text.
-The split pipeline now runs collection in summary mode, so it shows the yearly
-collection summary without printing per-row progress. If you want the more
-verbose progress output, run `ffbayes collect` directly.
+If you want the split runner directly, use `ffbayes split pre_draft` or `ffbayes split post_draft`. The module-level commands still work too, but the top-level CLI is the supported entry point.
 
-Maintenance note: if nflverse changes the underlying Python loaders again,
-keep the adaptation logic inside `src/ffbayes/data_pipeline/nflverse_backend.py`
-so the rest of the pipeline stays pandas-first.
+The collection step uses `nflreadpy` through a thin adapter that converts Polars frames to pandas before they reach the rest of the pipeline, so the collector output schema stays the same. The collector refreshes season files on each run instead of reusing older CSV output, and the latest-season freshness check is schema-aware rather than depending on backend-specific error text.
+
+The split pipeline runs collection in summary mode, so it shows the yearly collection summary without printing per-row progress. If you want the more verbose progress output, run `ffbayes collect` directly.
+
+Maintenance note: if nflverse changes the underlying Python loaders again, keep the adaptation logic inside `src/ffbayes/data_pipeline/nflverse_backend.py` so the rest of the pipeline stays pandas-first.
 
 **What You Get:**
-- 📊 **Draft Board Workbook**: `draft_board_<year>.xlsx` with board, tiers, availability, scenarios, diagnostics, and freshness
-- 🧠 **Dashboard Payload**: `dashboard_payload_<year>.json` for the local interactive draft dashboard
-- 🌐 **HTML Fallback**: `draft_board_<year>.html` for quick browser access
-- 📋 **Decision Backtest**: `draft_decision_backtest_<year_range>.json` comparing market, VOR, consensus, recent-form, and draft-score strategies
+- 📊 **Draft Board Workbook**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/draft_strategy/draft_board_<year>.xlsx`
+- 🧠 **Dashboard Payload**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/dashboard/dashboard_payload_<year>.json`
+- 🌐 **HTML Fallback**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/dashboard/draft_board_<year>.html`
+- 📋 **Decision Backtest**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/draft_strategy/draft_decision_backtest_<year_range>.json`
+- 🎯 **Team Analysis**: `~/ProjectsRuntime/ffbayes/runs/<year>/post_draft/results/team_aggregation/team_analysis_results.json`
+- 📈 **Season Projections**: `~/ProjectsRuntime/ffbayes/runs/<year>/post_draft/results/montecarlo_results/mc_projections_<year>_trained_on_<range>.tsv`
 
 If you want the published mirror, run:
 ```bash
-python -m ffbayes.publish_artifacts --year <year> --phase pre_draft
+ffbayes publish --year <year> --phase pre_draft
 ```
 
 ### **Step 4: Use During Draft**
@@ -96,15 +101,17 @@ James Cook	RB	BUF
 
 Then run:
 ```bash
-python -m ffbayes.run_pipeline_split post_draft
+ffbayes validate-team
+ffbayes post-draft
 ```
 
+If you want to mirror the runtime outputs into the cloud workspace, run `ffbayes publish --year <year> --phase post_draft`.
+
 **What You Get:**
-- 🎯 **Team Analysis**: Player contributions and reliability
+- 🎯 **Team Analysis**: Player contributions, team totals, and reliability
 - 📊 **Season Projections**: Weekly score expectations with confidence intervals
-- 🔍 **Monte Carlo Validation**: 5000 simulations of your team's performance
+- 🔍 **Monte Carlo Validation**: Validation artifacts and plots for the drafted roster
 - 📋 **Team Summary**: Comprehensive analysis and recommendations
-- If you want to mirror the runtime outputs into the cloud workspace, run `python -m ffbayes.publish_artifacts --year <year> --phase post_draft`
 
 ---
 
@@ -133,23 +140,23 @@ Unlike traditional models that fail with new players, FFBayes can:
 ## 📁 **Output Organization**
 
 ### **Pre-Draft Outputs** (Use During Draft)
-Runtime working tree: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/`
+Runtime working tree: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/`
 
-- `vor_strategy/` - Excel draft guide and raw VOR data
-- `draft_strategy/` - Canonical draft board workbook, dashboard payload, HTML dashboard, compatibility JSON, and backtest
+- `results/vor_strategy/` - VOR rankings and draft guide outputs
+- `results/draft_strategy/` - Canonical draft board workbook, compatibility JSON, and draft decision backtest
 - `dashboard/` - Interactive dashboard payload and HTML fallback
-- `hybrid_mc_bayesian/` - Monte Carlo + Bayesian model outputs
+- `results/hybrid_mc_bayesian/` - Monte Carlo + Bayesian model outputs
 
-Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/pre_draft/` after `ffbayes-publish`
+Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/pre_draft/` after `ffbayes publish`
 
 ### **Post-Draft Outputs** (Use During Season)
-Runtime working tree: `~/ProjectsRuntime/ffbayes/runs/<year>/post_draft/results/`
+Runtime working tree: `~/ProjectsRuntime/ffbayes/runs/<year>/post_draft/`
 
-- `team_aggregation/` - Team analysis JSON
-- `montecarlo_results/` - Season projections TSV
-- `monte_carlo_validation/` - Validation JSON
+- `results/team_aggregation/` - Team analysis JSON and derived summaries
+- `results/montecarlo_results/` - Season projections TSV files
+- `plots/` - Post-draft charts and validation visuals
 
-Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/post_draft/` after `ffbayes-publish`
+Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/post_draft/` after `ffbayes publish`
 
 ### **Visualizations** (Analysis & Strategy)
 Runtime plots: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/plots/` and `~/ProjectsRuntime/ffbayes/runs/<year>/post_draft/plots/`
@@ -157,8 +164,8 @@ Runtime plots: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/plots/` and `~/P
 - `pre_draft/` - Strategy comparison, draft-score diagnostics, freshness views, and slot sensitivity
 - `post_draft/` - Team analysis charts
 
-Published plots: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/plots/<year>/` after `ffbayes-publish`
-Published preview images: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/docs/images/` after `ffbayes-publish`
+Published plots: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/plots/<year>/` after `ffbayes publish`
+Published preview images: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/docs/images/` after `ffbayes publish`
 
 ---
 
@@ -186,20 +193,24 @@ Published preview images: `~/Library/CloudStorage/OneDrive-Personal/SideProjects
 }
 ```
 
-### **Pipeline Configuration: `config/pipeline_config.json`**
-Defines the pipeline process:
-1. **Data Collection** - Gather NFL fantasy data
-2. **Data Validation** - Verify data quality
-3. **Data Preprocessing** - Prepare for analysis
-4. **VOR Strategy** - Generate traditional rankings
-5. **Unified Dataset** - Combine all data sources
-6. **Hybrid MC Analysis** - Run Monte Carlo + Bayesian model
-7. **Draft Decision Strategy** - Generate the canonical draft utility table and board
-8. **Strategy Comparison** - Backtest market, VOR, consensus, recent-form, and draft-score strategies
-9. **Pre-Draft Analysis** - Generate the draft board, dashboard payload, HTML fallback, and diagnostics
-10. **Team Aggregation** - Analyze drafted team
-11. **Monte Carlo Validation** - Validate team performance
-12. **Team Summary Export** - Save analysis to files
+### **Pipeline Configuration**
+- `config/pipeline_config.json` defines the full end-to-end pipeline.
+- `config/pipeline_pre_draft.json` and `config/pipeline_post_draft.json` drive the split runner.
+- The split runner forwards the active phase through `FFBAYES_PIPELINE_PHASE`.
+
+The current pipeline steps are:
+1. Data collection
+2. Data validation
+3. Data preprocessing
+4. Traditional VOR draft strategy
+5. Unified dataset creation
+6. Hybrid Monte Carlo + Bayesian analysis
+7. Draft decision strategy
+8. Draft strategy comparison
+9. Pre-draft visualizations
+10. Team aggregation
+11. Monte Carlo validation
+12. Post-draft visualizations
 
 ---
 
@@ -243,10 +254,10 @@ Interpretation guide:
 
 ### **Publication**
 - Runtime outputs stay local by default.
-- To mirror selected results into the cloud workspace, run `python -m ffbayes.publish_artifacts --year <year> --phase pre_draft` or `--phase post_draft`.
+- To mirror selected results into the cloud workspace, run `ffbayes publish --year <year> --phase pre_draft` or `--phase post_draft`.
 - Use `--phase both` only when you want both run phases mirrored together.
 
-### **Post-Draft Visualizations** (Coming Soon)
+### **Post-Draft Visualizations**
 - **Team Composition Analysis** - Roster balance and depth assessment
 - **Performance Projections** - Weekly scoring expectations with confidence intervals
 - **Monte Carlo Validation** - Team performance distribution across simulations
@@ -258,21 +269,32 @@ Interpretation guide:
 
 ### **Basic 10-Team League (Position 10)**
 ```bash
-# Edit config/user_config.json first, then:
-python -m ffbayes.run_pipeline_split pre_draft
+ffbayes pre-draft
 ```
 
 ### **12-Team League (Position 5, Full PPR)**
 ```bash
 # Update config/user_config.json:
 # "league_size": 12, "draft_position": 5, "ppr_value": 1.0
-python -m ffbayes.run_pipeline_split pre_draft
+ffbayes pre-draft
 ```
 
 ### **Post-Draft Analysis**
 ```bash
-# After saving your team to the cloud raw data tree:
-python -m ffbayes.run_pipeline_split post_draft
+# After saving your team to the runtime raw data tree:
+ffbayes validate-team
+ffbayes post-draft
+```
+
+### **Other Common Commands**
+```bash
+ffbayes collect --years 2021,2022,2023 --allow-stale-season
+ffbayes preprocess
+ffbayes draft-strategy --draft-position 10 --league-size 10 --risk-tolerance medium
+ffbayes draft-backtest
+ffbayes compare-strategies
+ffbayes bayesian-vor
+ffbayes publish --year 2025 --phase both
 ```
 
 ---
@@ -292,11 +314,16 @@ python -m ffbayes.run_pipeline_split post_draft
 #### **"Pipeline failed with errors"**
 - **Problem**: Critical step failed
 - **Solution**: Check logs in `~/ProjectsRuntime/ffbayes/logs/` for detailed error information
-- **Check**: Verify your team file format matches requirements
+- **Check**: Verify your team file format matches requirements and that `ffbayes validate-team` passes before post-draft analysis
+
+#### **"ffbayes split requires a phase argument"**
+- **Problem**: The explicit split runner needs a phase name
+- **Solution**: Run `ffbayes split pre_draft` or `ffbayes split post_draft`
 
 #### **"Missing required columns"**
 - **Problem**: Team file has wrong column names
 - **Solution**: Use `Name`, `Position`, `Team` columns (or `POS`, `PLAYER`, `BYE` for legacy format)
+- **Default path**: `~/ProjectsRuntime/ffbayes/data/raw/my_ff_teams/drafted_team_<year>.tsv`
 
 ### **Team File Format**
 Your team file should have these columns:
@@ -320,9 +347,9 @@ RB	James Cook	7
 ## 📚 **Technical Documentation**
 
 For detailed technical information:
+- [Documentation Index](docs/README.md) - Navigation for the docs folder
 - [Technical Deep Dive](docs/TECHNICAL_DEEP_DIVE.md) - How the models work
 - [Pre/Post Draft Examples](docs/PRE_POST_DRAFT_EXAMPLES.md) - Usage examples
-- [API Reference](docs/API_REFERENCE.md) - Complete function documentation
 
 ---
 
@@ -338,23 +365,20 @@ For detailed technical information:
 
 ## 🤝 **Contributing**
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
-- Development setup
-- Code standards
-- Testing guidelines
-- Pull request process
+We welcome contributions. Follow the repository guidance in [AGENTS.md](AGENTS.md) and keep changes aligned with the current CLI, path constants, and test coverage.
+
+Before submitting changes, run `ruff check .`, `ruff format .`, and `conda run -n ffbayes pytest -q`.
 
 ---
 
 ## 📊 Visualizations
 
-The visualization layer now produces the draft board HTML dashboard, workbook-backed audit tables, and the supporting validation plots.
+The visualization layer produces the draft board HTML dashboard, workbook-backed audit tables, and the supporting validation plots.
 
 Current outputs:
-- `draft_board_<year>.html` - interactive local draft board
-- `draft_board_<year>.xlsx` - workbook for draft-day review
-- `dashboard_payload_<year>.json` - machine-readable dashboard data
-- `draft_decision_backtest_<year_range>.json` - strategy comparison summary
+- Draft board workbook and dashboard payload in the pre-draft runtime tree
+- Team analysis charts in the post-draft runtime tree
+- Published plots and preview images only after `ffbayes publish`
 
 The dashboard is designed to answer four draft-day questions quickly:
 - Who are the best players right now?
@@ -364,7 +388,7 @@ The dashboard is designed to answer four draft-day questions quickly:
 
 ## 📄 **License**
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT License.
 
 ---
 
