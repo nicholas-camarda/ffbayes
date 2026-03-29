@@ -43,6 +43,16 @@ Edit `config/user_config.json` to set your preferences:
 python -m ffbayes.run_pipeline_split pre_draft
 ```
 
+You can also use the consolidated CLI:
+
+```bash
+ffbayes collect --years 2021,2022,2023
+ffbayes preprocess
+ffbayes pre-draft
+ffbayes post-draft
+ffbayes publish --year 2025 --phase pre_draft
+```
+
 **What You Get:**
 - 📊 **Draft Board Workbook**: `draft_board_<year>.xlsx` with board, tiers, availability, scenarios, diagnostics, and freshness
 - 🧠 **Dashboard Payload**: `dashboard_payload_<year>.json` for the local interactive draft dashboard
