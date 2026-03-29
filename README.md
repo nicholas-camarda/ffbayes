@@ -62,7 +62,22 @@ ffbayes post-draft
 ffbayes publish --year 2025 --phase pre_draft
 ```
 
-If you want the split runner directly, use `ffbayes split pre_draft` or `ffbayes split post_draft`. The module-level commands still work too, but the top-level CLI is the supported entry point.
+### **Command Reference**
+- `ffbayes collect`: downloads raw season data and refreshes the runtime season datasets.
+- `ffbayes validate`: checks the collected data for completeness and freshness.
+- `ffbayes preprocess`: builds the analysis-ready combined dataset used by downstream models.
+- `ffbayes pre-draft`: runs the full pre-draft workflow, including collection, validation, preprocessing, VOR, hybrid modeling, draft-board generation, backtesting, and visualizations.
+- `ffbayes draft-strategy`: generates the draft board workbook, dashboard payload, HTML fallback, and compatibility JSON for the current league settings.
+- `ffbayes draft-backtest`: backtests draft decision strategies against historical season data.
+- `ffbayes compare-strategies`: compares draft strategy variants and summarizes how they differ.
+- `ffbayes bayesian-vor`: compares the Bayesian outputs with traditional VOR rankings.
+- `ffbayes validate-team`: validates your drafted team file before post-draft analysis.
+- `ffbayes post-draft`: runs the post-draft workflow, including team aggregation, Monte Carlo validation, and post-draft plots.
+- `ffbayes publish`: copies selected runtime artifacts into the cloud mirror for long-term storage.
+- `ffbayes split pre_draft` or `ffbayes split post_draft`: runs one phase of the split pipeline directly if you want to bypass the convenience shortcuts.
+- `ffbayes pipeline`: runs the full end-to-end pipeline in one command.
+
+The module-level commands still work too, but the top-level CLI is the supported entry point.
 
 The collection step uses `nflreadpy` through a thin adapter that converts Polars frames to pandas before they reach the rest of the pipeline, so the collector output schema stays the same. The collector refreshes season files on each run instead of reusing older CSV output, and the latest-season freshness check is schema-aware rather than depending on backend-specific error text.
 
