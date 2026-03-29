@@ -82,16 +82,29 @@ def _resolve_existing_vor_csv(current_year: int) -> Path | None:
     filename = get_vor_csv_filename(current_year)
     from ffbayes.utils.path_constants import get_vor_strategy_dir
 
+    legacy_runtime_root = Path.home() / 'ProjectsRuntime' / 'ffbayes'
+    legacy_processed_dir = legacy_runtime_root / 'data' / 'processed' / 'snake_draft_datasets'
+    legacy_organized_dir = (
+        legacy_runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'results' / 'vor_strategy'
+    )
+
     candidates = [
         SNAKE_DRAFT_DATASETS_DIR / filename,
         get_vor_strategy_dir(current_year) / filename,
+        legacy_processed_dir / filename,
+        legacy_organized_dir / filename,
     ]
     for candidate in candidates:
         if candidate.exists():
             return candidate
 
     wildcard_matches = []
-    for directory in [SNAKE_DRAFT_DATASETS_DIR, get_vor_strategy_dir(current_year)]:
+    for directory in [
+        SNAKE_DRAFT_DATASETS_DIR,
+        get_vor_strategy_dir(current_year),
+        legacy_processed_dir,
+        legacy_organized_dir,
+    ]:
         wildcard_matches.extend(
             sorted(directory.glob(f'snake-draft_ppr-*_{current_year}.csv'))
         )
@@ -249,7 +262,7 @@ def _attach_market_snapshot(data: pd.DataFrame, market_snapshot: pd.DataFrame) -
         market_index = {}
         for position, group in market.groupby('__match_position'):
             normalized_names = [
-                (_normalize_player_name(name), idx)
+                (idx, _normalize_player_name(name))
                 for idx, name in enumerate(group['player_name'].tolist())
             ]
             market_index[position] = {
@@ -621,9 +634,14 @@ def load_combined_dataset(data_directory=None):
         source_path=latest_file,
         found_files=[latest_file],
     )
-    write_freshness_manifest(
-        freshness_manifest, RAW_DATA_DIR / 'unified_dataset_freshness.json'
-    )
+    try:
+        write_freshness_manifest(
+            freshness_manifest, RAW_DATA_DIR / 'unified_dataset_freshness.json'
+        )
+    except PermissionError as exc:
+        logger.warning(
+            'Skipping unified dataset freshness manifest write: %s', exc
+        )
 
     if (
         not ALLOW_STALE_SEASON
@@ -1198,14 +1216,31 @@ def create_unified_dataset(data_directory=None):
 
         output_path = get_unified_dataset_path()
         csv_path = get_unified_dataset_csv_path()
+        workspace_runtime_root = Path(__file__).resolve().parents[3] / '.ffbayes_runtime'
+        fallback_dir = workspace_runtime_root / 'data' / 'processed' / 'unified_dataset'
+        fallback_csv_path = fallback_dir / 'unified_dataset.csv'
+        fallback_json_path = fallback_dir / 'unified_dataset.json'
 
-        data.to_csv(csv_path, index=False)
-        data.to_json(output_path, orient='records')
+        write_target_csv = csv_path
+        write_target_json = output_path
+        try:
+            data.to_csv(write_target_csv, index=False)
+            data.to_json(write_target_json, orient='records')
+        except PermissionError as exc:
+            logger.warning(
+                'Primary unified dataset paths are not writable; falling back to %s',
+                fallback_dir,
+            )
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            data.to_csv(fallback_csv_path, index=False)
+            data.to_json(fallback_json_path, orient='records')
+            write_target_csv = fallback_csv_path
+            write_target_json = fallback_json_path
         logger.info(
             'Phase write_outputs completed in %.1fs: csv=%s json=%s',
             time.perf_counter() - phase_start,
-            csv_path,
-            output_path,
+            write_target_csv,
+            write_target_json,
         )
         logger.info('✅ Unified dataset saved in compact machine-readable formats')
         logger.info('✅ Current-year VOR source: %s', vor_file_path)

@@ -17,6 +17,7 @@ import logging
 import os
 from datetime import date
 from io import StringIO
+from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import pandas as pd
@@ -29,6 +30,35 @@ logger = logging.getLogger(__name__)
 
 # Pipeline configuration
 QUICK_TEST = os.getenv('QUICK_TEST', 'false').lower() == 'true'
+
+
+def _resolve_existing_vor_csv(current_year: int, config: Dict) -> Path | None:
+    """Find an existing VOR CSV before scraping FantasyPros."""
+    from ffbayes.utils.vor_filename_generator import get_vor_csv_filename
+
+    legacy_runtime_root = Path.home() / 'ProjectsRuntime' / 'ffbayes'
+    candidates = [
+        Path(config['output_dir']) / get_vor_csv_filename(current_year),
+        Path(config.get('organized_output_dir', '')) / get_vor_csv_filename(current_year),
+        legacy_runtime_root
+        / 'data'
+        / 'processed'
+        / 'snake_draft_datasets'
+        / get_vor_csv_filename(current_year),
+        legacy_runtime_root
+        / 'runs'
+        / str(current_year)
+        / 'pre_draft'
+        / 'results'
+        / 'vor_strategy'
+        / get_vor_csv_filename(current_year),
+    ]
+
+    for candidate in candidates:
+        if candidate and candidate.exists():
+            return candidate
+
+    return None
 
 
 def load_config() -> Dict:
@@ -360,6 +390,28 @@ def main():
     try:
         # Load configuration
         config = load_config()
+        current_year = date.today().year
+        existing_csv = _resolve_existing_vor_csv(current_year, config)
+
+        if existing_csv is not None:
+            logger.info("Reusing existing VOR snapshot: %s", existing_csv)
+            vor_df = pd.read_csv(existing_csv)
+            csv_path, excel_path = save_results(vor_df, config)
+            logger.info("=" * 70)
+            logger.info("VOR Draft Strategy Summary:")
+            logger.info(f"- Top {config['top_rank']} players ranked by VOR")
+            logger.info(f"- PPR scoring: {config['ppr']}")
+            logger.info(f"- CSV output: {csv_path}")
+            logger.info(f"- Excel strategy: {excel_path}")
+            logger.info("=" * 70)
+
+            return {
+                'csv_path': csv_path,
+                'excel_path': excel_path,
+                'top_player': vor_df.iloc[0]['PLAYER'] if not vor_df.empty else None,
+                'top_vor': vor_df.iloc[0]['VOR'] if not vor_df.empty else None,
+                'reused_existing_snapshot': True,
+            }
         
         # Scrape ADP data
         adp_df = make_adp_df(config)

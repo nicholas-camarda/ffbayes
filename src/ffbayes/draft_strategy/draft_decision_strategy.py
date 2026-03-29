@@ -301,15 +301,26 @@ def _build_history_features(history_frame: pd.DataFrame) -> pd.DataFrame:
 
     df = history_frame.copy()
     rename_map: dict[str, str] = {}
+    canonical_columns = set(df.columns)
     for column in df.columns:
         normalized = column.strip().lower().replace(' ', '_')
         if normalized in {'name', 'player', 'player_name'}:
+            if 'player_name' in canonical_columns:
+                continue
             rename_map[column] = 'player_name'
+            canonical_columns.add('player_name')
         elif normalized in {'pos', 'position'}:
+            if 'position' in canonical_columns:
+                continue
             rename_map[column] = 'position'
+            canonical_columns.add('position')
         elif normalized in {'team', 'tm', 'recent_team'}:
+            if 'team' in canonical_columns:
+                continue
             rename_map[column] = 'team'
+            canonical_columns.add('team')
     df = df.rename(columns=rename_map)
+    df = df.loc[:, ~df.columns.duplicated()]
     if 'player_name' not in df.columns or 'position' not in df.columns:
         return pd.DataFrame(columns=['player_name', 'position'])
 

@@ -116,6 +116,47 @@ def test_resolve_existing_vor_csv_falls_back_to_organized_path(
     assert resolved == organized_file
 
 
+def test_resolve_existing_vor_csv_finds_legacy_path(tmp_path, monkeypatch):
+    runtime_dir = tmp_path / 'runtime' / 'snake_draft'
+    organized_dir = tmp_path / 'runtime' / 'organized'
+    legacy_dir = (
+        tmp_path
+        / 'legacy'
+        / 'ProjectsRuntime'
+        / 'ffbayes'
+        / 'data'
+        / 'processed'
+        / 'snake_draft_datasets'
+    )
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    organized_dir.mkdir(parents=True, exist_ok=True)
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(
+        path_constants, 'SNAKE_DRAFT_DATASETS_DIR', runtime_dir, raising=False
+    )
+    monkeypatch.setattr(
+        path_constants,
+        'get_vor_strategy_dir',
+        lambda year: organized_dir,
+        raising=False,
+    )
+
+    legacy_file = legacy_dir / get_vor_csv_filename(2026)
+    _write_vor_snapshot(legacy_file)
+
+    monkeypatch.setattr(
+        cud.Path,
+        'home',
+        lambda: tmp_path / 'legacy',
+        raising=False,
+    )
+
+    resolved = cud._resolve_existing_vor_csv(2026)
+
+    assert resolved == legacy_file
+
+
 def test_create_unified_dataset_reuses_existing_vor_and_writes_compact_outputs(
     tmp_path, monkeypatch
 ):

@@ -10,6 +10,7 @@ import json
 import os
 import signal
 import time
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -33,6 +34,9 @@ try:
     from ffbayes.utils.progress_monitor import ProgressMonitor
 except Exception:
     ProgressMonitor = None
+
+LEGACY_RUNTIME_ROOT = Path.home() / 'ProjectsRuntime' / 'ffbayes'
+LEGACY_SEASON_DATASETS_DIR = LEGACY_RUNTIME_ROOT / 'data' / 'raw' / 'season_datasets'
 
 # Configuration
 CURRENT_YEAR = datetime.now().year
@@ -813,6 +817,32 @@ def collect_data_by_year(year):
     return processed_df
 
 
+def _seed_cached_season_files(years) -> list[int]:
+    """Copy cached season files from the legacy runtime tree when available."""
+    seeded_years = []
+    if not LEGACY_SEASON_DATASETS_DIR.exists():
+        return seeded_years
+
+    SEASON_DATASETS_DIR.mkdir(parents=True, exist_ok=True)
+
+    for year in years:
+        target_file = SEASON_DATASETS_DIR / f'{year}season.csv'
+        if target_file.exists():
+            continue
+
+        source_file = LEGACY_SEASON_DATASETS_DIR / f'{year}season.csv'
+        if not source_file.exists():
+            continue
+
+        shutil.copy2(source_file, target_file)
+        seeded_years.append(year)
+        print(
+            f'   ♻️  Seeded cached season file for {year} from {LEGACY_SEASON_DATASETS_DIR}'
+        )
+
+    return seeded_years
+
+
 def combine_datasets(directory_path, output_directory_path, years_to_process):
     """Combine all datasets into a single file."""
     print('\n🔗 Combining datasets...')
@@ -864,6 +894,9 @@ def collect_nfl_data(years=None, allow_stale_latest: bool = False):
 
     # Create directory structure
     SEASON_DATASETS_DIR.mkdir(parents=True, exist_ok=True)
+    seeded_years = _seed_cached_season_files(years)
+    if seeded_years:
+        print(f'   ✅ Reused cached season files for years: {seeded_years}')
 
     successful_years = []
 
@@ -874,6 +907,14 @@ def collect_nfl_data(years=None, allow_stale_latest: bool = False):
 
         with monitor.monitor(len(years), 'Processing Years'):
             for year in years:
+                cached_file = SEASON_DATASETS_DIR / f'{year}season.csv'
+                if cached_file.exists():
+                    print(
+                        f'⏭️  Skipping year {year} - cached season file already exists'
+                    )
+                    successful_years.append(year)
+                    continue
+
                 # Check if data is available
                 available, result = check_data_availability(year)
                 if not available:

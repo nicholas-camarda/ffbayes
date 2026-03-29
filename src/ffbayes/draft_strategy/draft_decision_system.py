@@ -243,12 +243,19 @@ def normalize_player_frame(player_frame: pd.DataFrame) -> pd.DataFrame:
     df = player_frame.copy()
 
     rename_map = {}
+    canonical_columns = set(df.columns)
     for column in df.columns:
         normalized = column.strip().lower().replace(' ', '_')
         if normalized in {'player', 'player_name', 'name', 'playername'}:
+            if 'player_name' in canonical_columns:
+                continue
             rename_map[column] = 'player_name'
+            canonical_columns.add('player_name')
         elif normalized in {'pos', 'position', 'slot'}:
+            if 'position' in canonical_columns:
+                continue
             rename_map[column] = 'position'
+            canonical_columns.add('position')
         elif normalized in {
             'fpts',
             'fantpt',
@@ -258,21 +265,43 @@ def normalize_player_frame(player_frame: pd.DataFrame) -> pd.DataFrame:
             'proj_points',
             'projection',
         }:
+            if 'proj_points_mean' in canonical_columns:
+                continue
             rename_map[column] = 'proj_points_mean'
+            canonical_columns.add('proj_points_mean')
         elif normalized in {'adp', 'avg', 'average_draft_position', 'market_rank'}:
+            if 'adp' in canonical_columns:
+                continue
             rename_map[column] = 'adp'
+            canonical_columns.add('adp')
         elif normalized in {'mean_projection', 'mean_proj', 'consensus_projection'}:
+            if 'proj_points_mean' in canonical_columns:
+                continue
             rename_map[column] = 'proj_points_mean'
+            canonical_columns.add('proj_points_mean')
         elif normalized in {'std_projection', 'projection_std', 'projection_spread'}:
+            if 'std_projection' in canonical_columns:
+                continue
             rename_map[column] = 'std_projection'
+            canonical_columns.add('std_projection')
         elif normalized in {'uncertainty_score', 'risk_score', 'volatility_score'}:
+            if 'uncertainty_score' in canonical_columns:
+                continue
             rename_map[column] = 'uncertainty_score'
+            canonical_columns.add('uncertainty_score')
         elif normalized in {'vor', 'value_over_replacement'}:
+            if 'vor_value' in canonical_columns:
+                continue
             rename_map[column] = 'vor_value'
+            canonical_columns.add('vor_value')
         elif normalized in {'valuerank', 'vor_rank', 'market_rank_numeric'}:
+            if 'market_rank' in canonical_columns:
+                continue
             rename_map[column] = 'market_rank'
+            canonical_columns.add('market_rank')
 
     df = df.rename(columns=rename_map)
+    df = df.loc[:, ~df.columns.duplicated()]
 
     if 'player_name' not in df.columns:
         raise ValueError('player_frame must include a player name column')

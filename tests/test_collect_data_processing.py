@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -191,3 +193,98 @@ def test_create_dataset_does_not_attach_vor_rankings(monkeypatch):
 
     assert 'rank' not in merged_df.columns
     assert 'Name' in merged_df.columns
+
+
+def test_collect_nfl_data_reuses_cached_season_files(
+    tmp_path, monkeypatch, capsys
+):
+    active_raw = tmp_path / 'active' / 'data' / 'raw' / 'season_datasets'
+    legacy_raw = tmp_path / 'legacy' / 'data' / 'raw' / 'season_datasets'
+    active_processed = tmp_path / 'active' / 'data' / 'processed'
+    active_raw.mkdir(parents=True, exist_ok=True)
+    legacy_raw.mkdir(parents=True, exist_ok=True)
+    active_processed.mkdir(parents=True, exist_ok=True)
+
+    cached_file = legacy_raw / '2025season.csv'
+    pd.DataFrame(
+        [
+            {
+                'G#': 1,
+                'Date': '2025-09-01',
+                'Tm': 'NYG',
+                'Away': 'DAL',
+                'Opp': 'DAL',
+                'FantPt': 12.5,
+                'FantPtPPR': 15.0,
+                'Name': 'Alpha Player',
+                'PlayerID': 'p1',
+                'Position': 'RB',
+                'Season': 2025,
+                'GameInjuryStatus': None,
+                'PracticeInjuryStatus': None,
+                'is_home': 1,
+            }
+        ]
+    ).to_csv(cached_file, index=False)
+
+    monkeypatch.setattr(collect_data, 'SEASON_DATASETS_DIR', active_raw)
+    monkeypatch.setattr(
+        collect_data, 'LEGACY_SEASON_DATASETS_DIR', legacy_raw
+    )
+    monkeypatch.setattr(collect_data, 'RAW_DATA_DIR', tmp_path / 'active' / 'data' / 'raw')
+    monkeypatch.setattr(
+        collect_data, 'COMBINED_DATASETS_DIR', active_processed / 'combined_datasets'
+    )
+
+    class DummyMonitor:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start_timer(self):
+            return None
+
+        class _Context:
+            def __init__(self, total, title):
+                self.total = total
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        def monitor(self, total, title):
+            return self._Context(total, title)
+
+    monkeypatch.setattr(collect_data, 'ProgressMonitor', DummyMonitor)
+    monkeypatch.setattr(
+        collect_data,
+        'check_data_availability',
+        lambda year: (_ for _ in ()).throw(
+            AssertionError('network availability check should not run')
+        ),
+    )
+    monkeypatch.setattr(
+        collect_data,
+        'collect_data_by_year',
+        lambda year: (_ for _ in ()).throw(
+            AssertionError('year collection should not run')
+        ),
+    )
+    monkeypatch.setattr(
+        collect_data,
+        'combine_datasets',
+        lambda directory_path, output_directory_path, years_to_process: pd.DataFrame(
+            {'year': years_to_process}
+        ),
+    )
+
+    successful_years = collect_data.collect_nfl_data(
+        years=[2025], allow_stale_latest=True
+    )
+    output = capsys.readouterr().out
+
+    assert successful_years == [2025]
+    assert (active_raw / '2025season.csv').exists()
+    assert 'Seeded cached season file for 2025' in output
+    assert 'cached season file already exists' in output

@@ -36,6 +36,18 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from ffbayes.data_pipeline.unified_data_loader import load_unified_dataset
 
 
+def _coerce_vor_rank(vor_rank):
+    """Normalize missing VOR ranks to the unranked bucket."""
+    try:
+        rank = float(vor_rank)
+    except Exception:
+        return 121
+
+    if not np.isfinite(rank):
+        return 121
+    return int(rank)
+
+
 class HybridMCBayesianModel:
     """Hybrid Monte Carlo + Bayesian uncertainty model."""
     
@@ -181,9 +193,14 @@ class HybridMCBayesianModel:
                 ]
                 
                 # Add VOR ranking validation
-                vor_rank = player_data['vor_global_rank'].iloc[0] if 'vor_global_rank' in player_data.columns else 121
+                vor_rank = (
+                    player_data['vor_global_rank'].iloc[0]
+                    if 'vor_global_rank' in player_data.columns
+                    else 121
+                )
+                vor_rank = _coerce_vor_rank(vor_rank)
                 enhanced_data['vor_validation'] = {
-                    'global_rank': int(vor_rank),
+                    'global_rank': vor_rank,
                     'rank_tier': self._get_rank_tier(vor_rank),
                     'prediction_validation': self._validate_prediction_against_vor(
                         mc_data['monte_carlo']['mean'], vor_rank
@@ -284,6 +301,7 @@ class HybridMCBayesianModel:
     
     def _get_rank_tier(self, vor_rank):
         """Convert VOR rank to tier classification."""
+        vor_rank = _coerce_vor_rank(vor_rank)
         if vor_rank <= 30:
             return "Elite"
         elif vor_rank <= 70:
@@ -295,6 +313,7 @@ class HybridMCBayesianModel:
     
     def _validate_prediction_against_vor(self, prediction, vor_rank):
         """Validate prediction makes sense given VOR ranking."""
+        vor_rank = _coerce_vor_rank(vor_rank)
         if vor_rank <= 30:  # Elite tier
             if prediction >= 15:
                 return "✅ High prediction matches elite ranking"
