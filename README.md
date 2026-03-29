@@ -53,6 +53,20 @@ ffbayes post-draft
 ffbayes publish --year 2025 --phase pre_draft
 ```
 
+The collection step now uses `nflreadpy` through a thin adapter that converts
+Polars frames to pandas before they reach the rest of the pipeline, so the
+collector output schema stays the same.
+The collector now refreshes season files on each run instead of reusing older
+CSV output, and the latest-season freshness check is schema-aware rather than
+depending on backend-specific error text.
+The split pipeline now runs collection in summary mode, so it shows the yearly
+collection summary without printing per-row progress. If you want the more
+verbose progress output, run `ffbayes collect` directly.
+
+Maintenance note: if nflverse changes the underlying Python loaders again,
+keep the adaptation logic inside `src/ffbayes/data_pipeline/nflverse_backend.py`
+so the rest of the pipeline stays pandas-first.
+
 **What You Get:**
 - 📊 **Draft Board Workbook**: `draft_board_<year>.xlsx` with board, tiers, availability, scenarios, diagnostics, and freshness
 - 🧠 **Dashboard Payload**: `dashboard_payload_<year>.json` for the local interactive draft dashboard

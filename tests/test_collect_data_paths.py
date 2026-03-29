@@ -264,3 +264,115 @@ def test_collect_main_combines_only_real_season_files(
     assert (season_dir / '2024season.csv').exists()
     assert not (season_dir / '2025season.csv').exists()
     assert (combined_dir / 'combined_data.csv').exists()
+
+
+def test_collect_nfl_data_refreshes_existing_files_with_backend_only_monkeypatch(
+    tmp_path, monkeypatch
+):
+    season_dir = tmp_path / 'season_datasets'
+    combined_dir = tmp_path / 'combined_datasets'
+    raw_dir = tmp_path / 'raw'
+    season_dir.mkdir(parents=True, exist_ok=True)
+    combined_dir.mkdir(parents=True, exist_ok=True)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+
+    stale_file = season_dir / '2025season.csv'
+    stale_file.write_text(
+        'G#,Date,Tm,Away,Opp,FantPt,FantPtPPR,Name,PlayerID,Position,Season,'
+        'GameInjuryStatus,PracticeInjuryStatus,is_home\n'
+        '1,2025-09-01,NYG,DAL,DAL,8,9,Stale Player,p-stale,RB,2025,,,1\n',
+        encoding='utf-8',
+    )
+
+    class DummyLogger:
+        def info(self, *args, **kwargs):
+            return None
+
+        def warning(self, *args, **kwargs):
+            return None
+
+    class DummyInterface:
+        def setup_argument_parser(self):
+            return self
+
+        def add_data_arguments(self, parser):
+            return parser
+
+        def setup_logging(self, args):
+            return DummyLogger()
+
+        def handle_errors(self, func, *args, **kwargs):
+            return func(*args, **kwargs)
+
+        def log_completion(self, message):
+            return None
+
+    fake_backend = SimpleNamespace(
+        PLAYER_STATS_REQUIRED_COLUMNS=(
+            'player_id',
+            'player_display_name',
+            'position',
+            'recent_team',
+            'season',
+            'week',
+            'season_type',
+            'fantasy_points',
+            'fantasy_points_ppr',
+        ),
+        NFLVerseBackendError=Exception,
+        load_weekly_player_stats=lambda seasons: pd.DataFrame(
+            [
+                {
+                    'player_id': 'p1',
+                    'player_display_name': 'Alpha Player',
+                    'position': 'RB',
+                    'recent_team': 'NYG',
+                    'season': 2025,
+                    'week': 1,
+                    'season_type': 'REG',
+                    'fantasy_points': 12.5,
+                    'fantasy_points_ppr': 15.0,
+                    'game_injury_report_status': 'Questionable',
+                    'practice_injury_report_status': 'Limited',
+                }
+            ]
+        ),
+        load_player_stats=lambda seasons, summary_level: pd.DataFrame(
+            []
+        ),
+        load_schedules=lambda seasons: pd.DataFrame(
+            [
+                {
+                    'game_id': '2025_01_NYG_DAL',
+                    'week': 1,
+                    'season': 2025,
+                    'gameday': '2025-09-01',
+                    'home_team': 'NYG',
+                    'away_team': 'DAL',
+                    'home_score': 24,
+                    'away_score': 17,
+                    'game_type': 'REG',
+                }
+            ]
+        ),
+        load_weekly_defense_stats=lambda seasons: pd.DataFrame(),
+    )
+
+    monkeypatch.setattr(collect_data, 'CURRENT_YEAR', 2026)
+    monkeypatch.setattr(collect_data, 'SEASON_DATASETS_DIR', season_dir)
+    monkeypatch.setattr(collect_data, 'COMBINED_DATASETS_DIR', combined_dir)
+    monkeypatch.setattr(collect_data, 'RAW_DATA_DIR', raw_dir)
+    monkeypatch.setattr(collect_data, 'ProgressMonitor', _DummyProgressMonitor)
+    monkeypatch.setattr(collect_data, 'nflverse_backend', fake_backend)
+    monkeypatch.setattr(
+        'ffbayes.utils.script_interface.create_standardized_interface',
+        lambda *args, **kwargs: DummyInterface(),
+    )
+
+    successful_years = collect_data.collect_nfl_data([2025], allow_stale_latest=False)
+
+    season_csv = stale_file.read_text(encoding='utf-8')
+
+    assert successful_years == [2025]
+    assert 'Stale Player' not in season_csv
+    assert 'Alpha Player' in season_csv

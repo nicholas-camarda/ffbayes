@@ -19,6 +19,11 @@ except Exception:
     ProgressMonitor = None
 
 
+def _encode_team_codes(values: pd.Series, team_names: pd.Index) -> pd.Series:
+    """Map team labels to stable integer codes, using -1 for unknown values."""
+    return pd.Series(team_names.get_indexer(values), index=values.index).astype(int)
+
+
 def create_analysis_dataset(path_to_data_directory):
     """Create and preprocess the fantasy football dataset for analysis."""
     print('Loading and preprocessing data for analysis...')
@@ -104,18 +109,20 @@ def create_analysis_dataset(path_to_data_directory):
     data = pd.get_dummies(data, columns=['position'])
 
     # Identify teams with integer encoding
-    ids = np.array([k for k in data['Opp'].unique()])
-    team_names = ids.copy()
-    data['opp_team'] = data['Opp'].apply(lambda x: np.where(x == ids)[0][0])
-    data['team'] = data['Tm'].apply(lambda x: np.where(x == ids)[0][0])
+    team_names = pd.Index(
+        pd.unique(
+            pd.concat([data['Opp'], data['Tm']], ignore_index=True).dropna()
+        )
+    )
+    data['opp_team'] = _encode_team_codes(data['Opp'], team_names)
+    data['team'] = _encode_team_codes(data['Tm'], team_names)
 
     # Create home/away indicator - Away column contains team names, so if Away == Tm, it's away
     data['is_home'] = (data['Away'] != data['Tm']).astype(int)
 
     # Position encoding
-    pos_ids = np.array([k for k in data['pos_id'].unique()])
-    pos_ids_nonan = pos_ids[np.where(pos_ids != 'nan')]
-    onehot_pos_ids = list(map(int, data['pos_id'].isin(pos_ids_nonan)))
+    pos_ids = pd.Index(pd.unique(data['pos_id'].dropna()))
+    onehot_pos_ids = list(map(int, data['pos_id'].isin(pos_ids)))
     data['pos_id'] = onehot_pos_ids
 
     # Calculate seven game rolling average

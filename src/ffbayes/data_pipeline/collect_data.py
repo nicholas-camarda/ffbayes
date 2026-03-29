@@ -7,15 +7,16 @@ Collects raw NFL data from multiple sources with sophisticated processing.
 
 # Import progress monitoring utilities
 import json
+import os
 import signal
 import time
 from datetime import datetime
 from pathlib import Path
 
-import nfl_data_py as nfl
 import pandas as pd
 from alive_progress import alive_bar
 
+from ffbayes.data_pipeline import nflverse_backend
 from ffbayes.utils.analysis_windows import (
     build_freshness_manifest,
     get_analysis_years,
@@ -91,6 +92,8 @@ PROCESS_DATASET_REQUIRED_COLUMNS = {
 PROCESS_DATASET_TEAM_COLUMNS = ('recent_team', 'player_team')
 PROCESS_DATASET_MAX_ROW_ERROR_LOGS = 5
 PROCESS_DATASET_MAX_FAILURE_REASONS = 5
+PROCESS_DATASET_PROGRESS_ENV = 'FFBAYES_PROCESS_DATASET_PROGRESS'
+PROCESS_DATASET_PROGRESS_SUMMARY_VALUES = {'summary', 'compact', 'none', 'off', '0', 'false'}
 
 
 class TimeoutError(Exception):
@@ -168,12 +171,25 @@ def check_data_availability(year):
         signal.alarm(API_TIMEOUT)
 
         # Test if we can get a small sample of data
-        test_data = nfl.import_weekly_data([year])
+        test_data = nflverse_backend.load_weekly_player_stats([year])
 
         # Clear the alarm
         signal.alarm(0)
 
+        required_columns = set(nflverse_backend.PLAYER_STATS_REQUIRED_COLUMNS)
+        missing_columns = sorted(required_columns - set(test_data.columns))
+        if missing_columns:
+            return False, f'missing required columns: {missing_columns}'
+        if test_data.empty:
+            return False, 'empty player stats frame'
+
         return True, len(test_data)
+    except nflverse_backend.NFLVerseBackendError as e:
+        try:
+            signal.alarm(0)
+        finally:
+            pass
+        return False, str(e)
     except TimeoutError:
         print(f'      ⏰ Timeout checking data availability for {year}')
         return False, 'API timeout'
@@ -196,7 +212,7 @@ def create_dataset(year):
         signal.alarm(API_TIMEOUT)
 
         # Get player weekly data
-        players = nfl.import_weekly_data([year])
+        players = nflverse_backend.load_weekly_player_stats([year])
         print(f'      ✅ Players: {len(players):,} rows')
 
         # Clear the alarm
@@ -214,12 +230,14 @@ def create_dataset(year):
                 'season_type',
                 'fantasy_points',
                 'fantasy_points_ppr',
+                'game_injury_report_status',
+                'practice_injury_report_status',
             ]
         ]
 
         # Get schedule data with timeout
         signal.alarm(API_TIMEOUT)
-        schedules = nfl.import_schedules([year])
+        schedules = nflverse_backend.load_schedules([year])
         signal.alarm(0)
         print(f'      ✅ Schedule: {len(schedules):,} rows')
 
@@ -229,7 +247,6 @@ def create_dataset(year):
                 'week',
                 'season',
                 'gameday',
-                'game_type',
                 'home_team',
                 'away_team',
                 'away_score',
@@ -240,7 +257,7 @@ def create_dataset(year):
         # Get team defense data with timeout
         signal.alarm(API_TIMEOUT)
         try:
-            defense_data = nfl.import_weekly_pfr('def', [year])
+            defense_data = nflverse_backend.load_weekly_defense_stats([year])
             print(f'      ✅ Team Defense: {len(defense_data):,} rows')
         except Exception as e:
             print(f'      ⚠️  Team Defense data unavailable: {e}')
@@ -289,6 +306,8 @@ def create_dataset(year):
             'player_display_name',
             'position',
             'recent_team',
+            'game_injury_report_status',
+            'practice_injury_report_status',
             'home_team',
             'season',
             'week',
@@ -639,6 +658,12 @@ def _first_present_row_value(row, *column_names):
     return None
 
 
+def _should_print_row_progress() -> bool:
+    """Return True when row-by-row progress logging should be shown."""
+    mode = os.getenv(PROCESS_DATASET_PROGRESS_ENV, 'verbose').strip().lower()
+    return mode not in PROCESS_DATASET_PROGRESS_SUMMARY_VALUES
+
+
 def _validate_process_dataset_schema(final_df: pd.DataFrame) -> str:
     """Validate the merged dataset schema before row processing."""
     missing_columns = sorted(PROCESS_DATASET_REQUIRED_COLUMNS - set(final_df.columns))
@@ -673,6 +698,7 @@ def process_dataset(final_df, year):
     failure_count = 0
     failure_reasons = []
     suppressed_failure_count = 0
+    show_row_progress = _should_print_row_progress()
 
     # Process data without nested progress bar
     for i, row in enumerate(final_df.itertuples(index=False)):
@@ -721,7 +747,7 @@ def process_dataset(final_df, year):
             )
 
             # Update progress every 100 rows
-            if i % 100 == 0:
+            if show_row_progress and i % 100 == 0:
                 print(f'      📊 Processed {i:,}/{raw_rows:,} rows...')
 
         except Exception as e:
@@ -835,7 +861,6 @@ def collect_nfl_data(years=None, allow_stale_latest: bool = False):
 
     # Create directory structure
     SEASON_DATASETS_DIR.mkdir(parents=True, exist_ok=True)
-    existing_files = [f.name for f in SEASON_DATASETS_DIR.iterdir() if f.is_file()]
 
     successful_years = []
 
@@ -846,14 +871,6 @@ def collect_nfl_data(years=None, allow_stale_latest: bool = False):
 
         with monitor.monitor(len(years), 'Processing Years'):
             for year in years:
-                # Check if file already exists
-                if any(
-                    file.startswith(str(year)) and 'season.csv' in file
-                    for file in existing_files
-                ):
-                    print(f'⏭️  Skipping year {year} as file already exists')
-                    continue
-
                 # Check if data is available
                 available, result = check_data_availability(year)
                 if not available:

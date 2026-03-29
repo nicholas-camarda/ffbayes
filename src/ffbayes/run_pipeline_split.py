@@ -7,6 +7,7 @@ Only creates directories when steps actually run.
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -105,8 +106,10 @@ class SplitPipelineRunner:
         # Build command
         cmd = [sys.executable, '-m', script]
         if step.get('args'):
-            cmd.extend(step['args'].split())
+            cmd.extend(shlex.split(step['args']))
         env = os.environ.copy()
+        step_env = step.get('env') or {}
+        env.update({str(key): str(value) for key, value in step_env.items()})
         env['FFBAYES_PIPELINE_PHASE'] = self.pipeline_type
 
         try:

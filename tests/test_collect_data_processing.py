@@ -110,3 +110,22 @@ def test_collect_data_by_year_skips_empty_processed_frames(tmp_path, monkeypatch
 
     assert result is None
     assert not (season_dir / '2024season.csv').exists()
+
+
+def test_process_dataset_suppresses_row_progress_in_summary_mode(
+    monkeypatch, capsys
+):
+    monkeypatch.setenv('FFBAYES_PROCESS_DATASET_PROGRESS', 'summary')
+    monkeypatch.setattr(
+        collect_data,
+        'add_player_rankings',
+        lambda df, year: df,
+    )
+
+    merged_df = _make_merged_frame(team_column='recent_team')
+    processed_df = collect_data.process_dataset(merged_df, 2025)
+    output = capsys.readouterr().out
+
+    assert len(processed_df) == 2
+    assert 'Processed 0/2 rows' not in output
+    assert 'Processing summary for 2025' in output
