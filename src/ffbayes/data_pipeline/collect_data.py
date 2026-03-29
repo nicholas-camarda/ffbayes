@@ -58,6 +58,40 @@ DEFENSE_SCORING = {
     'points_allowed_35_plus': -4.0,  # -4 points for 35+ points allowed
 }
 
+PROCESS_DATASET_OUTPUT_COLUMNS = [
+    'G#',
+    'Date',
+    'Tm',
+    'Away',
+    'Opp',
+    'FantPt',
+    'FantPtPPR',
+    'Name',
+    'PlayerID',
+    'Position',
+    'Season',
+    'GameInjuryStatus',
+    'PracticeInjuryStatus',
+    'is_home',
+]
+
+PROCESS_DATASET_REQUIRED_COLUMNS = {
+    'player_id',
+    'player_display_name',
+    'season',
+    'position',
+    'week',
+    'fantasy_points',
+    'fantasy_points_ppr',
+    'gameday',
+    'home_team',
+    'away_team',
+}
+
+PROCESS_DATASET_TEAM_COLUMNS = ('recent_team', 'player_team')
+PROCESS_DATASET_MAX_ROW_ERROR_LOGS = 5
+PROCESS_DATASET_MAX_FAILURE_REASONS = 5
+
 
 class TimeoutError(Exception):
     """Custom timeout exception."""
@@ -588,18 +622,60 @@ def calculate_defense_fantasy_points(row):
         return 0.0
 
 
+def _value_is_missing(value) -> bool:
+    """Return True when a row value should be treated as missing."""
+    try:
+        return value is None or pd.isna(value)
+    except Exception:
+        return value is None
+
+
+def _first_present_row_value(row, *column_names):
+    """Return the first non-missing value from a tuple row."""
+    for column_name in column_names:
+        value = getattr(row, column_name, None)
+        if not _value_is_missing(value):
+            return value
+    return None
+
+
+def _validate_process_dataset_schema(final_df: pd.DataFrame) -> str:
+    """Validate the merged dataset schema before row processing."""
+    missing_columns = sorted(PROCESS_DATASET_REQUIRED_COLUMNS - set(final_df.columns))
+    available_team_columns = [
+        column_name
+        for column_name in PROCESS_DATASET_TEAM_COLUMNS
+        if column_name in final_df.columns
+    ]
+
+    if not available_team_columns:
+        missing_columns.append('recent_team or player_team')
+
+    if missing_columns:
+        raise ValueError(
+            'process_dataset requires columns: ' + ', '.join(missing_columns)
+        )
+
+    return available_team_columns[0]
+
+
 def process_dataset(final_df, year):
     """Process the dataset into the final format."""
     if final_df is None or len(final_df) == 0:
-        return None
+        print(f'   ⚠️  No rows available for {year}')
+        return pd.DataFrame(columns=PROCESS_DATASET_OUTPUT_COLUMNS)
 
     print(f'   🔄 Processing {year} data...')
+    team_column = _validate_process_dataset_schema(final_df)
+    raw_rows = len(final_df)
 
     data_list = []
-    max_rows = len(final_df)
+    failure_count = 0
+    failure_reasons = []
+    suppressed_failure_count = 0
 
     # Process data without nested progress bar
-    for i, row in enumerate(final_df.itertuples()):
+    for i, row in enumerate(final_df.itertuples(index=False)):
         try:
             # Extract player details - itertuples gives scalar values directly
             player_id = row.player_id
@@ -610,19 +686,20 @@ def process_dataset(final_df, year):
             fantasy_points_ppr = row.fantasy_points_ppr
             fantasy_points = row.fantasy_points
             game_date = row.gameday
-            team = row.player_team
+            team = _first_present_row_value(row, team_column, 'recent_team', 'player_team')
             home = row.home_team
             away = row.away_team
 
-            # Simple scalar comparison - no need for complex extraction
-            opponent = away if team == away else home
+            if _value_is_missing(team):
+                raise ValueError('missing team value')
+
+            # Derive opponent and home/away status from the merged schedule columns.
+            is_home = 1 if not _value_is_missing(home) and team == home else 0
+            opponent = away if is_home else home
             game_injury_report_status = getattr(row, 'game_injury_report_status', None)
             practice_injury_report_status = getattr(
                 row, 'practice_injury_report_status', None
             )
-
-            # Create is_home indicator
-            is_home = 1 if team == home else 0
 
             data_list.append(
                 [
@@ -645,32 +722,35 @@ def process_dataset(final_df, year):
 
             # Update progress every 100 rows
             if i % 100 == 0:
-                print(f'      📊 Processed {i:,}/{max_rows:,} rows...')
+                print(f'      📊 Processed {i:,}/{raw_rows:,} rows...')
 
         except Exception as e:
-            print(f'      ⚠️  Error processing row {i}: {e}')
+            failure_count += 1
+            if len(failure_reasons) < PROCESS_DATASET_MAX_FAILURE_REASONS:
+                failure_reasons.append(f'row {i}: {e}')
+            if failure_count <= PROCESS_DATASET_MAX_ROW_ERROR_LOGS:
+                print(f'      ⚠️  Error processing row {i}: {e}')
+            else:
+                suppressed_failure_count += 1
             continue
 
     # Create final DataFrame
-    columns = [
-        'G#',
-        'Date',
-        'Tm',
-        'Away',
-        'Opp',
-        'FantPt',
-        'FantPtPPR',
-        'Name',
-        'PlayerID',
-        'Position',
-        'Season',
-        'GameInjuryStatus',
-        'PracticeInjuryStatus',
-        'is_home',
-    ]
-
-    df = pd.DataFrame(data_list, columns=columns)
-    print(f'   ✅ Processed {len(df):,} rows for {year}')
+    df = pd.DataFrame(data_list, columns=PROCESS_DATASET_OUTPUT_COLUMNS)
+    processed_rows = len(df)
+    print(
+        '   📋 Processing summary for '
+        f'{year}: raw_rows={raw_rows:,}, processed_rows={processed_rows:,}, '
+        f'failed_rows={failure_count:,}'
+    )
+    if failure_reasons:
+        print('      Failure reasons:')
+        for reason in failure_reasons:
+            print(f'         - {reason}')
+    if suppressed_failure_count:
+        print(
+            f'      ⚠️  Suppressed {suppressed_failure_count:,} similar errors'
+        )
+    print(f'   ✅ Processed {processed_rows:,} rows for {year}')
     return df
 
 
@@ -691,7 +771,8 @@ def collect_data_by_year(year):
 
     # Process dataset
     processed_df = process_dataset(final_df, year)
-    if processed_df is None:
+    if processed_df is None or processed_df.empty:
+        print(f'   ❌ No valid processed rows for {year}; skipping season CSV write')
         return None
 
     # Save to file
@@ -796,7 +877,9 @@ def collect_nfl_data(years=None, allow_stale_latest: bool = False):
         if file_path.name.endswith('season.csv')
     )
     freshness_window = resolve_analysis_window(
-        found_years, reference_year=CURRENT_YEAR, allow_stale=True
+        found_years,
+        reference_year=CURRENT_YEAR,
+        allow_stale=allow_stale_latest,
     )
     manifest = build_freshness_manifest(
         freshness_window,
@@ -809,15 +892,6 @@ def collect_nfl_data(years=None, allow_stale_latest: bool = False):
     if freshness_window.warnings:
         for warning in freshness_window.warnings:
             print(f'⚠️  {warning}')
-
-    if (
-        not allow_stale_latest
-        and freshness_window.latest_expected_year not in freshness_window.found_years
-    ):
-        raise RuntimeError(
-            f'Missing latest expected season {freshness_window.latest_expected_year}. '
-            'Re-run with --allow-stale-season only if you explicitly want to proceed.'
-        )
 
     return successful_years
 
@@ -832,13 +906,10 @@ def main(args=None):
     )
 
     # Parse arguments
-    if args is None:
-        args = interface.parse_arguments()
-
-    # Add data-specific arguments
     parser = interface.setup_argument_parser()
     parser = interface.add_data_arguments(parser)
-    args = parser.parse_args()
+    if args is None:
+        args = parser.parse_args()
 
     # Set up logging
     logger = interface.setup_logging(args)
@@ -893,15 +964,6 @@ def main(args=None):
     runtime_manifest_path, freshness_manifest_path = write_collection_manifest(manifest)
     logger.info(f'Collection manifest saved to: {runtime_manifest_path}')
     logger.info(f'Freshness manifest saved to: {freshness_manifest_path}')
-
-    if (
-        not args.allow_stale_season
-        and freshness_window.latest_expected_year not in freshness_window.found_years
-    ):
-        raise RuntimeError(
-            f'Missing latest expected season {freshness_window.latest_expected_year}. '
-            'Use --allow-stale-season to continue with a degraded analysis window.'
-        )
 
     elapsed_time = time.time() - start_time
     logger.info(f'Collection completed in {elapsed_time:.1f} seconds')
