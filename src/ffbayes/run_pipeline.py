@@ -169,7 +169,10 @@ def validate_step_outputs(step_name):
             str(get_hybrid_mc_dir(current_year) / "hybrid_model_results.json")
         ],
         "Draft Strategy Generation": [
-            str(get_draft_strategy_dir(current_year) / "draft_strategy_pos*.json")
+            str(get_draft_strategy_dir(current_year) / "draft_strategy_pos*.json"),
+            str(get_draft_strategy_dir(current_year) / "draft_board_*.xlsx"),
+            str(get_draft_strategy_dir(current_year) / "dashboard_payload_*.json"),
+            str(get_draft_strategy_dir(current_year) / "draft_decision_backtest_*.json"),
         ],
         "Monte Carlo Validation": [
             str(get_monte_carlo_dir(current_year) / "*.tsv")

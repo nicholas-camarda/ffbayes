@@ -1,6 +1,6 @@
 # FFBayes: Advanced Fantasy Football Analytics Pipeline
 
-A sophisticated fantasy football analytics system that combines Monte Carlo simulations, Bayesian uncertainty modeling, and Value Over Replacement (VOR) analysis to generate optimal draft strategies and post-draft team analysis.
+A sophisticated fantasy football analytics system that combines Monte Carlo simulations, Bayesian uncertainty modeling, and draft-utility decision modeling to generate draft-board recommendations and post-draft team analysis.
 
 ## Workspace Contract
 
@@ -44,9 +44,9 @@ python -m ffbayes.run_pipeline_split pre_draft
 ```
 
 **What You Get:**
-- 📊 **VOR Strategy**: Excel file with traditional rankings
-- 🧠 **Bayesian Strategy**: JSON with advanced predictions
-- 📋 **Draft Guide**: Complete strategy for your position
+- 📊 **Draft Board Workbook**: `draft_board_<year>.xlsx` with board, tiers, availability, scenarios, and diagnostics
+- 🧠 **Dashboard Payload**: `dashboard_payload_<year>.json` for the local interactive draft dashboard
+- 📋 **Decision Backtest**: `draft_decision_backtest_<year_range>.json` comparing market, VOR, consensus, and draft-score strategies
 
 ### **Step 4: Use During Draft**
 - Open `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/vor_strategy/DRAFTING STRATEGY -- snake-draft_ppr-<ppr>_vor_top-<top_rank>_<year>.xlsx`
@@ -104,7 +104,7 @@ Unlike traditional models that fail with new players, FFBayes can:
 Runtime working tree: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/`
 
 - `vor_strategy/` - Excel draft guide and raw VOR data
-- `draft_strategy/` - Bayesian strategy JSON
+- `draft_strategy/` - Draft board workbook, dashboard payload, HTML dashboard, and compatibility JSON
 - `hybrid_mc_bayesian/` - Monte Carlo + Bayesian model outputs
 
 Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/pre_draft/`
@@ -161,9 +161,9 @@ Defines the 12-step pipeline process:
 4. **VOR Strategy** - Generate traditional rankings
 5. **Unified Dataset** - Combine all data sources
 6. **Hybrid MC Analysis** - Run Monte Carlo + Bayesian model
-7. **Bayesian Strategy** - Generate advanced draft strategy
-8. **Strategy Comparison** - Compare VOR vs Bayesian
-9. **Pre-Draft Analysis** - Generate draft strategy
+7. **Draft Decision Strategy** - Generate the draft utility table and board
+8. **Strategy Comparison** - Compare market, VOR, consensus, and draft-score strategies
+9. **Pre-Draft Analysis** - Generate draft board and dashboard outputs
 10. **Team Aggregation** - Analyze drafted team
 11. **Monte Carlo Validation** - Validate team performance
 12. **Team Summary Export** - Save analysis to files
@@ -176,11 +176,42 @@ Defines the 12-step pipeline process:
 
 The visualization system is currently being updated to provide more comprehensive and actionable insights. New visualizations will include:
 
-### **Pre-Draft Visualizations** (Coming Soon)
-- **Model Performance Dashboard** - Model accuracy and validation metrics
+### **Pre-Draft Visualizations** (Draft-Day Ready)
+- **Draft Board Dashboard** - Interactive local board with filters, targets, and regret view
+- **Model Performance Dashboard** - Market vs VOR vs consensus vs draft-score diagnostics
 - **Draft Value Heatmap** - Positional value by draft round
 - **Risk-Reward Analysis** - Player uncertainty and upside potential
 - **Strategy Success Rates** - Historical performance of different approaches
+
+### **How the Draft Score Works**
+
+The main decision number is a weighted utility score, not just a projection rank:
+
+```text
+draft_score =
+  0.34 * z(starter_delta)
+  + 0.20 * z(replacement_delta)
+  + 0.16 * z(proj_points_mean)
+  + 0.12 * z(availability_at_pick)
+  + 0.10 * z(upside_score)
+  + 0.08 * z(starter_need)
+  + 0.08 * z(position_scarcity)
+  - 0.25 * z(fragility_score)
+  + 0.06 * z(market_gap)
+```
+
+Plain English:
+- `starter_delta` tells you how much better the player is than a likely starter at that position.
+- `availability_at_pick` estimates whether the player survives to your next turn.
+- `upside_score` rewards ceiling and lineup leverage.
+- `fragility_score` penalizes injury, role, and uncertainty risk.
+- `market_gap` catches players the market is underrating relative to the model.
+
+Interpretation guide:
+- High `draft_score` means "best overall draft decision now."
+- High `availability_at_pick` means "safe to wait."
+- High `upside_score` with high `fragility_score` means "boom-bust upside."
+- High `why_flags` density means the player is unusual enough to inspect manually.
 
 ### **Post-Draft Visualizations** (Coming Soon)
 - **Team Composition Analysis** - Roster balance and depth assessment
@@ -282,30 +313,22 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ---
 
-## 
 ## 📊 Visualizations
 
-🚧 **UNDER CONSTRUCTION** 🚧
+The visualization layer now produces the draft board HTML dashboard, workbook-backed audit tables, and the supporting validation plots.
 
-The visualization system is currently being updated to provide more comprehensive and actionable insights for fantasy football decision-making.
+Current outputs:
+- `draft_board_<year>.html` - interactive local draft board
+- `draft_board_<year>.xlsx` - workbook for draft-day review
+- `dashboard_payload_<year>.json` - machine-readable dashboard data
+- `draft_decision_backtest_<year_range>.json` - strategy comparison summary
 
-### Coming Soon
+The dashboard is designed to answer four draft-day questions quickly:
+- Who are the best players right now?
+- Who is likely to survive to my next pick?
+- What position run risk should I care about?
+- Which strategy has been working best in the backtest?
 
-**Pre-Draft Analysis Tools** - Model performance validation, draft value analysis, and strategy optimization
-
-**Post-Draft Team Insights** - Roster analysis, performance projections, and trade evaluation tools
-
-**Model Validation Metrics** - Accuracy assessment and uncertainty quantification for better decision-making
-
-### Current Status
-
-The visualization pipeline is being rebuilt to provide:
-- More actionable insights
-- Better data validation
-- Improved user experience
-- Comprehensive model performance metrics
-
-Stay tuned for updates as we enhance the visualization capabilities!
 ## 📄 **License**
 
 MIT License - see [LICENSE](LICENSE) file for details.

@@ -72,9 +72,9 @@
     },
     {
       "name": "bayesian_draft_strategy",
-      "script": "ffbayes.draft_strategy.bayesian_draft_strategy",
+      "script": "ffbayes.draft_strategy.draft_decision_strategy",
       "args": "--draft-position 10 --league-size 10 --risk-tolerance medium",
-      "description": "Generate optimal draft strategies using Bayesian predictions",
+      "description": "Generate draft decision artifacts using the draft utility model",
       "timeout": 300,
       "retry_count": 2,
       "dependencies": [
@@ -85,9 +85,9 @@
     },
     {
       "name": "hybrid_draft_strategy",
-      "script": "ffbayes.draft_strategy.hybrid_draft_strategy",
+      "script": "ffbayes.draft_strategy.draft_decision_strategy",
       "args": "--draft-position 10 --league-size 10 --risk-tolerance medium",
-      "description": "Generate hybrid VOR + Bayesian draft strategy with Excel output",
+      "description": "Generate the workbook, dashboard payload, and draft board",
       "timeout": 300,
       "retry_count": 2,
       "dependencies": [
@@ -98,8 +98,8 @@
     },
     {
       "name": "draft_strategy_comparison",
-      "script": "ffbayes.analysis.draft_strategy_comparison",
-      "description": "Compare VOR and Bayesian draft strategies with analysis and visualizations",
+      "script": "ffbayes.analysis.draft_decision_backtest",
+      "description": "Backtest market, VOR, consensus, and draft-score strategies",
       "timeout": 300,
       "retry_count": 2,
       "dependencies": [

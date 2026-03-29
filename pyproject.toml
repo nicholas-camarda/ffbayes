@@ -46,7 +46,8 @@ ffbayes-agg = "ffbayes.analysis.bayesian_team_aggregation:main"
 ffbayes-compare = "ffbayes.analysis.model_comparison_framework:main"
 # Correct module path for team aggregation visualizations
 ffbayes-viz = "ffbayes.visualization.create_team_aggregation_visualizations:main"
-ffbayes-draft-strategy = "ffbayes.draft_strategy.bayesian_draft_strategy:main"
+ffbayes-draft-strategy = "ffbayes.draft_strategy.draft_decision_strategy:main"
+ffbayes-draft-backtest = "ffbayes.analysis.draft_decision_backtest:main"
 ffbayes-compare-strategies = "ffbayes.analysis.draft_strategy_comparison:main"
 ffbayes-bayesian-vor = "ffbayes.analysis.bayesian_vor_comparison:main"
 

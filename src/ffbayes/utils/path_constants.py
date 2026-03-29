@@ -7,6 +7,7 @@ Eliminates hardcoded paths throughout the package.
 import os
 from pathlib import Path
 
+
 # Base directories
 def get_project_root() -> Path:
     """Return the canonical project root for the ffbayes repository."""
@@ -16,12 +17,33 @@ def get_project_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+def _path_is_writable(path: Path) -> bool:
+    """Return True when a directory can be created and written to."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".write_probe"
+        probe.write_text("", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
 def get_runtime_root() -> Path:
     """Return the canonical runtime root for the active project."""
     env_root = os.getenv("FFBAYES_RUNTIME_ROOT")
     if env_root:
         return Path(env_root).expanduser().resolve()
-    return Path.home() / "ProjectsRuntime" / "ffbayes"
+
+    primary_root = Path.home() / "ProjectsRuntime" / "ffbayes"
+    if _path_is_writable(primary_root):
+        return primary_root
+
+    # Sandbox and some locked-down environments cannot write to the default
+    # runtime tree. Fall back to a workspace-local runtime directory so the
+    # pipeline can still run without changing the canonical layout on systems
+    # where the default location is writable.
+    return Path(__file__).resolve().parents[3] / ".ffbayes_runtime"
 
 
 def get_cloud_root() -> Path:
@@ -29,7 +51,21 @@ def get_cloud_root() -> Path:
     env_root = os.getenv("FFBAYES_CLOUD_ROOT")
     if env_root:
         return Path(env_root).expanduser().resolve()
-    return Path.home() / "Library" / "CloudStorage" / "OneDrive-Personal" / "SideProjects" / "ffbayes"
+
+    primary_root = (
+        Path.home()
+        / "Library"
+        / "CloudStorage"
+        / "OneDrive-Personal"
+        / "SideProjects"
+        / "ffbayes"
+    )
+    if _path_is_writable(primary_root):
+        return primary_root
+
+    # Mirror the runtime fallback behavior for environments where OneDrive is
+    # present but not writable from this shell.
+    return Path(__file__).resolve().parents[3] / ".ffbayes_cloud"
 
 
 BASE_DIR = get_project_root()
@@ -129,6 +165,31 @@ def get_draft_strategy_dir(year: int = None) -> Path:
     path = get_pre_draft_dir(year) / "draft_strategy"
     ensure_dir_exists(path)
     return path
+
+
+def get_draft_board_path(year: int = None) -> Path:
+    """Get workbook path for the draft board artifact."""
+    if year is None:
+        from datetime import datetime
+        year = datetime.now().year
+    return get_draft_strategy_dir(year) / f"draft_board_{year}.xlsx"
+
+
+def get_dashboard_payload_path(year: int = None) -> Path:
+    """Get JSON payload path for the interactive draft dashboard."""
+    if year is None:
+        from datetime import datetime
+        year = datetime.now().year
+    return get_draft_strategy_dir(year) / f"dashboard_payload_{year}.json"
+
+
+def get_draft_decision_backtest_path(year: int = None, year_range: str = None) -> Path:
+    """Get JSON path for the draft decision backtest artifact."""
+    if year is None:
+        from datetime import datetime
+        year = datetime.now().year
+    suffix = year_range or str(year)
+    return get_draft_strategy_dir(year) / f"draft_decision_backtest_{suffix}.json"
 
 def get_draft_strategy_comparison_dir(year: int = None) -> Path:
     """Get draft strategy comparison directory."""

@@ -1,0 +1,130 @@
+from __future__ import annotations
+
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import pandas as pd
+
+from ffbayes.draft_strategy.draft_decision_system import (
+    DraftContext,
+    LeagueSettings,
+    availability_probability,
+    build_decision_table,
+    build_draft_decision_artifacts,
+    build_recommendations,
+    export_workbook,
+    run_draft_backtest,
+)
+
+
+def _synthetic_players() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            'player_name': ['Alpha QB', 'Beta QB', 'Alpha RB', 'Beta RB', 'Alpha WR', 'Beta WR', 'Alpha TE'],
+            'position': ['QB', 'QB', 'RB', 'RB', 'WR', 'WR', 'TE'],
+            'proj_points_mean': [310, 285, 240, 225, 235, 220, 185],
+            'adp': [3, 14, 4, 18, 6, 16, 9],
+            'std_projection': [16, 18, 21, 24, 17, 16, 12],
+            'uncertainty_score': [0.10, 0.22, 0.15, 0.25, 0.18, 0.16, 0.12],
+            'season_count': [4, 3, 2, 1, 5, 2, 1],
+            'games_missed': [0, 2, 1, 3, 0, 4, 0],
+            'age': [27, 29, 25, 24, 26, 27, 31],
+            'years_in_league': [5, 4, 2, 1, 3, 2, 1],
+            'team_change': [0, 1, 0, 1, 0, 0, 0],
+            'role_volatility': [0.10, 0.30, 0.20, 0.40, 0.15, 0.20, 0.10],
+            'site_disagreement': [0.05, 0.12, 0.10, 0.18, 0.08, 0.11, 0.04],
+            'adp_std': [1.5, 2.2, 2.0, 3.0, 1.8, 2.4, 1.2],
+        }
+    )
+
+
+def test_decision_table_builds_expected_columns():
+    settings = LeagueSettings()
+    table = build_decision_table(_synthetic_players(), settings, DraftContext(current_pick_number=10))
+
+    required = {
+        'player_name',
+        'position',
+        'proj_points_mean',
+        'proj_points_floor',
+        'proj_points_ceiling',
+        'adp',
+        'market_rank',
+        'availability_at_pick',
+        'replacement_delta',
+        'starter_delta',
+        'upside_score',
+        'fragility_score',
+        'draft_score',
+        'draft_tier',
+        'why_flags',
+    }
+    assert required.issubset(set(table.columns))
+    assert table['availability_at_pick'].between(0, 1).all()
+    assert table.iloc[0]['draft_score'] >= table.iloc[-1]['draft_score']
+
+
+def test_availability_probability_is_monotonic():
+    early = availability_probability(adp=10, target_pick=8, adp_std=2.0, uncertainty_score=0.1)
+    middle = availability_probability(adp=10, target_pick=12, adp_std=2.0, uncertainty_score=0.1)
+    late = availability_probability(adp=10, target_pick=16, adp_std=2.0, uncertainty_score=0.1)
+
+    assert early > middle > late
+
+
+def test_recommendations_update_after_drafted_players():
+    settings = LeagueSettings()
+    table = build_decision_table(_synthetic_players(), settings, DraftContext(current_pick_number=10))
+
+    initial = build_recommendations(table, settings, DraftContext(current_pick_number=10))
+    after_qb_drafted = build_recommendations(
+        table,
+        settings,
+        DraftContext(current_pick_number=10, drafted_players={'Alpha QB'}),
+    )
+
+    assert not initial.empty
+    assert not after_qb_drafted.empty
+    assert 'Alpha QB' not in after_qb_drafted['player_name'].tolist()
+    assert initial.iloc[0]['player_name'] != after_qb_drafted.iloc[0]['player_name'] or initial.iloc[0]['position'] != after_qb_drafted.iloc[0]['position']
+
+
+def test_workbook_contains_core_sheets():
+    settings = LeagueSettings()
+    artifacts = build_draft_decision_artifacts(_synthetic_players(), settings, DraftContext(current_pick_number=10))
+
+    with TemporaryDirectory() as tmpdir:
+        output_path = Path(tmpdir) / 'draft_board.xlsx'
+        export_workbook(
+            artifacts.decision_table,
+            artifacts.recommendations,
+            artifacts.tier_cliffs,
+            artifacts.roster_scenarios,
+            artifacts.source_freshness,
+            output_path,
+            settings,
+            backtest=artifacts.backtest,
+        )
+
+        assert output_path.exists()
+        import openpyxl
+
+        wb = openpyxl.load_workbook(output_path)
+        assert {'Big Board', 'By Position', 'My Picks', 'Tier Cliffs', 'Availability', 'Targets By Round', 'Roster Construction Scenarios', 'Player Notes', 'Model Diagnostics', 'Source Freshness'}.issubset(set(wb.sheetnames))
+
+
+def test_backtest_payload_has_expected_shape():
+    season_history = pd.DataFrame(
+        {
+            'Season': [2022, 2022, 2023, 2023, 2024, 2024, 2024, 2024],
+            'Name': ['Alpha QB', 'Alpha RB', 'Alpha QB', 'Alpha RB', 'Alpha QB', 'Alpha RB', 'Alpha WR', 'Alpha TE'],
+            'Position': ['QB', 'RB', 'QB', 'RB', 'QB', 'RB', 'WR', 'TE'],
+            'FantPt': [280, 210, 295, 220, 310, 230, 190, 170],
+        }
+    )
+
+    backtest = run_draft_backtest(season_history, LeagueSettings())
+    assert backtest['model_type'] == 'draft_decision_backtest'
+    assert 'overall' in backtest
+    assert 'by_strategy' in backtest['overall']
+    assert len(backtest['overall']['by_strategy']) >= 1

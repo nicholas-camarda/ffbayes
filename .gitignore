@@ -35,6 +35,8 @@ docs/images/
 logs
 plots
 results
+.ffbayes_runtime/
+.ffbayes_cloud/
 my_ff_teams
 .playwright-mcp/
 AGENTS.md

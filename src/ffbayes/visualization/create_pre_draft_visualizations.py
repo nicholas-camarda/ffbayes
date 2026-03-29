@@ -13,8 +13,16 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from ffbayes.draft_strategy.draft_decision_system import (
+    DraftContext,
+    LeagueSettings,
+    build_draft_decision_artifacts,
+    save_draft_decision_artifacts,
+)
 from ffbayes.utils.path_constants import (get_pre_draft_plots_dir,
+                                          get_draft_strategy_dir,
                                           get_unified_dataset_csv_path,
+                                          SEASON_DATASETS_DIR,
                                           get_user_config_file)
 from ffbayes.utils.strategy_path_generator import (
     get_bayesian_strategy_path,
@@ -63,6 +71,14 @@ def load_hybrid_mc_results():
     print(f"🎲 Loading Hybrid MC results from: {mc_file}")
     with open(mc_file, 'r') as f:
         return json.load(f)
+
+
+def load_season_history():
+    """Load historical season data for the draft decision backtest."""
+    files = sorted(SEASON_DATASETS_DIR.glob('*season.csv'))
+    if not files:
+        return None
+    return pd.concat((pd.read_csv(file_path) for file_path in files), ignore_index=True)
 
 # ============================================================================
 # PLOT 1: MODEL PERFORMANCE DASHBOARD
@@ -345,6 +361,31 @@ def main():
         fig3 = ov.create_plot(unified_df)
         ov.save_plot(fig3, f'uncertainty_overview_{current_year}', ['html', 'png'])
         print(f"✅ Uncertainty Overview saved to: {output_dir}")
+
+        print("\n" + "="*60)
+        print("DRAFT DECISION ARTIFACTS")
+        print("="*60)
+        try:
+            league_settings = LeagueSettings.from_mapping(
+                json.loads(get_user_config_file().read_text()) if get_user_config_file().exists() else {}
+            )
+        except Exception:
+            league_settings = LeagueSettings()
+
+        season_history = load_season_history()
+        artifacts = build_draft_decision_artifacts(
+            unified_df,
+            league_settings=league_settings,
+            context=DraftContext(current_pick_number=league_settings.draft_position),
+            season_history=season_history,
+        )
+        decision_dir = get_draft_strategy_dir(current_year)
+        saved_paths = save_draft_decision_artifacts(artifacts, decision_dir, year=current_year)
+        print(f"✅ Draft board workbook: {saved_paths['workbook_path']}")
+        print(f"✅ Dashboard payload: {saved_paths['payload_path']}")
+        print(f"✅ Dashboard HTML: {saved_paths['html_path']}")
+        if artifacts.backtest:
+            print(f"✅ Backtest JSON: {saved_paths['backtest_path']}")
 
         print("\n" + "="*60)
         print("PLOTS COMPLETED")

@@ -34,6 +34,10 @@ All generated outputs are written to `~/ProjectsRuntime/ffbayes` during executio
 # Pre-draft strategy
 python -m ffbayes.run_pipeline_split pre_draft
 
+# Draft board and decision backtest
+python -m ffbayes.draft_strategy.draft_decision_strategy
+python -m ffbayes.analysis.draft_decision_backtest
+
 # Post-draft analysis  
 python -m ffbayes.run_pipeline_split post_draft
 
@@ -44,7 +48,9 @@ python -m ffbayes.analysis.montecarlo_historical_ff
 
 ### **Key Files**
 - **Team File**: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/data/raw/my_ff_teams/drafted_team_<year>.tsv`
-- **Main Output**: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/vor_strategy/DRAFTING STRATEGY -- snake-draft_ppr-<ppr>_vor_top-<top_rank>_<year>.xlsx`
+- **Main Output**: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/draft_strategy/draft_board_<year>.xlsx`
+- **Dashboard Payload**: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/draft_strategy/dashboard_payload_<year>.json`
+- **Decision Backtest**: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/draft_strategy/draft_decision_backtest_<year_range>.json`
 - **Configuration**: JSON config files (see main README)
 
 ### **Common Issues**

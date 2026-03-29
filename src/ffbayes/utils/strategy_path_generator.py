@@ -61,6 +61,30 @@ def get_hybrid_mc_results_filename():
     """Get just the Hybrid MC results filename."""
     return "hybrid_model_results.json"
 
+
+def get_draft_board_path(current_year=None):
+    """Get the workbook path for the draft board artifact."""
+    if current_year is None:
+        current_year = datetime.now().year
+    from ffbayes.utils.path_constants import get_draft_board_path as _get_draft_board_path
+    return str(_get_draft_board_path(current_year))
+
+
+def get_dashboard_payload_path(current_year=None):
+    """Get the dashboard payload JSON path."""
+    if current_year is None:
+        current_year = datetime.now().year
+    from ffbayes.utils.path_constants import get_dashboard_payload_path as _get_dashboard_payload_path
+    return str(_get_dashboard_payload_path(current_year))
+
+
+def get_draft_decision_backtest_path(current_year=None, year_range=None):
+    """Get the decision backtest JSON path."""
+    if current_year is None:
+        current_year = datetime.now().year
+    from ffbayes.utils.path_constants import get_draft_decision_backtest_path as _get_path
+    return str(_get_path(current_year, year_range=year_range))
+
 if __name__ == "__main__":
     """Test the strategy path generator."""
     print("🔧 Strategy Path Generator Test")
