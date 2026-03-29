@@ -66,21 +66,10 @@
       "parallel_group": "modeling"
     },
     {
-      "name": "bayesian_draft_strategy",
+      "name": "draft_decision_strategy",
       "script": "ffbayes.draft_strategy.draft_decision_strategy",
       "args": "--draft-position 10 --league-size 10 --risk-tolerance medium",
-      "description": "Generate draft decision artifacts using the draft utility model",
-      "timeout": 300,
-      "retry_count": 2,
-      "dependencies": ["hybrid_mc_analysis"],
-      "critical": true,
-      "parallel_group": "strategy"
-    },
-    {
-      "name": "hybrid_draft_strategy",
-      "script": "ffbayes.draft_strategy.draft_decision_strategy",
-      "args": "--draft-position 10 --league-size 10 --risk-tolerance medium",
-      "description": "Generate the workbook, dashboard payload, and draft board",
+      "description": "Generate the canonical draft decision board and dashboard",
       "timeout": 300,
       "retry_count": 2,
       "dependencies": ["hybrid_mc_analysis"],
@@ -93,7 +82,7 @@
       "description": "Backtest market, VOR, consensus, and draft-score strategies",
       "timeout": 300,
       "retry_count": 2,
-      "dependencies": ["vor_draft_strategy", "bayesian_draft_strategy"],
+      "dependencies": ["vor_draft_strategy", "draft_decision_strategy"],
       "critical": false,
       "parallel_group": "analysis"
     },
@@ -124,7 +113,7 @@
       "description": "Validate drafted teams using Monte Carlo simulation (POST-DRAFT ONLY)",
       "timeout": 600,
       "retry_count": 2,
-      "dependencies": ["bayesian_draft_strategy", "create_unified_dataset"],
+      "dependencies": ["draft_decision_strategy", "create_unified_dataset"],
       "critical": false,
       "parallel_group": "validation"
     },
@@ -193,8 +182,8 @@
     "progress_update_interval": 30
   },
   "output": {
-    "results_directory": "~/ProjectsRuntime/ffbayes/results",
-    "plots_directory": "~/ProjectsRuntime/ffbayes/plots",
+    "results_directory": "~/ProjectsRuntime/ffbayes/runs",
+    "plots_directory": "~/ProjectsRuntime/ffbayes/runs",
     "logs_directory": "~/ProjectsRuntime/ffbayes/logs",
     "cloud_results_directory": "~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results",
     "cloud_plots_directory": "~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/plots",

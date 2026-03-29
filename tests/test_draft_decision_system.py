@@ -14,13 +14,22 @@ from ffbayes.draft_strategy.draft_decision_system import (
     build_recommendations,
     export_workbook,
     run_draft_backtest,
+    save_draft_decision_artifacts,
 )
 
 
 def _synthetic_players() -> pd.DataFrame:
     return pd.DataFrame(
         {
-            'player_name': ['Alpha QB', 'Beta QB', 'Alpha RB', 'Beta RB', 'Alpha WR', 'Beta WR', 'Alpha TE'],
+            'player_name': [
+                'Alpha QB',
+                'Beta QB',
+                'Alpha RB',
+                'Beta RB',
+                'Alpha WR',
+                'Beta WR',
+                'Alpha TE',
+            ],
             'position': ['QB', 'QB', 'RB', 'RB', 'WR', 'WR', 'TE'],
             'proj_points_mean': [310, 285, 240, 225, 235, 220, 185],
             'adp': [3, 14, 4, 18, 6, 16, 9],
@@ -40,7 +49,9 @@ def _synthetic_players() -> pd.DataFrame:
 
 def test_decision_table_builds_expected_columns():
     settings = LeagueSettings()
-    table = build_decision_table(_synthetic_players(), settings, DraftContext(current_pick_number=10))
+    table = build_decision_table(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
 
     required = {
         'player_name',
@@ -64,19 +75,43 @@ def test_decision_table_builds_expected_columns():
     assert table.iloc[0]['draft_score'] >= table.iloc[-1]['draft_score']
 
 
+def test_decision_table_collapses_duplicate_player_rows():
+    players = pd.concat(
+        [_synthetic_players(), _synthetic_players().iloc[[0]]], ignore_index=True
+    )
+    players.loc[len(players) - 1, 'proj_points_mean'] = 999
+
+    table = build_decision_table(
+        players, LeagueSettings(), DraftContext(current_pick_number=10)
+    )
+
+    assert len(table) == len(_synthetic_players()['player_name'].unique())
+    assert table[table['player_name'] == 'Alpha QB'].iloc[0]['proj_points_mean'] == 999
+
+
 def test_availability_probability_is_monotonic():
-    early = availability_probability(adp=10, target_pick=8, adp_std=2.0, uncertainty_score=0.1)
-    middle = availability_probability(adp=10, target_pick=12, adp_std=2.0, uncertainty_score=0.1)
-    late = availability_probability(adp=10, target_pick=16, adp_std=2.0, uncertainty_score=0.1)
+    early = availability_probability(
+        adp=10, target_pick=8, adp_std=2.0, uncertainty_score=0.1
+    )
+    middle = availability_probability(
+        adp=10, target_pick=12, adp_std=2.0, uncertainty_score=0.1
+    )
+    late = availability_probability(
+        adp=10, target_pick=16, adp_std=2.0, uncertainty_score=0.1
+    )
 
     assert early > middle > late
 
 
 def test_recommendations_update_after_drafted_players():
     settings = LeagueSettings()
-    table = build_decision_table(_synthetic_players(), settings, DraftContext(current_pick_number=10))
+    table = build_decision_table(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
 
-    initial = build_recommendations(table, settings, DraftContext(current_pick_number=10))
+    initial = build_recommendations(
+        table, settings, DraftContext(current_pick_number=10)
+    )
     after_qb_drafted = build_recommendations(
         table,
         settings,
@@ -86,12 +121,17 @@ def test_recommendations_update_after_drafted_players():
     assert not initial.empty
     assert not after_qb_drafted.empty
     assert 'Alpha QB' not in after_qb_drafted['player_name'].tolist()
-    assert initial.iloc[0]['player_name'] != after_qb_drafted.iloc[0]['player_name'] or initial.iloc[0]['position'] != after_qb_drafted.iloc[0]['position']
+    assert (
+        initial.iloc[0]['player_name'] != after_qb_drafted.iloc[0]['player_name']
+        or initial.iloc[0]['position'] != after_qb_drafted.iloc[0]['position']
+    )
 
 
 def test_workbook_contains_core_sheets():
     settings = LeagueSettings()
-    artifacts = build_draft_decision_artifacts(_synthetic_players(), settings, DraftContext(current_pick_number=10))
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
 
     with TemporaryDirectory() as tmpdir:
         output_path = Path(tmpdir) / 'draft_board.xlsx'
@@ -110,14 +150,57 @@ def test_workbook_contains_core_sheets():
         import openpyxl
 
         wb = openpyxl.load_workbook(output_path)
-        assert {'Big Board', 'By Position', 'My Picks', 'Tier Cliffs', 'Availability', 'Targets By Round', 'Roster Construction Scenarios', 'Player Notes', 'Model Diagnostics', 'Source Freshness'}.issubset(set(wb.sheetnames))
+        assert {
+            'Big Board',
+            'By Position',
+            'My Picks',
+            'Tier Cliffs',
+            'Availability',
+            'Targets By Round',
+            'Roster Construction Scenarios',
+            'Player Notes',
+            'Model Diagnostics',
+            'Source Freshness',
+        }.issubset(set(wb.sheetnames))
+
+
+def test_slot_specific_artifacts_use_prefixed_filenames():
+    settings = LeagueSettings()
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
+
+    with TemporaryDirectory() as tmpdir:
+        output_dir = Path(tmpdir) / 'results'
+        dashboard_dir = Path(tmpdir) / 'dashboard'
+        saved = save_draft_decision_artifacts(
+            artifacts,
+            output_dir,
+            year=2026,
+            filename_prefix='pos03_',
+            dashboard_dir=dashboard_dir,
+        )
+
+        assert saved['workbook_path'].name == 'draft_board_pos03_2026.xlsx'
+        assert saved['payload_path'].name == 'dashboard_payload_pos03_2026.json'
+        assert saved['html_path'].name == 'draft_board_pos03_2026.html'
+        assert saved['backtest_path'].name.startswith('draft_decision_backtest_pos03_')
 
 
 def test_backtest_payload_has_expected_shape():
     season_history = pd.DataFrame(
         {
             'Season': [2022, 2022, 2023, 2023, 2024, 2024, 2024, 2024],
-            'Name': ['Alpha QB', 'Alpha RB', 'Alpha QB', 'Alpha RB', 'Alpha QB', 'Alpha RB', 'Alpha WR', 'Alpha TE'],
+            'Name': [
+                'Alpha QB',
+                'Alpha RB',
+                'Alpha QB',
+                'Alpha RB',
+                'Alpha QB',
+                'Alpha RB',
+                'Alpha WR',
+                'Alpha TE',
+            ],
             'Position': ['QB', 'RB', 'QB', 'RB', 'QB', 'RB', 'WR', 'TE'],
             'FantPt': [280, 210, 295, 220, 310, 230, 190, 170],
         }

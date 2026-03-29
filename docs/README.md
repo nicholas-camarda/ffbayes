@@ -2,7 +2,7 @@
 
 Welcome to the FFBayes documentation! This guide helps you find the right information for your needs.
 
-All generated outputs are written to `~/ProjectsRuntime/ffbayes` during execution and then mirrored to `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes` for published deliverables.
+Generated outputs are written to `~/ProjectsRuntime/ffbayes` during execution. Published copies are mirrored to `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes` only when you run `ffbayes-publish`.
 
 ## 📚 **Documentation Guide**
 
@@ -38,6 +38,9 @@ python -m ffbayes.run_pipeline_split pre_draft
 python -m ffbayes.draft_strategy.draft_decision_strategy
 python -m ffbayes.analysis.draft_decision_backtest
 
+# Explicit publication
+python -m ffbayes.publish_artifacts --year 2026 --phase pre_draft
+
 # Post-draft analysis  
 python -m ffbayes.run_pipeline_split post_draft
 
@@ -47,10 +50,11 @@ python -m ffbayes.analysis.montecarlo_historical_ff
 ```
 
 ### **Key Files**
-- **Team File**: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/data/raw/my_ff_teams/drafted_team_<year>.tsv`
-- **Main Output**: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/draft_strategy/draft_board_<year>.xlsx`
-- **Dashboard Payload**: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/draft_strategy/dashboard_payload_<year>.json`
-- **Decision Backtest**: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/draft_strategy/draft_decision_backtest_<year_range>.json`
+- **Team File**: `~/ProjectsRuntime/ffbayes/data/raw/my_ff_teams/drafted_team_<year>.tsv`
+- **Main Output**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/draft_strategy/draft_board_<year>.xlsx`
+- **Dashboard Payload**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/dashboard/dashboard_payload_<year>.json`
+- **HTML Fallback**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/dashboard/draft_board_<year>.html`
+- **Decision Backtest**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/draft_strategy/draft_decision_backtest_<year_range>.json`
 - **Configuration**: JSON config files (see main README)
 
 ### **Common Issues**
@@ -94,5 +98,6 @@ docs/
 - **Technical Questions**: See the Technical Deep Dive documentation
 - **Development**: Review the Development Setup and Contributing guides
 - **Bugs**: Check the logs in `~/ProjectsRuntime/ffbayes/logs/`
+- **Publishing**: Run `python -m ffbayes.publish_artifacts --year <year> --phase pre_draft` or `post_draft`
 
 ---

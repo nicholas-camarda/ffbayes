@@ -35,6 +35,8 @@ dependencies = [
 dev = ["pytest>=7", "ruff>=0.5", "mypy>=1.5"]
 
 [project.scripts]
+ffbayes = "ffbayes.cli:main"
+ffbayes-cli = "ffbayes.cli:main"
 ffbayes-pipeline = "ffbayes.run_pipeline:main"
 ffbayes-collect = "ffbayes.data_pipeline.collect_data:main"
 ffbayes-validate = "ffbayes.data_pipeline.validate_data:main"
@@ -48,6 +50,7 @@ ffbayes-compare = "ffbayes.analysis.model_comparison_framework:main"
 ffbayes-viz = "ffbayes.visualization.create_team_aggregation_visualizations:main"
 ffbayes-draft-strategy = "ffbayes.draft_strategy.draft_decision_strategy:main"
 ffbayes-draft-backtest = "ffbayes.analysis.draft_decision_backtest:main"
+ffbayes-publish = "ffbayes.publish_artifacts:main"
 ffbayes-compare-strategies = "ffbayes.analysis.draft_strategy_comparison:main"
 ffbayes-bayesian-vor = "ffbayes.analysis.bayesian_vor_comparison:main"
 

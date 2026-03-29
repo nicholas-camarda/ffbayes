@@ -7,6 +7,7 @@ Prepares data specifically for analysis scripts.
 
 import glob
 import os
+from pathlib import Path
 
 # Add scripts/utils to path for progress monitoring
 import numpy as np
@@ -20,19 +21,27 @@ except Exception:
 
 def create_analysis_dataset(path_to_data_directory):
     """Create and preprocess the fantasy football dataset for analysis."""
-    print("Loading and preprocessing data for analysis...")
-    
+    print('Loading and preprocessing data for analysis...')
+
     # Read in the datasets and combine - look for season.csv files in season_datasets subdirectory
-    from ffbayes.utils.path_constants import SEASON_DATASETS_DIR
+    from ffbayes.utils.analysis_windows import (
+        build_freshness_manifest,
+        get_analysis_years,
+        resolve_analysis_window,
+        write_freshness_manifest,
+    )
+    from ffbayes.utils.path_constants import RAW_DATA_DIR, SEASON_DATASETS_DIR
+
     all_files = glob.glob(str(SEASON_DATASETS_DIR / '*season.csv'))
     if not all_files:
-        raise ValueError(f"No season data files found in {SEASON_DATASETS_DIR}")
-    
-    # Sort files by year and get only the last 5 years
+        raise ValueError(f'No season data files found in {SEASON_DATASETS_DIR}')
+
     from datetime import datetime
+
     current_year = datetime.now().year
-    target_years = list(range(current_year - 5, current_year))
-    
+    target_years = get_analysis_years(current_year)
+    allow_stale = os.getenv('FFBAYES_ALLOW_STALE_SEASON', 'false').lower() == 'true'
+
     # Filter files to only include the last 5 years
     filtered_files = []
     for file in all_files:
@@ -40,18 +49,50 @@ def create_analysis_dataset(path_to_data_directory):
         year = int(filename.replace('season.csv', ''))
         if year in target_years:
             filtered_files.append(file)
-    
+
     if not filtered_files:
-        raise ValueError(f"No season data files found for the last 5 years ({target_years})")
-    
-    print(f"Using {len(filtered_files)} season files for last 5 years: {[os.path.basename(f) for f in filtered_files]}")
-    print(f"Target years: {target_years}")
-    
+        raise ValueError(
+            f'No season data files found for the last 5 years ({target_years})'
+        )
+
+    freshness_window = resolve_analysis_window(
+        [
+            int(os.path.basename(file).replace('season.csv', ''))
+            for file in filtered_files
+        ],
+        reference_year=current_year,
+        allow_stale=True,
+    )
+    freshness_manifest = build_freshness_manifest(
+        freshness_window,
+        source_name='season_datasets',
+        source_path=SEASON_DATASETS_DIR,
+        found_files=[Path(file) for file in filtered_files],
+    )
+    write_freshness_manifest(
+        freshness_manifest, RAW_DATA_DIR / 'preprocess_freshness_manifest.json'
+    )
+
+    print(
+        f'Using {len(filtered_files)} season files for last 5 years: {[os.path.basename(f) for f in filtered_files]}'
+    )
+    print(f'Target years: {target_years}')
+
+    if (
+        not allow_stale
+        and freshness_window.latest_expected_year is not None
+        and freshness_window.latest_expected_year not in freshness_window.found_years
+    ):
+        raise RuntimeError(
+            f'Missing latest expected season {freshness_window.latest_expected_year}. '
+            'Re-run with FFBAYES_ALLOW_STALE_SEASON=true only if you explicitly want a degraded window.'
+        )
+
     data_temp = pd.concat((pd.read_csv(f) for f in filtered_files), ignore_index=True)
-    print(f"Combined data shape: {data_temp.shape}")
-    print(f"Available columns: {data_temp.columns.tolist()}")
-    print(f"Season range: {data_temp['Season'].min()} - {data_temp['Season'].max()}")
-    
+    print(f'Combined data shape: {data_temp.shape}')
+    print(f'Available columns: {data_temp.columns.tolist()}')
+    print(f'Season range: {data_temp["Season"].min()} - {data_temp["Season"].max()}')
+
     # Sort properly
     data = data_temp.sort_values(
         by=['Season', 'Name', 'G#'], ascending=[True, True, True]
@@ -96,69 +137,74 @@ def create_analysis_dataset(path_to_data_directory):
     # Keep rows where we have the essential columns
     essential_cols = ['Name', 'Position', 'Season', 'FantPt', '7_game_avg']
     data = data.dropna(subset=essential_cols)
-    
+
     # Convert rank to integer, handling NaN values
     data['rank'] = data['rank'].fillna(0).astype(int)
-    
-    print(f"After cleaning, data shape: {data.shape}")
-    print(f"Season range after cleaning: {data['Season'].min()} - {data['Season'].max()}")
+
+    print(f'After cleaning, data shape: {data.shape}')
+    print(
+        f'Season range after cleaning: {data["Season"].min()} - {data["Season"].max()}'
+    )
 
     # Save combined dataset with consistent naming
     from ffbayes.utils.path_constants import COMBINED_DATASETS_DIR
+
     output_dir = str(COMBINED_DATASETS_DIR)
-    
+
     # Create filename with year range for consistency
-    year_range = f"{data['Season'].min()}-{data['Season'].max()}"
+    year_range = f'{data["Season"].min()}-{data["Season"].max()}'
     output_file = os.path.join(output_dir, f'{year_range}season_modern.csv')
-    
+
     data.to_csv(output_file, index=False)
-    print(f"Combined dataset saved to: {output_file}")
-    print(f"Shape: {data.shape}")
-    
+    print(f'Combined dataset saved to: {output_file}')
+    print(f'Shape: {data.shape}')
+
     return data, team_names
 
 
 def main(args=None):
     """Main preprocessing function with standardized interface."""
     from ffbayes.utils.script_interface import create_standardized_interface
-    
+
     interface = create_standardized_interface(
-        "ffbayes-preprocess",
-        "Data preprocessing for analysis with standardized interface"
+        'ffbayes-preprocess',
+        'Data preprocessing for analysis with standardized interface',
     )
-    
+
     # Parse arguments
     if args is None:
         args = interface.parse_arguments()
-    
+
     # Add data-specific arguments
     parser = interface.setup_argument_parser()
     parser = interface.add_data_arguments(parser)
     args = parser.parse_args()
-    
+
     # Set up logging
     logger = interface.setup_logging(args)
-    
+
     # Get data directory
     data_dir = interface.get_data_directory(args)
-    logger.info(f"Using data directory: {data_dir}")
-    
+    logger.info(f'Using data directory: {data_dir}')
+
     # Check for quick test mode
     if args.quick_test:
-        logger.warning("⚠️  QUICK_TEST mode explicitly enabled - processing limited data")
-        logger.warning("⚠️  This will not provide production-quality results")
-    
+        logger.warning(
+            '⚠️  QUICK_TEST mode explicitly enabled - processing limited data'
+        )
+        logger.warning('⚠️  This will not provide production-quality results')
+
     # Preprocess data for analysis
     data, team_names = interface.handle_errors(create_analysis_dataset, str(data_dir))
-    
-    logger.info("Preprocessing completed!")
-    logger.info(f"Final dataset: {data.shape}")
-    logger.info(f"Teams: {len(team_names)}")
-    
-    interface.log_completion("Data preprocessing completed successfully")
-    
+
+    logger.info('Preprocessing completed!')
+    logger.info(f'Final dataset: {data.shape}')
+    logger.info(f'Teams: {len(team_names)}')
+
+    interface.log_completion('Data preprocessing completed successfully')
+
     return data, team_names
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

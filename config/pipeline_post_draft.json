@@ -71,23 +71,10 @@
       "parallel_group": "modeling"
     },
     {
-      "name": "bayesian_draft_strategy",
-      "script": "ffbayes.draft_strategy.bayesian_draft_strategy",
+      "name": "draft_decision_strategy",
+      "script": "ffbayes.draft_strategy.draft_decision_strategy",
       "args": "--draft-position 10 --league-size 10 --risk-tolerance medium",
-      "description": "Generate optimal draft strategies using Bayesian predictions",
-      "timeout": 300,
-      "retry_count": 2,
-      "dependencies": [
-        "hybrid_mc_analysis"
-      ],
-      "critical": true,
-      "parallel_group": "strategy"
-    },
-    {
-      "name": "hybrid_draft_strategy",
-      "script": "ffbayes.draft_strategy.hybrid_draft_strategy",
-      "args": "--draft-position 10 --league-size 10 --risk-tolerance medium",
-      "description": "Generate hybrid VOR + Bayesian draft strategy with Excel output",
+      "description": "Generate the canonical draft decision board and dashboard",
       "timeout": 300,
       "retry_count": 2,
       "dependencies": [
@@ -116,7 +103,7 @@
       "timeout": 600,
       "retry_count": 2,
       "dependencies": [
-        "bayesian_draft_strategy",
+        "draft_decision_strategy",
         "create_unified_dataset"
       ],
       "critical": false,

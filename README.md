@@ -5,9 +5,9 @@ A sophisticated fantasy football analytics system that combines Monte Carlo simu
 ## Workspace Contract
 
 - Source code lives in `~/Projects/ffbayes`
-- Runtime artifacts live in `~/ProjectsRuntime/ffbayes`
-- Raw scraped inputs and published deliverables live in `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes`
-- Successful runs mirror results and plots from runtime into the cloud tree
+- Runtime data, logs, and per-run artifacts live in `~/ProjectsRuntime/ffbayes`
+- Raw scraped inputs and processed analysis data stay in the runtime tree by default
+- Published deliverables are mirrored into `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes` only when you run `ffbayes-publish`
 
 ## 🚀 **Quick Start**
 
@@ -44,17 +44,24 @@ python -m ffbayes.run_pipeline_split pre_draft
 ```
 
 **What You Get:**
-- 📊 **Draft Board Workbook**: `draft_board_<year>.xlsx` with board, tiers, availability, scenarios, and diagnostics
+- 📊 **Draft Board Workbook**: `draft_board_<year>.xlsx` with board, tiers, availability, scenarios, diagnostics, and freshness
 - 🧠 **Dashboard Payload**: `dashboard_payload_<year>.json` for the local interactive draft dashboard
-- 📋 **Decision Backtest**: `draft_decision_backtest_<year_range>.json` comparing market, VOR, consensus, and draft-score strategies
+- 🌐 **HTML Fallback**: `draft_board_<year>.html` for quick browser access
+- 📋 **Decision Backtest**: `draft_decision_backtest_<year_range>.json` comparing market, VOR, consensus, recent-form, and draft-score strategies
+
+If you want the published mirror, run:
+```bash
+python -m ffbayes.publish_artifacts --year <year> --phase pre_draft
+```
 
 ### **Step 4: Use During Draft**
-- Open `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/vor_strategy/DRAFTING STRATEGY -- snake-draft_ppr-<ppr>_vor_top-<top_rank>_<year>.xlsx`
-- Follow the pick-by-pick recommendations
+- Open `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/draft_strategy/draft_board_<year>.xlsx`
+- Use `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/dashboard/draft_board_<year>.html` if you want a browser view
+- Follow the pick-by-pick recommendations in the workbook
 - Use backup options if primary targets are gone
 
 ### **Step 5: Post-Draft Analysis**
-After drafting, save your team to `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/data/raw/my_ff_teams/drafted_team_<year>.tsv`:
+After drafting, save your team to `~/ProjectsRuntime/ffbayes/data/raw/my_ff_teams/drafted_team_<year>.tsv`:
 
 ```tsv
 Name	Position	Team
@@ -73,6 +80,7 @@ python -m ffbayes.run_pipeline_split post_draft
 - 📊 **Season Projections**: Weekly score expectations with confidence intervals
 - 🔍 **Monte Carlo Validation**: 5000 simulations of your team's performance
 - 📋 **Team Summary**: Comprehensive analysis and recommendations
+- If you want to mirror the runtime outputs into the cloud workspace, run `python -m ffbayes.publish_artifacts --year <year> --phase post_draft`
 
 ---
 
@@ -101,31 +109,32 @@ Unlike traditional models that fail with new players, FFBayes can:
 ## 📁 **Output Organization**
 
 ### **Pre-Draft Outputs** (Use During Draft)
-Runtime working tree: `~/ProjectsRuntime/ffbayes/results/<year>/pre_draft/`
+Runtime working tree: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/`
 
 - `vor_strategy/` - Excel draft guide and raw VOR data
-- `draft_strategy/` - Draft board workbook, dashboard payload, HTML dashboard, and compatibility JSON
+- `draft_strategy/` - Canonical draft board workbook, dashboard payload, HTML dashboard, compatibility JSON, and backtest
+- `dashboard/` - Interactive dashboard payload and HTML fallback
 - `hybrid_mc_bayesian/` - Monte Carlo + Bayesian model outputs
 
-Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/pre_draft/`
+Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/pre_draft/` after `ffbayes-publish`
 
 ### **Post-Draft Outputs** (Use During Season)
-Runtime working tree: `~/ProjectsRuntime/ffbayes/results/<year>/post_draft/`
+Runtime working tree: `~/ProjectsRuntime/ffbayes/runs/<year>/post_draft/results/`
 
 - `team_aggregation/` - Team analysis JSON
 - `montecarlo_results/` - Season projections TSV
 - `monte_carlo_validation/` - Validation JSON
 
-Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/post_draft/`
+Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/post_draft/` after `ffbayes-publish`
 
 ### **Visualizations** (Analysis & Strategy)
-Runtime plots: `~/ProjectsRuntime/ffbayes/plots/<year>/`
+Runtime plots: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/plots/` and `~/ProjectsRuntime/ffbayes/runs/<year>/post_draft/plots/`
 
-- `pre_draft/` - Strategy comparison, analysis, and draft decision support
+- `pre_draft/` - Strategy comparison, draft-score diagnostics, freshness views, and slot sensitivity
 - `post_draft/` - Team analysis charts
 
-Published plots: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/plots/<year>/`
-Published preview images: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/docs/images/`
+Published plots: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/plots/<year>/` after `ffbayes-publish`
+Published preview images: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/docs/images/` after `ffbayes-publish`
 
 ---
 
@@ -154,16 +163,16 @@ Published preview images: `~/Library/CloudStorage/OneDrive-Personal/SideProjects
 ```
 
 ### **Pipeline Configuration: `config/pipeline_config.json`**
-Defines the 12-step pipeline process:
+Defines the pipeline process:
 1. **Data Collection** - Gather NFL fantasy data
 2. **Data Validation** - Verify data quality
 3. **Data Preprocessing** - Prepare for analysis
 4. **VOR Strategy** - Generate traditional rankings
 5. **Unified Dataset** - Combine all data sources
 6. **Hybrid MC Analysis** - Run Monte Carlo + Bayesian model
-7. **Draft Decision Strategy** - Generate the draft utility table and board
-8. **Strategy Comparison** - Compare market, VOR, consensus, and draft-score strategies
-9. **Pre-Draft Analysis** - Generate draft board and dashboard outputs
+7. **Draft Decision Strategy** - Generate the canonical draft utility table and board
+8. **Strategy Comparison** - Backtest market, VOR, consensus, recent-form, and draft-score strategies
+9. **Pre-Draft Analysis** - Generate the draft board, dashboard payload, HTML fallback, and diagnostics
 10. **Team Aggregation** - Analyze drafted team
 11. **Monte Carlo Validation** - Validate team performance
 12. **Team Summary Export** - Save analysis to files
@@ -172,16 +181,11 @@ Defines the 12-step pipeline process:
 
 ## 📊 **Visualizations**
 
-🚧 **UNDER CONSTRUCTION** 🚧
-
-The visualization system is currently being updated to provide more comprehensive and actionable insights. New visualizations will include:
-
-### **Pre-Draft Visualizations** (Draft-Day Ready)
-- **Draft Board Dashboard** - Interactive local board with filters, targets, and regret view
-- **Model Performance Dashboard** - Market vs VOR vs consensus vs draft-score diagnostics
-- **Draft Value Heatmap** - Positional value by draft round
-- **Risk-Reward Analysis** - Player uncertainty and upside potential
-- **Strategy Success Rates** - Historical performance of different approaches
+### **Primary Draft Outputs**
+- **Draft Board Workbook** - `draft_board_<year>.xlsx` with board, by-position, my picks, tier cliffs, availability, targets by round, roster scenarios, player notes, diagnostics, freshness, and backtest summary
+- **Dashboard Payload** - `dashboard_payload_<year>.json` for the local interactive dashboard
+- **HTML Fallback** - `draft_board_<year>.html` for browser access without a notebook or app shell
+- **Decision Backtest** - `draft_decision_backtest_<year_range>.json` comparing draft strategies on the same targets
 
 ### **How the Draft Score Works**
 
@@ -212,6 +216,11 @@ Interpretation guide:
 - High `availability_at_pick` means "safe to wait."
 - High `upside_score` with high `fragility_score` means "boom-bust upside."
 - High `why_flags` density means the player is unusual enough to inspect manually.
+
+### **Publication**
+- Runtime outputs stay local by default.
+- To mirror selected results into the cloud workspace, run `python -m ffbayes.publish_artifacts --year <year> --phase pre_draft` or `--phase post_draft`.
+- Use `--phase both` only when you want both run phases mirrored together.
 
 ### **Post-Draft Visualizations** (Coming Soon)
 - **Team Composition Analysis** - Roster balance and depth assessment

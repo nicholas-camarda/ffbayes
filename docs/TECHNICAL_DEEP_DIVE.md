@@ -332,16 +332,23 @@ def adjust_for_risk_tolerance(player_rankings, risk_level):
 ```
 data_collection → data_validation → data_preprocessing → vor_draft_strategy
        ↓                ↓                ↓                ↓
-create_unified_dataset → hybrid_mc_analysis → bayesian_draft_strategy
+create_unified_dataset → hybrid_mc_analysis → draft_decision_strategy
        ↓                ↓                ↓                ↓
 create_human_readable_strategy → draft_strategy_comparison → pre_draft_visualizations
 ```
 
+Publication is intentionally outside the pipeline graph. Use `python -m ffbayes.publish_artifacts --year <year> --phase pre_draft` or `--phase post_draft` to mirror selected runtime outputs into the cloud workspace.
+
 ### **Error Handling Philosophy**
 - **Fail Fast**: Pipeline breaks immediately on critical errors
-- **No Fallbacks**: If data is missing, pipeline stops
+- **No Silent Fallbacks**: If the latest expected season is missing, pipeline stops unless you explicitly pass the stale-season flag
 - **Clear Messages**: Error messages explain exactly what's wrong
 - **User Control**: Users decide how to fix issues
+
+### **Freshness Policy**
+- The canonical analysis window is the last five completed seasons.
+- On March 29, 2026, that window is 2021-2025.
+- If the latest expected season is missing, the pipeline writes a freshness manifest and stops unless `--allow-stale-season` or `FFBAYES_ALLOW_STALE_SEASON=true` is set.
 
 ### **Parallel Execution**
 - **Independent Steps**: Run simultaneously when possible
@@ -378,7 +385,7 @@ Raw NFL Data → Season Datasets → Combined Dataset → Unified Dataset → Mo
 ## 🎨 **Visualization System**
 
 ### **Chart Types Generated**
-1. **Strategy Comparison**: VOR vs Bayesian approaches
+1. **Strategy Comparison**: market, VOR, consensus, recent-form, and draft-score approaches
 2. **Position Analysis**: Team composition and balance
 3. **Uncertainty Analysis**: Risk assessment and confidence
 4. **Draft Summary**: Pick-by-pick recommendations

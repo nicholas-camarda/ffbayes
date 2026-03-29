@@ -32,7 +32,6 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from scipy.stats import spearmanr
 
-
 POSITION_ORDER = ['QB', 'RB', 'WR', 'TE', 'DST', 'K']
 DEFAULT_FLEX_WEIGHTS = {'RB': 0.45, 'WR': 0.45, 'TE': 0.10}
 DEFAULT_ROSTER_TEMPLATE = {
@@ -122,8 +121,12 @@ class LeagueSettings:
     scoring_type: str = 'PPR'
     ppr_value: float = 0.5
     risk_tolerance: str = 'medium'
-    roster_spots: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_ROSTER_TEMPLATE))
-    flex_weights: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_FLEX_WEIGHTS))
+    roster_spots: dict[str, int] = field(
+        default_factory=lambda: dict(DEFAULT_ROSTER_TEMPLATE)
+    )
+    flex_weights: dict[str, float] = field(
+        default_factory=lambda: dict(DEFAULT_FLEX_WEIGHTS)
+    )
     bench_slots: int = 6
 
     @classmethod
@@ -131,15 +134,29 @@ class LeagueSettings:
         mapping = mapping or {}
         league_settings = mapping.get('league_settings', mapping)
         roster = dict(DEFAULT_ROSTER_TEMPLATE)
-        roster.update({k.upper(): _coerce_int(v, roster.get(k.upper(), 0)) for k, v in league_settings.get('roster_spots', {}).items()})
+        roster.update(
+            {
+                k.upper(): _coerce_int(v, roster.get(k.upper(), 0))
+                for k, v in league_settings.get('roster_spots', {}).items()
+            }
+        )
         flex_weights = dict(DEFAULT_FLEX_WEIGHTS)
-        flex_weights.update({k.upper(): float(v) for k, v in league_settings.get('flex_weights', {}).items()})
+        flex_weights.update(
+            {
+                k.upper(): float(v)
+                for k, v in league_settings.get('flex_weights', {}).items()
+            }
+        )
         return cls(
             league_size=_coerce_int(league_settings.get('league_size', 10), 10),
             draft_position=_coerce_int(league_settings.get('draft_position', 10), 10),
-            scoring_type=_safe_string(league_settings.get('scoring_type', 'PPR')) or 'PPR',
-            ppr_value=_coerce_float(league_settings.get('ppr_value', league_settings.get('ppr', 0.5)), 0.5),
-            risk_tolerance=_safe_string(league_settings.get('risk_tolerance', 'medium')) or 'medium',
+            scoring_type=_safe_string(league_settings.get('scoring_type', 'PPR'))
+            or 'PPR',
+            ppr_value=_coerce_float(
+                league_settings.get('ppr_value', league_settings.get('ppr', 0.5)), 0.5
+            ),
+            risk_tolerance=_safe_string(league_settings.get('risk_tolerance', 'medium'))
+            or 'medium',
             roster_spots=roster,
             flex_weights=flex_weights,
             bench_slots=_coerce_int(league_settings.get('bench_slots', 6), 6),
@@ -149,7 +166,10 @@ class LeagueSettings:
         return asdict(self)
 
     def starters_by_position(self) -> dict[str, int]:
-        return {pos: self.roster_spots.get(pos, 0) * self.league_size for pos in POSITION_ORDER}
+        return {
+            pos: self.roster_spots.get(pos, 0) * self.league_size
+            for pos in POSITION_ORDER
+        }
 
     def effective_replacement_slots(self) -> dict[str, int]:
         starters = self.starters_by_position()
@@ -166,7 +186,10 @@ class LeagueSettings:
         return replacement
 
     def round_count(self) -> int:
-        base = sum(self.roster_spots.get(pos, 0) for pos in ['QB', 'RB', 'WR', 'TE', 'DST', 'K'])
+        base = sum(
+            self.roster_spots.get(pos, 0)
+            for pos in ['QB', 'RB', 'WR', 'TE', 'DST', 'K']
+        )
         base += self.bench_slots
         return max(1, base)
 
@@ -226,7 +249,15 @@ def normalize_player_frame(player_frame: pd.DataFrame) -> pd.DataFrame:
             rename_map[column] = 'player_name'
         elif normalized in {'pos', 'position', 'slot'}:
             rename_map[column] = 'position'
-        elif normalized in {'fpts', 'fantpt', 'fantasy_points', 'projected_points', 'projected_fpts', 'proj_points', 'projection'}:
+        elif normalized in {
+            'fpts',
+            'fantpt',
+            'fantasy_points',
+            'projected_points',
+            'projected_fpts',
+            'proj_points',
+            'projection',
+        }:
             rename_map[column] = 'proj_points_mean'
         elif normalized in {'adp', 'avg', 'average_draft_position', 'market_rank'}:
             rename_map[column] = 'adp'
@@ -261,7 +292,9 @@ def normalize_player_frame(player_frame: pd.DataFrame) -> pd.DataFrame:
         ]
         for column in source_columns:
             if column in player_frame.columns:
-                df['proj_points_mean'] = pd.to_numeric(player_frame[column], errors='coerce')
+                df['proj_points_mean'] = pd.to_numeric(
+                    player_frame[column], errors='coerce'
+                )
                 break
     df['proj_points_mean'] = pd.to_numeric(df.get('proj_points_mean'), errors='coerce')
 
@@ -276,7 +309,9 @@ def normalize_player_frame(player_frame: pd.DataFrame) -> pd.DataFrame:
         df['std_projection'] = np.nan
 
     if 'uncertainty_score' in df.columns:
-        df['uncertainty_score'] = pd.to_numeric(df['uncertainty_score'], errors='coerce')
+        df['uncertainty_score'] = pd.to_numeric(
+            df['uncertainty_score'], errors='coerce'
+        )
     else:
         df['uncertainty_score'] = np.nan
 
@@ -321,17 +356,16 @@ def normalize_player_frame(player_frame: pd.DataFrame) -> pd.DataFrame:
     if 'source_updated_at' not in df.columns:
         df['source_updated_at'] = pd.NaT
 
-    df = df.drop_duplicates(subset=['player_name', 'position']).reset_index(drop=True)
+    df = df.drop_duplicates(subset=['player_name', 'position'], keep='last').reset_index(drop=True)
     return df
 
 
 def _position_baseline(
-    frame: pd.DataFrame,
-    position: str,
-    slot_count: int,
-    fallback: float | None = None,
+    frame: pd.DataFrame, position: str, slot_count: int, fallback: float | None = None
 ) -> float:
-    pos_values = pd.to_numeric(frame.loc[frame['position'] == position, 'proj_points_mean'], errors='coerce').dropna()
+    pos_values = pd.to_numeric(
+        frame.loc[frame['position'] == position, 'proj_points_mean'], errors='coerce'
+    ).dropna()
     if pos_values.empty:
         if fallback is not None and not pd.isna(fallback):
             return float(fallback)
@@ -345,13 +379,19 @@ def _position_baseline(
 
 def _compute_freshness(source_frame: pd.DataFrame) -> pd.DataFrame:
     if source_frame is None or source_frame.empty:
-        return pd.DataFrame(columns=['source_name', 'source_updated_at', 'freshness_days', 'row_count'])
+        return pd.DataFrame(
+            columns=['source_name', 'source_updated_at', 'freshness_days', 'row_count']
+        )
 
     summary_rows = []
     for source_name, sub in source_frame.groupby('source_name', dropna=False):
         updated = pd.to_datetime(sub['source_updated_at'], errors='coerce')
         freshest = updated.max() if not updated.isna().all() else pd.NaT
-        freshness_days = (pd.Timestamp.now(tz=None) - freshest).days if pd.notna(freshest) else np.nan
+        freshness_days = (
+            (pd.Timestamp.now(tz=None) - freshest).days
+            if pd.notna(freshest)
+            else np.nan
+        )
         summary_rows.append(
             {
                 'source_name': source_name if source_name else 'unknown',
@@ -405,16 +445,30 @@ def build_decision_table(
     # Project floors/ceilings from uncertainty or historical spread.
     uncertainty = df['uncertainty_score'].copy()
     if uncertainty.isna().all():
-        uncertainty = (pd.to_numeric(df['std_projection'], errors='coerce') / df['proj_points_mean'].replace(0, np.nan)).fillna(0.15)
+        uncertainty = (
+            pd.to_numeric(df['std_projection'], errors='coerce')
+            / df['proj_points_mean'].replace(0, np.nan)
+        ).fillna(0.15)
     else:
-        uncertainty = uncertainty.fillna((pd.to_numeric(df['std_projection'], errors='coerce') / df['proj_points_mean'].replace(0, np.nan)).fillna(0.15))
+        uncertainty = uncertainty.fillna(
+            (
+                pd.to_numeric(df['std_projection'], errors='coerce')
+                / df['proj_points_mean'].replace(0, np.nan)
+            ).fillna(0.15)
+        )
 
     df['uncertainty_score'] = _clamp(uncertainty, 0.0, 1.0)
 
     spread_from_std = pd.to_numeric(df['std_projection'], errors='coerce')
-    fallback_spread = (df['proj_points_mean'].abs() * (0.08 + 0.35 * df['uncertainty_score'])).fillna(0.0)
-    df['proj_points_floor'] = df['proj_points_mean'] - spread_from_std.fillna(fallback_spread)
-    df['proj_points_ceiling'] = df['proj_points_mean'] + spread_from_std.fillna(fallback_spread) * 1.25
+    fallback_spread = (
+        df['proj_points_mean'].abs() * (0.08 + 0.35 * df['uncertainty_score'])
+    ).fillna(0.0)
+    df['proj_points_floor'] = df['proj_points_mean'] - spread_from_std.fillna(
+        fallback_spread
+    )
+    df['proj_points_ceiling'] = (
+        df['proj_points_mean'] + spread_from_std.fillna(fallback_spread) * 1.25
+    )
 
     # Replacement and starter baselines depend on league structure.
     starter_slots = settings.starters_by_position()
@@ -422,8 +476,15 @@ def build_decision_table(
     df['starter_baseline'] = np.nan
     df['replacement_baseline'] = np.nan
     for position in df['position'].dropna().unique():
-        starter_baseline = _position_baseline(df, position, starter_slots.get(position, 0), fallback=df['proj_points_mean'].mean())
-        replacement_baseline = _position_baseline(df, position, replacement_slots.get(position, 0), fallback=starter_baseline)
+        starter_baseline = _position_baseline(
+            df,
+            position,
+            starter_slots.get(position, 0),
+            fallback=df['proj_points_mean'].mean(),
+        )
+        replacement_baseline = _position_baseline(
+            df, position, replacement_slots.get(position, 0), fallback=starter_baseline
+        )
         pos_mask = df['position'] == position
         df.loc[pos_mask, 'starter_baseline'] = starter_baseline
         df.loc[pos_mask, 'replacement_baseline'] = replacement_baseline
@@ -444,34 +505,49 @@ def build_decision_table(
 
     # Availability is based on the next time we expect to pick again in a snake draft.
     target_pick = next_pick_number(
-        context.current_pick_number,
-        settings.draft_position,
-        settings.league_size,
+        context.current_pick_number, settings.draft_position, settings.league_size
     )
     df['availability_at_pick'] = [
-        availability_probability(adp=row.adp, target_pick=target_pick, adp_std=row.adp_std, uncertainty_score=row.uncertainty_score)
+        availability_probability(
+            adp=row.adp,
+            target_pick=target_pick,
+            adp_std=row.adp_std,
+            uncertainty_score=row.uncertainty_score,
+        )
         for row in df.itertuples(index=False)
     ]
 
     # Risk and upside signals.
     missing_history = pd.to_numeric(df['season_count'], errors='coerce').fillna(0.0)
     games_missed = pd.to_numeric(df['games_missed'], errors='coerce').fillna(0.0)
-    age = pd.to_numeric(df['age'], errors='coerce').fillna(df['age'].median(skipna=True) if df['age'].notna().any() else 27.0)
+    age = pd.to_numeric(df['age'], errors='coerce').fillna(
+        df['age'].median(skipna=True) if df['age'].notna().any() else 27.0
+    )
     years = pd.to_numeric(df['years_in_league'], errors='coerce').fillna(0.0)
     team_change = pd.to_numeric(df['team_change'], errors='coerce').fillna(0.0)
     role_volatility = pd.to_numeric(df['role_volatility'], errors='coerce').fillna(0.0)
-    site_disagreement = pd.to_numeric(df['site_disagreement'], errors='coerce').fillna(0.0)
+    site_disagreement = pd.to_numeric(df['site_disagreement'], errors='coerce').fillna(
+        0.0
+    )
     adp_std = pd.to_numeric(df['adp_std'], errors='coerce').fillna(0.0)
 
-    history_penalty = _clamp(pd.Series(1.0 / np.maximum(1.0, missing_history + 1.0)), 0.0, 1.0)
+    history_penalty = _clamp(
+        pd.Series(1.0 / np.maximum(1.0, missing_history + 1.0)), 0.0, 1.0
+    )
     injury_penalty = _clamp(pd.Series(np.tanh(games_missed / 6.0)), 0.0, 1.0)
     age_penalty = _clamp(pd.Series(np.maximum(0.0, (age - 29.0) / 8.0)), 0.0, 1.0)
     role_penalty = _clamp(pd.Series(np.maximum(0.0, role_volatility)), 0.0, 1.0)
     team_penalty = _clamp(pd.Series(np.maximum(0.0, team_change)), 0.0, 1.0)
-    disagreement_penalty = _clamp(pd.Series(np.maximum(0.0, np.maximum(site_disagreement, adp_std / 10.0))), 0.0, 1.0)
+    disagreement_penalty = _clamp(
+        pd.Series(np.maximum(0.0, np.maximum(site_disagreement, adp_std / 10.0))),
+        0.0,
+        1.0,
+    )
 
     if 'projected_points_spread' in df.columns:
-        spread = pd.to_numeric(df['projected_points_spread'], errors='coerce').fillna(0.0)
+        spread = pd.to_numeric(df['projected_points_spread'], errors='coerce').fillna(
+            0.0
+        )
     else:
         spread = (df['proj_points_ceiling'] - df['proj_points_floor']) / 2.0
     upside_gap = (df['proj_points_ceiling'] - df['proj_points_mean']).fillna(0.0)
@@ -498,20 +574,34 @@ def build_decision_table(
     # Lean toward players who are both good and likely to survive.
     df['starter_need'] = 0.0
     roster_need = {
-        'QB': max(0, settings.roster_spots.get('QB', 0) - context.roster_counts.get('QB', 0)),
-        'RB': max(0, settings.roster_spots.get('RB', 0) - context.roster_counts.get('RB', 0)),
-        'WR': max(0, settings.roster_spots.get('WR', 0) - context.roster_counts.get('WR', 0)),
-        'TE': max(0, settings.roster_spots.get('TE', 0) - context.roster_counts.get('TE', 0)),
+        'QB': max(
+            0, settings.roster_spots.get('QB', 0) - context.roster_counts.get('QB', 0)
+        ),
+        'RB': max(
+            0, settings.roster_spots.get('RB', 0) - context.roster_counts.get('RB', 0)
+        ),
+        'WR': max(
+            0, settings.roster_spots.get('WR', 0) - context.roster_counts.get('WR', 0)
+        ),
+        'TE': max(
+            0, settings.roster_spots.get('TE', 0) - context.roster_counts.get('TE', 0)
+        ),
     }
     roster_need_total = sum(roster_need.values()) or 1
     for position, need in roster_need.items():
         if need > 0:
-            df.loc[df['position'] == position, 'starter_need'] = need / roster_need_total
+            df.loc[df['position'] == position, 'starter_need'] = (
+                need / roster_need_total
+            )
 
     scarcity_by_position = df.groupby('position')['player_name'].transform('count')
-    df['position_scarcity'] = _clamp(1.0 / np.maximum(1.0, scarcity_by_position), 0.0, 1.0)
+    df['position_scarcity'] = _clamp(
+        1.0 / np.maximum(1.0, scarcity_by_position), 0.0, 1.0
+    )
 
-    risk_multiplier = {'low': 0.80, 'medium': 1.00, 'high': 1.18}.get(settings.risk_tolerance.lower(), 1.00)
+    risk_multiplier = {'low': 0.80, 'medium': 1.00, 'high': 1.18}.get(
+        settings.risk_tolerance.lower(), 1.00
+    )
     df['draft_score'] = (
         0.34 * _zscore(df['starter_delta']).fillna(0.0)
         + 0.20 * _zscore(df['replacement_delta']).fillna(0.0)
@@ -525,26 +615,39 @@ def build_decision_table(
     )
 
     df['draft_score'] = df['draft_score'].fillna(0.0)
-    df['draft_rank'] = df['draft_score'].rank(method='first', ascending=False).astype(int)
+    df['draft_rank'] = (
+        df['draft_score'].rank(method='first', ascending=False).astype(int)
+    )
     df['draft_tier'] = _assign_tiers(df['draft_score'])
     df['market_value_gap'] = df['model_rank'] - df['market_rank']
     df['why_flags'] = df.apply(_build_why_flags, axis=1)
 
-    df = df.sort_values(['draft_score', 'proj_points_mean'], ascending=[False, False]).reset_index(drop=True)
+    df = df.sort_values(
+        ['draft_score', 'proj_points_mean'], ascending=[False, False]
+    ).reset_index(drop=True)
     return df
 
 
 def _assign_tiers(scores: pd.Series, num_tiers: int = 5) -> pd.Series:
     if scores.empty:
         return pd.Series(dtype='object')
-    quantiles = pd.qcut(scores.rank(method='first', ascending=False), q=min(num_tiers, len(scores)), labels=False, duplicates='drop')
+    quantiles = pd.qcut(
+        scores.rank(method='first', ascending=False),
+        q=min(num_tiers, len(scores)),
+        labels=False,
+        duplicates='drop',
+    )
     tiers = pd.Series(quantiles, index=scores.index).fillna(0).astype(int) + 1
     return tiers.map(lambda tier: f'Tier {tier}')
 
 
 def _build_why_flags(row: pd.Series) -> str:
     flags: list[str] = []
-    if pd.notna(row.get('adp')) and pd.notna(row.get('market_rank')) and (row['market_rank'] - row['model_rank']) > 8:
+    if (
+        pd.notna(row.get('adp'))
+        and pd.notna(row.get('market_rank'))
+        and (row['market_rank'] - row['model_rank']) > 8
+    ):
         flags.append('market_discount')
     if pd.notna(row.get('availability_at_pick')) and row['availability_at_pick'] < 0.40:
         flags.append('survival_risk')
@@ -554,7 +657,11 @@ def _build_why_flags(row: pd.Series) -> str:
         flags.append('fragile')
     if pd.notna(row.get('starter_delta')) and row['starter_delta'] > 0:
         flags.append('starter_gain')
-    if row.get('position') in {'RB', 'WR'} and pd.notna(row.get('position_scarcity')) and row['position_scarcity'] > 0.10:
+    if (
+        row.get('position') in {'RB', 'WR'}
+        and pd.notna(row.get('position_scarcity'))
+        and row['position_scarcity'] > 0.10
+    ):
         flags.append('scarce_position')
     if pd.notna(row.get('season_count')) and row['season_count'] <= 1:
         flags.append('cohort_prior')
@@ -563,7 +670,9 @@ def _build_why_flags(row: pd.Series) -> str:
     return '|'.join(flags)
 
 
-def next_pick_number(current_pick_number: int, draft_position: int, league_size: int) -> int:
+def next_pick_number(
+    current_pick_number: int, draft_position: int, league_size: int
+) -> int:
     """Return the next pick at which our team will draft in a snake draft."""
     current_pick_number = max(1, int(current_pick_number))
     draft_position = max(1, int(draft_position))
@@ -594,27 +703,53 @@ def build_recommendations(
     available = decision_table.copy()
     if context.drafted_players:
         drafted = context.drafted_set()
-        available = available[~available['player_name'].str.lower().isin(drafted)].copy()
+        available = available[
+            ~available['player_name'].str.lower().isin(drafted)
+        ].copy()
     if context.keepers:
         keepers = {name.lower() for name in context.keepers}
-        available = available[~available['player_name'].str.lower().isin(keepers)].copy()
+        available = available[
+            ~available['player_name'].str.lower().isin(keepers)
+        ].copy()
 
     if available.empty:
-        return pd.DataFrame(columns=[
-            'player_name', 'position', 'draft_score', 'availability_at_pick', 'expected_regret',
-            'position_run_risk', 'roster_fit_score', 'pick_mode', 'rationale'
-        ])
+        return pd.DataFrame(
+            columns=[
+                'player_name',
+                'position',
+                'draft_score',
+                'availability_at_pick',
+                'expected_regret',
+                'position_run_risk',
+                'roster_fit_score',
+                'pick_mode',
+                'rationale',
+            ]
+        )
 
-    next_turn_pick = next_pick_number(context.current_pick_number, league_settings.draft_position, league_settings.league_size)
+    next_turn_pick = next_pick_number(
+        context.current_pick_number,
+        league_settings.draft_position,
+        league_settings.league_size,
+    )
     available = available.copy()
     available['availability_to_next_pick'] = [
-        availability_probability(adp=row.adp, target_pick=next_turn_pick, adp_std=row.adp_std, uncertainty_score=row.uncertainty_score)
+        availability_probability(
+            adp=row.adp,
+            target_pick=next_turn_pick,
+            adp_std=row.adp_std,
+            uncertainty_score=row.uncertainty_score,
+        )
         for row in available.itertuples(index=False)
     ]
 
     position_counts_remaining = available['position'].value_counts().to_dict()
     position_need = {
-        pos: max(0, league_settings.roster_spots.get(pos, 0) - context.roster_counts.get(pos, 0))
+        pos: max(
+            0,
+            league_settings.roster_spots.get(pos, 0)
+            - context.roster_counts.get(pos, 0),
+        )
         for pos in ['QB', 'RB', 'WR', 'TE']
     }
     total_need = sum(position_need.values()) or 1
@@ -626,15 +761,21 @@ def build_recommendations(
         return float(np.clip(1.0 - remaining / demand, 0.0, 1.0))
 
     available['position_run_risk'] = available['position'].map(_pos_run_risk)
-    available['roster_fit_score'] = available['position'].map(lambda pos: position_need.get(pos, 0) / total_need)
+    available['roster_fit_score'] = available['position'].map(
+        lambda pos: position_need.get(pos, 0) / total_need
+    )
 
     # Regret proxy: how much value we lose if we wait until next turn.
     best_now = available['draft_score'].max()
-    available['expected_regret'] = np.maximum(0.0, best_now - available['draft_score']) * (1.0 - available['availability_to_next_pick'])
+    available['expected_regret'] = np.maximum(
+        0.0, best_now - available['draft_score']
+    ) * (1.0 - available['availability_to_next_pick'])
     available['expected_regret'] += 0.25 * available['position_run_risk']
 
     # Combine current pick utility with wait-survival utility.
-    risk_bias = {'low': -0.08, 'medium': 0.0, 'high': 0.08}.get(league_settings.risk_tolerance.lower(), 0.0)
+    risk_bias = {'low': -0.08, 'medium': 0.0, 'high': 0.08}.get(
+        league_settings.risk_tolerance.lower(), 0.0
+    )
     available['current_pick_utility'] = (
         available['draft_score']
         + 0.15 * available['roster_fit_score']
@@ -648,11 +789,23 @@ def build_recommendations(
         - 0.15 * available['fragility_score']
     )
 
-    now = available.sort_values(['current_pick_utility', 'draft_score'], ascending=[False, False]).head(top_n).copy()
+    now = (
+        available.sort_values(
+            ['current_pick_utility', 'draft_score'], ascending=[False, False]
+        )
+        .head(top_n)
+        .copy()
+    )
     now['pick_mode'] = 'now'
     now['rationale'] = now.apply(_rationale_now, axis=1)
 
-    wait = available.sort_values(['wait_utility', 'availability_to_next_pick'], ascending=[False, False]).head(top_n).copy()
+    wait = (
+        available.sort_values(
+            ['wait_utility', 'availability_to_next_pick'], ascending=[False, False]
+        )
+        .head(top_n)
+        .copy()
+    )
     wait = wait[~wait['player_name'].isin(now['player_name'])].copy()
     wait['pick_mode'] = 'wait'
     wait['rationale'] = wait.apply(_rationale_wait, axis=1)
@@ -680,31 +833,27 @@ def build_recommendations(
         'rationale',
     ]
     combined = pd.concat([now[cols], wait[cols]], ignore_index=True)
-    combined = combined.sort_values(['pick_mode', 'draft_score'], ascending=[True, False]).reset_index(drop=True)
+    combined = combined.sort_values(
+        ['pick_mode', 'draft_score'], ascending=[True, False]
+    ).reset_index(drop=True)
     return combined
 
 
 def _rationale_now(row: pd.Series) -> str:
-    parts = [
-        f"{row['position']} value",
-        f"score={row['draft_score']:.2f}",
-    ]
+    parts = [f'{row["position"]} value', f'score={row["draft_score"]:.2f}']
     if row.get('why_flags'):
         parts.append(row['why_flags'].replace('|', ', '))
     if pd.notna(row.get('availability_to_next_pick')):
-        parts.append(f"survival={row['availability_to_next_pick']:.0%}")
+        parts.append(f'survival={row["availability_to_next_pick"]:.0%}')
     return '; '.join(parts)
 
 
 def _rationale_wait(row: pd.Series) -> str:
-    parts = [
-        f"wait candidate",
-        f"score={row['draft_score']:.2f}",
-    ]
+    parts = ['wait candidate', f'score={row["draft_score"]:.2f}']
     if pd.notna(row.get('availability_to_next_pick')):
-        parts.append(f"survival={row['availability_to_next_pick']:.0%}")
+        parts.append(f'survival={row["availability_to_next_pick"]:.0%}')
     if pd.notna(row.get('expected_regret')):
-        parts.append(f"regret={row['expected_regret']:.2f}")
+        parts.append(f'regret={row["expected_regret"]:.2f}')
     return '; '.join(parts)
 
 
@@ -712,13 +861,17 @@ def build_tier_cliffs(decision_table: pd.DataFrame) -> pd.DataFrame:
     """Compute position-consistent tier cliffs from the decision table."""
     rows = []
     for position, group in decision_table.groupby('position'):
-        ordered = group.sort_values('proj_points_mean', ascending=False).reset_index(drop=True)
+        ordered = group.sort_values('proj_points_mean', ascending=False).reset_index(
+            drop=True
+        )
         if ordered.empty:
             continue
         diffs = ordered['proj_points_mean'].diff(-1).fillna(0.0)
         threshold = diffs.quantile(0.75) if len(diffs) > 3 else diffs.max()
         threshold = float(np.nan_to_num(threshold, nan=0.0))
-        cliff_mask = diffs >= threshold if threshold > 0 else pd.Series([False] * len(ordered))
+        cliff_mask = (
+            diffs >= threshold if threshold > 0 else pd.Series([False] * len(ordered))
+        )
         for idx, row in ordered.iterrows():
             rows.append(
                 {
@@ -727,14 +880,18 @@ def build_tier_cliffs(decision_table: pd.DataFrame) -> pd.DataFrame:
                     'draft_score': row['draft_score'],
                     'proj_points_mean': row['proj_points_mean'],
                     'tier_cliff_distance': float(diffs.iloc[idx]),
-                    'is_tier_cliff': bool(cliff_mask.iloc[idx]) if len(cliff_mask) > idx else False,
+                    'is_tier_cliff': bool(cliff_mask.iloc[idx])
+                    if len(cliff_mask) > idx
+                    else False,
                     'draft_tier': row['draft_tier'],
                 }
             )
     return pd.DataFrame(rows)
 
 
-def build_roster_scenarios(decision_table: pd.DataFrame, league_settings: LeagueSettings) -> pd.DataFrame:
+def build_roster_scenarios(
+    decision_table: pd.DataFrame, league_settings: LeagueSettings
+) -> pd.DataFrame:
     """Generate simple roster-construction archetypes and their utility tradeoffs."""
     archetypes = [
         ('balanced', {'RB': 1.0, 'WR': 1.0, 'QB': 0.8, 'TE': 0.8}),
@@ -750,7 +907,9 @@ def build_roster_scenarios(decision_table: pd.DataFrame, league_settings: League
         score = 0.0
         count = 0
         for pos, weight in weights.items():
-            pos_df = top[top['position'] == pos].head(max(1, league_settings.roster_spots.get(pos, 0) + 1))
+            pos_df = top[top['position'] == pos].head(
+                max(1, league_settings.roster_spots.get(pos, 0) + 1)
+            )
             if pos_df.empty:
                 continue
             score += float(pos_df['draft_score'].mean()) * weight
@@ -762,17 +921,27 @@ def build_roster_scenarios(decision_table: pd.DataFrame, league_settings: League
                 'mean_draft_score': float(top['draft_score'].mean()),
                 'mean_upside_score': float(top['upside_score'].mean()),
                 'mean_fragility_score': float(top['fragility_score'].mean()),
-                'recommended_build': ', '.join([f'{pos}:{weight}' for pos, weight in weights.items()]),
+                'recommended_build': ', '.join(
+                    [f'{pos}:{weight}' for pos, weight in weights.items()]
+                ),
             }
         )
-    return pd.DataFrame(rows).sort_values('utility_proxy', ascending=False).reset_index(drop=True)
+    return (
+        pd.DataFrame(rows)
+        .sort_values('utility_proxy', ascending=False)
+        .reset_index(drop=True)
+    )
 
 
-def _starter_points_from_roster(team_roster: pd.DataFrame, league_settings: LeagueSettings) -> float:
+def _starter_points_from_roster(
+    team_roster: pd.DataFrame, league_settings: LeagueSettings
+) -> float:
     if team_roster.empty:
         return 0.0
 
-    def _take_best(pos: str, count: int, pool: pd.DataFrame) -> tuple[pd.DataFrame, float]:
+    def _take_best(
+        pos: str, count: int, pool: pd.DataFrame
+    ) -> tuple[pd.DataFrame, float]:
         if count <= 0 or pool.empty:
             return pool, 0.0
         chosen = pool.nlargest(count, 'actual_points')
@@ -790,18 +959,29 @@ def _starter_points_from_roster(team_roster: pd.DataFrame, league_settings: Leag
     flex_slots = league_settings.roster_spots.get('FLEX', 0)
     if flex_slots > 0:
         flex_pool = team_roster[team_roster['position'].isin(['RB', 'WR', 'TE'])]
-        flex_pool = flex_pool.loc[~flex_pool.index.isin(team_roster.index.difference(flex_pool.index))]
+        flex_pool = flex_pool.loc[
+            ~flex_pool.index.isin(team_roster.index.difference(flex_pool.index))
+        ]
         if not flex_pool.empty:
-            total += float(flex_pool.nlargest(flex_slots, 'actual_points')['actual_points'].sum())
+            total += float(
+                flex_pool.nlargest(flex_slots, 'actual_points')['actual_points'].sum()
+            )
     return float(total)
 
 
-def _team_actual_points(team_players: pd.DataFrame, league_settings: LeagueSettings) -> float:
+def _team_actual_points(
+    team_players: pd.DataFrame, league_settings: LeagueSettings
+) -> float:
     if team_players.empty:
         return 0.0
     total = 0.0
     chosen = pd.Series(False, index=team_players.index)
-    for pos, count in [('QB', league_settings.roster_spots.get('QB', 0)), ('RB', league_settings.roster_spots.get('RB', 0)), ('WR', league_settings.roster_spots.get('WR', 0)), ('TE', league_settings.roster_spots.get('TE', 0))]:
+    for pos, count in [
+        ('QB', league_settings.roster_spots.get('QB', 0)),
+        ('RB', league_settings.roster_spots.get('RB', 0)),
+        ('WR', league_settings.roster_spots.get('WR', 0)),
+        ('TE', league_settings.roster_spots.get('TE', 0)),
+    ]:
         pos_pool = team_players[(team_players['position'] == pos) & (~chosen)]
         if pos_pool.empty or count <= 0:
             continue
@@ -810,7 +990,9 @@ def _team_actual_points(team_players: pd.DataFrame, league_settings: LeagueSetti
         total += float(take['actual_points'].sum())
     flex_slots = league_settings.roster_spots.get('FLEX', 0)
     if flex_slots > 0:
-        flex_pool = team_players[(team_players['position'].isin(['RB', 'WR', 'TE'])) & (~chosen)]
+        flex_pool = team_players[
+            (team_players['position'].isin(['RB', 'WR', 'TE'])) & (~chosen)
+        ]
         if not flex_pool.empty:
             take = flex_pool.nlargest(flex_slots, 'actual_points')
             chosen.loc[take.index] = True
@@ -822,20 +1004,32 @@ def _build_strategy_ranker(strategy_name: str):
     def _rank(frame: pd.DataFrame) -> pd.DataFrame:
         frame = frame.copy()
         if strategy_name == 'market':
-            frame['strategy_rank'] = frame['market_rank'].rank(method='first', ascending=True)
+            frame['strategy_rank'] = frame['market_rank'].rank(
+                method='first', ascending=True
+            )
             frame['strategy_score'] = -frame['market_rank']
         elif strategy_name == 'vor':
-            frame['strategy_rank'] = frame['replacement_delta'].rank(method='first', ascending=False)
+            frame['strategy_rank'] = frame['replacement_delta'].rank(
+                method='first', ascending=False
+            )
             frame['strategy_score'] = frame['replacement_delta']
         elif strategy_name == 'consensus':
-            frame['strategy_rank'] = (0.65 * frame['proj_points_mean'] + 0.35 * frame['availability_at_pick']).rank(method='first', ascending=False)
-            frame['strategy_score'] = 0.65 * frame['proj_points_mean'] + 0.35 * frame['availability_at_pick']
+            frame['strategy_rank'] = (
+                0.65 * frame['proj_points_mean'] + 0.35 * frame['availability_at_pick']
+            ).rank(method='first', ascending=False)
+            frame['strategy_score'] = (
+                0.65 * frame['proj_points_mean'] + 0.35 * frame['availability_at_pick']
+            )
         elif strategy_name == 'draft_score':
-            frame['strategy_rank'] = frame['draft_score'].rank(method='first', ascending=False)
+            frame['strategy_rank'] = frame['draft_score'].rank(
+                method='first', ascending=False
+            )
             frame['strategy_score'] = frame['draft_score']
         else:
             raise ValueError(f'Unknown strategy: {strategy_name}')
-        return frame.sort_values(['strategy_score', 'proj_points_mean'], ascending=[False, False]).reset_index(drop=True)
+        return frame.sort_values(
+            ['strategy_score', 'proj_points_mean'], ascending=[False, False]
+        ).reset_index(drop=True)
 
     return _rank
 
@@ -855,7 +1049,9 @@ def _draft_team_from_pool(
     ranked = ranker(frame)
 
     # Prefer roster gaps first, then best available.
-    roster_counts = pd.Series([row['position'] for row in team_roster]).value_counts().to_dict()
+    roster_counts = (
+        pd.Series([row['position'] for row in team_roster]).value_counts().to_dict()
+    )
     for pos in ['QB', 'RB', 'WR', 'TE']:
         need = league_settings.roster_spots.get(pos, 0) - roster_counts.get(pos, 0)
         if need > 0:
@@ -863,15 +1059,21 @@ def _draft_team_from_pool(
             if not positional.empty:
                 choice = positional.iloc[0]
                 team_roster.append(choice.to_dict())
-                return ranked[ranked['player_name'] != choice['player_name']].reset_index(drop=True), team_roster
+                return ranked[
+                    ranked['player_name'] != choice['player_name']
+                ].reset_index(drop=True), team_roster
 
     if round_number > league_settings.round_count() - 3:
         # Late rounds: lean into upside if the build is already stable.
-        ranked = ranked.sort_values(['upside_score', 'draft_score'], ascending=[False, False])
+        ranked = ranked.sort_values(
+            ['upside_score', 'draft_score'], ascending=[False, False]
+        )
 
     choice = ranked.iloc[0]
     team_roster.append(choice.to_dict())
-    available = ranked[ranked['player_name'] != choice['player_name']].reset_index(drop=True)
+    available = ranked[ranked['player_name'] != choice['player_name']].reset_index(
+        drop=True
+    )
     return available, team_roster
 
 
@@ -889,7 +1091,9 @@ def run_draft_backtest(
     required = {'Season', 'Name', 'Position', 'FantPt'}
     missing = required.difference(df.columns)
     if missing:
-        raise ValueError(f'season_history is missing required columns: {sorted(missing)}')
+        raise ValueError(
+            f'season_history is missing required columns: {sorted(missing)}'
+        )
 
     df['Season'] = pd.to_numeric(df['Season'], errors='coerce').astype('Int64')
     df['Name'] = df['Name'].map(_safe_string)
@@ -917,26 +1121,47 @@ def run_draft_backtest(
         if train.empty or test.empty:
             continue
 
-        train_means = (
-            train.groupby(['Name', 'Position'], as_index=False)
-            .agg(
-                train_mean=('actual_points', 'mean'),
-                train_std=('actual_points', 'std'),
-                season_count=('actual_points', 'count'),
-            )
+        train_means = train.groupby(['Name', 'Position'], as_index=False).agg(
+            train_mean=('actual_points', 'mean'),
+            train_std=('actual_points', 'std'),
+            season_count=('actual_points', 'count'),
         )
-        latest = train.sort_values('Season').groupby(['Name', 'Position'], as_index=False).tail(1)
-        latest = latest[['Name', 'Position', 'actual_points']].rename(columns={'actual_points': 'latest_points'})
+        latest = (
+            train.sort_values('Season')
+            .groupby(['Name', 'Position'], as_index=False)
+            .tail(1)
+        )
+        latest = latest[['Name', 'Position', 'actual_points']].rename(
+            columns={'actual_points': 'latest_points'}
+        )
         test = test.merge(train_means, on=['Name', 'Position'], how='left')
         test = test.merge(latest, on=['Name', 'Position'], how='left')
 
         # Build a simple market proxy from the latest prior season plus uncertainty.
-        test['proj_points_mean'] = test['train_mean'].fillna(test['latest_points']).fillna(train['actual_points'].mean())
-        test['std_projection'] = test['train_std'].fillna(test['proj_points_mean'].std(ddof=0)).fillna(0.0)
-        test['adp'] = test.groupby('Position')['latest_points'].rank(method='first', ascending=False)
-        test['adp'] = test['adp'] + test['std_projection'].fillna(0.0).rank(method='first') * 0.15
-        test['uncertainty_score'] = _clamp((test['std_projection'] / test['proj_points_mean'].replace(0, np.nan)).fillna(0.15), 0.0, 1.0)
-        test['site_disagreement'] = _clamp(_zscore(test['std_projection']).rank(pct=True), 0.0, 1.0)
+        test['proj_points_mean'] = (
+            test['train_mean']
+            .fillna(test['latest_points'])
+            .fillna(train['actual_points'].mean())
+        )
+        test['std_projection'] = (
+            test['train_std'].fillna(test['proj_points_mean'].std(ddof=0)).fillna(0.0)
+        )
+        test['adp'] = test.groupby('Position')['latest_points'].rank(
+            method='first', ascending=False
+        )
+        test['adp'] = (
+            test['adp'] + test['std_projection'].fillna(0.0).rank(method='first') * 0.15
+        )
+        test['uncertainty_score'] = _clamp(
+            (
+                test['std_projection'] / test['proj_points_mean'].replace(0, np.nan)
+            ).fillna(0.15),
+            0.0,
+            1.0,
+        )
+        test['site_disagreement'] = _clamp(
+            _zscore(test['std_projection']).rank(pct=True), 0.0, 1.0
+        )
         test['adp_std'] = test['std_projection'].fillna(0.0)
         test['role_volatility'] = test['uncertainty_score']
         test['games_missed'] = 0.0
@@ -947,7 +1172,9 @@ def run_draft_backtest(
         test['source_name'] = f'historical_holdout_{holdout_year}'
         test['source_updated_at'] = pd.Timestamp(holdout_year, 1, 1)
 
-        context = DraftContext(current_pick_number=settings.draft_position, drafted_players=set())
+        context = DraftContext(
+            current_pick_number=settings.draft_position, drafted_players=set()
+        )
         decision_table = build_decision_table(test, settings, context)
         by_strategy = {}
         for strategy in ['market', 'vor', 'consensus', 'draft_score']:
@@ -963,7 +1190,9 @@ def run_draft_backtest(
                 draft_order.extend(order)
 
             available_pool = available.copy()
-            for pick_index, team_idx in enumerate(draft_order[: settings.league_size * picks_per_team], start=1):
+            for pick_index, team_idx in enumerate(
+                draft_order[: settings.league_size * picks_per_team], start=1
+            ):
                 round_number = math.ceil(pick_index / settings.league_size)
                 if team_idx == settings.draft_position - 1:
                     available_pool, team_rosters[team_idx] = _draft_team_from_pool(
@@ -984,16 +1213,28 @@ def run_draft_backtest(
                 if available_pool.empty:
                     break
 
-            our_roster = pd.DataFrame(team_rosters[settings.draft_position - 1]) if team_rosters[settings.draft_position - 1] else pd.DataFrame(columns=decision_table.columns)
+            our_roster = (
+                pd.DataFrame(team_rosters[settings.draft_position - 1])
+                if team_rosters[settings.draft_position - 1]
+                else pd.DataFrame(columns=decision_table.columns)
+            )
             if not our_roster.empty and 'actual_points' not in our_roster.columns:
-                our_roster['actual_points'] = test.set_index(['Name', 'Position']).reindex(
-                    pd.MultiIndex.from_frame(our_roster[['Name', 'Position']]),
-                )['actual_points'].to_numpy()
+                our_roster['actual_points'] = (
+                    test.set_index(['Name', 'Position'])
+                    .reindex(
+                        pd.MultiIndex.from_frame(our_roster[['Name', 'Position']])
+                    )['actual_points']
+                    .to_numpy()
+                )
             roster_points = _team_actual_points(our_roster, settings)
             lineup_points = _starter_points_from_roster(our_roster, settings)
             market_truth = test.copy()
-            market_truth['baseline_rank'] = market_truth['proj_points_mean'].rank(method='first', ascending=False)
-            market_truth['draft_score_rank'] = decision_table['draft_score'].rank(method='first', ascending=False)
+            market_truth['baseline_rank'] = market_truth['proj_points_mean'].rank(
+                method='first', ascending=False
+            )
+            market_truth['draft_score_rank'] = decision_table['draft_score'].rank(
+                method='first', ascending=False
+            )
 
             metric_rank = {}
             for metric_name, score_col in [
@@ -1003,19 +1244,25 @@ def run_draft_backtest(
                 ('draft_score', 'draft_score'),
             ]:
                 test_eval = test.copy()
-                test_eval['player_key'] = test_eval['Name'] + '||' + test_eval['Position']
+                test_eval['player_key'] = (
+                    test_eval['Name'] + '||' + test_eval['Position']
+                )
                 pred = decision_table.copy()
                 pred['player_key'] = pred['player_name'] + '||' + pred['position']
                 if score_col not in pred.columns:
                     score_col = 'draft_score'
-                pred_scores = pred[['player_key', score_col]].rename(columns={score_col: 'predicted_score'})
+                pred_scores = pred[['player_key', score_col]].rename(
+                    columns={score_col: 'predicted_score'}
+                )
                 merged = test_eval.merge(pred_scores, on='player_key', how='left')
                 if merged['predicted_score'].notna().sum() > 1:
                     if metric_name == 'market':
                         corr_input = -merged['predicted_score']
                     else:
                         corr_input = merged['predicted_score']
-                    corr = float(spearmanr(corr_input, merged['actual_points']).correlation)
+                    corr = float(
+                        spearmanr(corr_input, merged['actual_points']).correlation
+                    )
                 else:
                     corr = 0.0
                 metric_rank[metric_name] = float(np.nan_to_num(corr, nan=0.0))
@@ -1026,12 +1273,24 @@ def run_draft_backtest(
                 'our_team_actual_points': float(roster_points),
                 'our_team_lineup_points': float(lineup_points),
                 'predicted_rank_correlation': metric_rank.get(strategy, 0.0),
-                'drafted_players': [row.get('player_name', '') for row in team_rosters[settings.draft_position - 1]],
-                'position_counts': pd.Series([row.get('position', 'UNKNOWN') for row in team_rosters[settings.draft_position - 1]]).value_counts().to_dict(),
+                'drafted_players': [
+                    row.get('player_name', '')
+                    for row in team_rosters[settings.draft_position - 1]
+                ],
+                'position_counts': pd.Series(
+                    [
+                        row.get('position', 'UNKNOWN')
+                        for row in team_rosters[settings.draft_position - 1]
+                    ]
+                )
+                .value_counts()
+                .to_dict(),
                 'strategy_label': strategy,
             }
 
-        best_strategy = max(by_strategy.values(), key=lambda item: item['our_team_lineup_points'])
+        best_strategy = max(
+            by_strategy.values(), key=lambda item: item['our_team_lineup_points']
+        )
         by_season.append(
             {
                 'holdout_year': holdout_year,
@@ -1061,18 +1320,19 @@ def run_draft_backtest(
                 'season_count': len(season_values),
             }
         )
-    overall = pd.DataFrame(overall_rows).sort_values('mean_lineup_points', ascending=False)
-    winner = _pick_first_row(overall['strategy']) if not overall.empty else 'draft_score'
+    overall = pd.DataFrame(overall_rows).sort_values(
+        'mean_lineup_points', ascending=False
+    )
+    winner = (
+        _pick_first_row(overall['strategy']) if not overall.empty else 'draft_score'
+    )
 
     return {
         'model_type': 'draft_decision_backtest',
         'league_settings': settings.to_dict(),
         'holdout_years': holdout_years,
         'by_season': by_season,
-        'overall': {
-            'by_strategy': overall.to_dict(orient='records'),
-            'winner': winner,
-        },
+        'overall': {'by_strategy': overall.to_dict(orient='records'), 'winner': winner},
     }
 
 
@@ -1088,7 +1348,9 @@ def build_dashboard_payload(
 ) -> dict[str, Any]:
     """Build a JSON-serializable payload for the local dashboard."""
     backtest = backtest or {}
-    context = context or DraftContext(current_pick_number=league_settings.draft_position)
+    context = context or DraftContext(
+        current_pick_number=league_settings.draft_position
+    )
 
     top_targets = recommendations.head(10).to_dict(orient='records')
     position_summary = (
@@ -1108,7 +1370,11 @@ def build_dashboard_payload(
         'generated_at': datetime.now().isoformat(timespec='seconds'),
         'league_settings': league_settings.to_dict(),
         'current_pick_number': context.current_pick_number,
-        'next_pick_number': next_pick_number(context.current_pick_number, league_settings.draft_position, league_settings.league_size),
+        'next_pick_number': next_pick_number(
+            context.current_pick_number,
+            league_settings.draft_position,
+            league_settings.league_size,
+        ),
         'top_targets': top_targets,
         'decision_table': decision_table.to_dict(orient='records'),
         'position_summary': position_summary,
@@ -1120,7 +1386,9 @@ def build_dashboard_payload(
 
 
 def _format_sheet(worksheet: openpyxl.worksheet.worksheet.Worksheet) -> None:
-    header_fill = PatternFill(start_color='173F5F', end_color='173F5F', fill_type='solid')
+    header_fill = PatternFill(
+        start_color='173F5F', end_color='173F5F', fill_type='solid'
+    )
     header_font = Font(bold=True, color='FFFFFF', size=11)
     body_font = Font(size=10)
     for cell in worksheet[1]:
@@ -1130,7 +1398,9 @@ def _format_sheet(worksheet: openpyxl.worksheet.worksheet.Worksheet) -> None:
     for row in worksheet.iter_rows(min_row=2):
         for cell in row:
             cell.font = body_font
-            cell.alignment = Alignment(horizontal='left', vertical='top', wrap_text=True)
+            cell.alignment = Alignment(
+                horizontal='left', vertical='top', wrap_text=True
+            )
     for column in worksheet.columns:
         max_len = 0
         for cell in column:
@@ -1138,10 +1408,14 @@ def _format_sheet(worksheet: openpyxl.worksheet.worksheet.Worksheet) -> None:
                 max_len = max(max_len, len(str(cell.value)))
             except Exception:
                 continue
-        worksheet.column_dimensions[get_column_letter(column[0].column)].width = min(max_len + 2, 48)
+        worksheet.column_dimensions[get_column_letter(column[0].column)].width = min(
+            max_len + 2, 48
+        )
 
 
-def _write_dataframe_sheet(workbook: openpyxl.Workbook, title: str, df: pd.DataFrame) -> None:
+def _write_dataframe_sheet(
+    workbook: openpyxl.Workbook, title: str, df: pd.DataFrame
+) -> None:
     ws = workbook.create_sheet(title)
     if df is None or df.empty:
         ws.append(['No data available'])
@@ -1169,21 +1443,47 @@ def export_workbook(
     wb.remove(wb.active)
 
     board_cols = [
-        'player_name', 'position', 'proj_points_mean', 'proj_points_floor', 'proj_points_ceiling',
-        'adp', 'market_rank', 'availability_at_pick', 'replacement_delta', 'starter_delta',
-        'upside_score', 'fragility_score', 'draft_score', 'draft_rank', 'draft_tier', 'why_flags'
+        'player_name',
+        'position',
+        'proj_points_mean',
+        'proj_points_floor',
+        'proj_points_ceiling',
+        'adp',
+        'market_rank',
+        'availability_at_pick',
+        'replacement_delta',
+        'starter_delta',
+        'upside_score',
+        'fragility_score',
+        'draft_score',
+        'draft_rank',
+        'draft_tier',
+        'why_flags',
     ]
-    board = decision_table[[col for col in board_cols if col in decision_table.columns]].copy()
+    board = decision_table[
+        [col for col in board_cols if col in decision_table.columns]
+    ].copy()
     _write_dataframe_sheet(wb, 'Big Board', board)
 
-    by_position = decision_table.sort_values(['position', 'draft_score'], ascending=[True, False]).copy()
+    by_position = decision_table.sort_values(
+        ['position', 'draft_score'], ascending=[True, False]
+    ).copy()
     _write_dataframe_sheet(wb, 'By Position', by_position)
 
     my_picks = recommendations.copy()
     _write_dataframe_sheet(wb, 'My Picks', my_picks)
 
     _write_dataframe_sheet(wb, 'Tier Cliffs', tier_cliffs)
-    availability = decision_table[['player_name', 'position', 'adp', 'availability_at_pick', 'draft_score', 'why_flags']].copy()
+    availability = decision_table[
+        [
+            'player_name',
+            'position',
+            'adp',
+            'availability_at_pick',
+            'draft_score',
+            'why_flags',
+        ]
+    ].copy()
     _write_dataframe_sheet(wb, 'Availability', availability)
 
     round_rows = []
@@ -1194,27 +1494,69 @@ def export_workbook(
         top = decision_table.head(cut)
         row['best_player'] = _pick_first_row(top['player_name'])
         row['best_position'] = _pick_first_row(top['position'])
-        row['mean_draft_score'] = float(top['draft_score'].mean()) if not top.empty else np.nan
+        row['mean_draft_score'] = (
+            float(top['draft_score'].mean()) if not top.empty else np.nan
+        )
         round_rows.append(row)
     _write_dataframe_sheet(wb, 'Targets By Round', pd.DataFrame(round_rows))
 
     _write_dataframe_sheet(wb, 'Roster Construction Scenarios', roster_scenarios)
-    _write_dataframe_sheet(wb, 'Player Notes', decision_table[['player_name', 'position', 'why_flags', 'draft_tier', 'fragility_score', 'upside_score']])
+    _write_dataframe_sheet(
+        wb,
+        'Player Notes',
+        decision_table[
+            [
+                'player_name',
+                'position',
+                'why_flags',
+                'draft_tier',
+                'fragility_score',
+                'upside_score',
+            ]
+        ],
+    )
 
     diagnostics = pd.DataFrame(
         [
             {'metric': 'player_count', 'value': int(len(decision_table))},
             {'metric': 'recommendation_count', 'value': int(len(recommendations))},
-            {'metric': 'draft_score_mean', 'value': float(decision_table['draft_score'].mean())},
-            {'metric': 'draft_score_std', 'value': float(decision_table['draft_score'].std(ddof=0))},
-            {'metric': 'top_draft_score', 'value': float(decision_table['draft_score'].max())},
-            {'metric': 'availability_mean', 'value': float(decision_table['availability_at_pick'].mean())},
-            {'metric': 'source_count', 'value': int(source_freshness['source_name'].nunique()) if not source_freshness.empty else 0},
+            {
+                'metric': 'draft_score_mean',
+                'value': float(decision_table['draft_score'].mean()),
+            },
+            {
+                'metric': 'draft_score_std',
+                'value': float(decision_table['draft_score'].std(ddof=0)),
+            },
+            {
+                'metric': 'top_draft_score',
+                'value': float(decision_table['draft_score'].max()),
+            },
+            {
+                'metric': 'availability_mean',
+                'value': float(decision_table['availability_at_pick'].mean()),
+            },
+            {
+                'metric': 'source_count',
+                'value': int(source_freshness['source_name'].nunique())
+                if not source_freshness.empty
+                else 0,
+            },
         ]
     )
     if backtest:
         diagnostics = pd.concat(
-            [diagnostics, pd.DataFrame([{'metric': 'backtest_model', 'value': backtest.get('model_type', '')}])],
+            [
+                diagnostics,
+                pd.DataFrame(
+                    [
+                        {
+                            'metric': 'backtest_model',
+                            'value': backtest.get('model_type', ''),
+                        }
+                    ]
+                ),
+            ],
             ignore_index=True,
         )
     _write_dataframe_sheet(wb, 'Model Diagnostics', diagnostics)
@@ -1232,7 +1574,11 @@ def export_workbook(
     return output_path
 
 
-def _build_charts(decision_table: pd.DataFrame, recommendations: pd.DataFrame, league_settings: LeagueSettings) -> list[go.Figure]:
+def _build_charts(
+    decision_table: pd.DataFrame,
+    recommendations: pd.DataFrame,
+    league_settings: LeagueSettings,
+) -> list[Any]:
     import plotly.graph_objects as go
 
     top = decision_table.head(120).copy()
@@ -1249,7 +1595,12 @@ def _build_charts(decision_table: pd.DataFrame, recommendations: pd.DataFrame, l
                 marker=dict(size=9, opacity=0.8),
             )
         )
-    fig1.update_layout(title='ADP vs Draft Score', xaxis_title='ADP', yaxis_title='Draft Score', height=420)
+    fig1.update_layout(
+        title='ADP vs Draft Score',
+        xaxis_title='ADP',
+        yaxis_title='Draft Score',
+        height=420,
+    )
 
     fig2 = go.Figure()
     if not recommendations.empty:
@@ -1260,7 +1611,9 @@ def _build_charts(decision_table: pd.DataFrame, recommendations: pd.DataFrame, l
                 name='Survival to next pick',
             )
         )
-    fig2.update_layout(title='Availability by Pick', yaxis_title='Probability', height=420)
+    fig2.update_layout(
+        title='Availability by Pick', yaxis_title='Probability', height=420
+    )
 
     fig3 = go.Figure()
     fig3.add_trace(
@@ -1269,10 +1622,17 @@ def _build_charts(decision_table: pd.DataFrame, recommendations: pd.DataFrame, l
             y=top['upside_score'],
             mode='markers',
             text=top['player_name'],
-            marker=dict(color=top['draft_score'], colorscale='Viridis', showscale=True, size=10),
+            marker=dict(
+                color=top['draft_score'], colorscale='Viridis', showscale=True, size=10
+            ),
         )
     )
-    fig3.update_layout(title='Upside vs Fragility', xaxis_title='Fragility', yaxis_title='Upside', height=420)
+    fig3.update_layout(
+        title='Upside vs Fragility',
+        xaxis_title='Fragility',
+        yaxis_title='Upside',
+        height=420,
+    )
 
     return [fig1, fig2, fig3]
 
@@ -1289,7 +1649,9 @@ def export_dashboard_html(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     backtest = backtest or {}
-    source_freshness = source_freshness if source_freshness is not None else pd.DataFrame()
+    source_freshness = (
+        source_freshness if source_freshness is not None else pd.DataFrame()
+    )
 
     try:
         figs = _build_charts(decision_table, recommendations, league_settings)
@@ -1416,7 +1778,7 @@ def export_dashboard_html(
         </thead>
         <tbody>
           {''.join(
-              f"<tr><td>{row.get('player_name','')}</td><td>{row.get('position','')}</td><td>{row.get('draft_score',0):.2f}</td><td>{row.get('availability_to_next_pick',0):.0%}</td><td>{row.get('why_flags','')}</td></tr>"
+              f"<tr><td>{row.get('player_name', '')}</td><td>{row.get('position', '')}</td><td>{row.get('draft_score', 0):.2f}</td><td>{row.get('availability_to_next_pick', 0):.0%}</td><td>{row.get('why_flags', '')}</td></tr>"
               for row in top_rows
           )}
         </tbody>
@@ -1428,7 +1790,7 @@ def export_dashboard_html(
           <thead><tr><th>Strategy</th><th>Mean lineup points</th></tr></thead>
           <tbody>
             {''.join(
-                f"<tr><td>{row.get('strategy','')}</td><td>{row.get('mean_lineup_points', 0):.2f}</td></tr>"
+                f"<tr><td>{row.get('strategy', '')}</td><td>{row.get('mean_lineup_points', 0):.2f}</td></tr>"
                 for row in backtest_summary
             )}
           </tbody>
@@ -1440,7 +1802,7 @@ def export_dashboard_html(
           <thead><tr><th>Source</th><th>Age (days)</th><th>Rows</th></tr></thead>
           <tbody>
             {''.join(
-                f"<tr><td>{row.get('source_name','')}</td><td>{row.get('freshness_days','')}</td><td>{row.get('row_count','')}</td></tr>"
+                f"<tr><td>{row.get('source_name', '')}</td><td>{row.get('freshness_days', '')}</td><td>{row.get('row_count', '')}</td></tr>"
                 for row in freshness_rows
             )}
           </tbody>
@@ -1473,7 +1835,11 @@ def build_draft_decision_artifacts(
     tier_cliffs = build_tier_cliffs(decision_table)
     roster_scenarios = build_roster_scenarios(decision_table, settings)
     source_freshness = _compute_freshness(normalize_player_frame(player_frame))
-    backtest = run_draft_backtest(season_history, settings) if season_history is not None and not season_history.empty else {}
+    backtest = (
+        run_draft_backtest(season_history, settings)
+        if season_history is not None and not season_history.empty
+        else {}
+    )
     dashboard_payload = build_dashboard_payload(
         decision_table,
         recommendations,
@@ -1510,18 +1876,26 @@ def save_draft_decision_artifacts(
     artifacts: DraftDecisionArtifacts,
     output_dir: Path | str,
     year: int | None = None,
+    filename_prefix: str = '',
+    dashboard_dir: Path | str | None = None,
 ) -> dict[str, Path]:
     """Write workbook, dashboard payload, and HTML dashboard to disk."""
     year = year or datetime.now().year
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    dashboard_dir = Path(dashboard_dir) if dashboard_dir is not None else output_dir
+    dashboard_dir.mkdir(parents=True, exist_ok=True)
 
-    workbook_path = output_dir / f'draft_board_{year}.xlsx'
-    payload_path = output_dir / f'dashboard_payload_{year}.json'
-    html_path = output_dir / f'draft_board_{year}.html'
+    workbook_path = output_dir / f'draft_board_{filename_prefix}{year}.xlsx'
+    payload_path = dashboard_dir / f'dashboard_payload_{filename_prefix}{year}.json'
+    html_path = dashboard_dir / f'draft_board_{filename_prefix}{year}.html'
     backtest_years = artifacts.backtest.get('holdout_years', [])
-    backtest_suffix = f"{min(backtest_years)}-{max(backtest_years)}" if backtest_years else str(year)
-    backtest_path = output_dir / f'draft_decision_backtest_{backtest_suffix}.json'
+    backtest_suffix = (
+        f'{min(backtest_years)}-{max(backtest_years)}' if backtest_years else str(year)
+    )
+    backtest_path = (
+        output_dir / f'draft_decision_backtest_{filename_prefix}{backtest_suffix}.json'
+    )
 
     export_workbook(
         artifacts.decision_table,
@@ -1533,7 +1907,9 @@ def save_draft_decision_artifacts(
         artifacts.league_settings,
         backtest=artifacts.backtest,
     )
-    payload_path.write_text(json.dumps(artifacts.dashboard_payload, default=str, indent=2), encoding='utf-8')
+    payload_path.write_text(
+        json.dumps(artifacts.dashboard_payload, default=str, indent=2), encoding='utf-8'
+    )
     export_dashboard_html(
         artifacts.decision_table,
         artifacts.recommendations,
@@ -1543,7 +1919,9 @@ def save_draft_decision_artifacts(
         source_freshness=artifacts.source_freshness,
     )
     if artifacts.backtest:
-        backtest_path.write_text(json.dumps(artifacts.backtest, default=str, indent=2), encoding='utf-8')
+        backtest_path.write_text(
+            json.dumps(artifacts.backtest, default=str, indent=2), encoding='utf-8'
+        )
 
     return {
         'workbook_path': workbook_path,
