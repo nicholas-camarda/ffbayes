@@ -24,6 +24,7 @@ from ffbayes.utils.analysis_windows import (
 from ffbayes.utils.path_constants import (
     RAW_DATA_DIR,
     SEASON_DATASETS_DIR,
+    get_draft_strategy_dir,
     get_draft_decision_backtest_path,
 )
 
@@ -84,7 +85,16 @@ def main() -> int:
     output_path.write_text(
         json.dumps(backtest, default=str, indent=2), encoding='utf-8'
     )
+    historical_path = get_draft_strategy_dir(current_year) / (
+        f'historical_strategy_backtest_{year_range}.json'
+    )
+    historical_payload = dict(backtest)
+    historical_payload['comparison_type'] = 'historical_strategy_backtest'
+    historical_path.write_text(
+        json.dumps(historical_payload, default=str, indent=2), encoding='utf-8'
+    )
     logger.info('Draft decision backtest saved to: %s', output_path)
+    logger.info('Historical strategy backtest saved to: %s', historical_path)
     return 0
 
 

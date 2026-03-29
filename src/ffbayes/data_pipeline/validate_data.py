@@ -21,6 +21,61 @@ except Exception:
     ProgressMonitor = None
 
 
+POSITION_NORMALIZATION_MAP = {
+    'DEF': 'DST',
+    'D/ST': 'DST',
+    'DEFENSE': 'DST',
+    'SAF': 'S',
+    'SAFETY': 'S',
+}
+
+EXPECTED_POSITIONS = {
+    'QB',
+    'RB',
+    'WR',
+    'TE',
+    'K',
+    'DST',
+    'CB',
+    'FS',
+    'SS',
+    'ILB',
+    'OLB',
+    'MLB',
+    'DE',
+    'DT',
+    'NT',
+    'G',
+    'C',
+    'T',
+    'OT',
+    'P',
+    'FB',
+    'HB',
+    'DB',
+    'S',
+    'LS',
+    'DL',
+    'LB',
+}
+
+
+def _normalize_position(value) -> str:
+    if pd.isna(value):
+        return ''
+    position = ' '.join(str(value).strip().upper().split())
+    return POSITION_NORMALIZATION_MAP.get(position, position)
+
+
+def _append_blocker(validation_results: dict, message: str) -> None:
+    validation_results['errors'].append(message)
+    validation_results['blockers'].append(message)
+
+
+def _is_expected_position(value: str) -> bool:
+    return _normalize_position(value) in EXPECTED_POSITIONS
+
+
 def validate_data_quality():
     """Validate the quality and completeness of collected data."""
     print('🔍 Validating data quality...')
@@ -36,6 +91,7 @@ def validate_data_quality():
         'missing_data': 0,
         'quality_score': 100,
         'errors': [],
+        'blockers': [],
         'warnings': [],
         'data_consistency': [],
         'statistical_checks': [],
@@ -86,7 +142,7 @@ def validate_data_quality():
                     ]
                     if missing_cols:
                         error_msg = f'{year}: Missing core columns: {missing_cols}'
-                        validation_results['errors'].append(error_msg)
+                        _append_blocker(validation_results, error_msg)
                         files_with_errors += 1
                         print(f'      ❌ {error_msg}')
                         continue
@@ -101,7 +157,7 @@ def validate_data_quality():
                         error_msg = (
                             f'{year}: Missing fantasy point columns (FantPt, FantPtPPR)'
                         )
-                        validation_results['errors'].append(error_msg)
+                        _append_blocker(validation_results, error_msg)
                         files_with_errors += 1
                         print(f'      ❌ {error_msg}')
                         continue
@@ -128,7 +184,7 @@ def validate_data_quality():
 
                 except Exception as e:
                     error_msg = f'{file}: Error reading - {e}'
-                    validation_results['errors'].append(error_msg)
+                    _append_blocker(validation_results, error_msg)
                     files_with_errors += 1
                     print(f'      ❌ {error_msg}')
     else:
@@ -163,7 +219,7 @@ def perform_enhanced_validation(df, year, validation_results):
 
     except Exception as e:
         error_msg = f'{year}: Enhanced validation error - {e}'
-        validation_results['errors'].append(error_msg)
+        _append_blocker(validation_results, error_msg)
         print(f'      ❌ {error_msg}')
 
     return validation_results
@@ -180,7 +236,11 @@ def perform_data_consistency_checks(df, year):
             parsed_dates = pd.to_datetime(df['Date'], errors='coerce')
             date_errors = parsed_dates.isna().sum()
             if date_errors > 0:
-                consistency_checks.append(f'{year}: {date_errors} invalid date formats')
+                total = max(1, len(df))
+                pct = 100.0 * date_errors / total
+                consistency_checks.append(
+                    f'{year}: {date_errors} invalid date formats ({pct:.1f}%)'
+                )
 
         # Check numeric column consistency
         numeric_columns = ['FantPt', 'FantPtPPR', 'G#', 'Season']
@@ -203,36 +263,14 @@ def perform_data_consistency_checks(df, year):
 
         # Check position consistency
         if 'Position' in df.columns:
-            # Include both offensive and defensive positions
-            valid_positions = [
-                'QB',
-                'RB',
-                'WR',
-                'TE',
-                'K',
-                'DST',
-                'CB',
-                'FS',
-                'SS',
-                'ILB',
-                'OLB',
-                'MLB',
-                'DE',
-                'DT',
-                'NT',
-                'G',
-                'C',
-                'T',
-                'OT',
-                'P',
-                'FB',
-                'HB',
-                'DB',
-                'S',
-            ]
-            invalid_positions = df[~df['Position'].isin(valid_positions)][
-                'Position'
-            ].unique()
+            normalized_positions = df['Position'].map(_normalize_position)
+            invalid_positions = sorted(
+                {
+                    position
+                    for position in normalized_positions.dropna().unique()
+                    if position and position not in EXPECTED_POSITIONS
+                }
+            )
             if len(invalid_positions) > 0:
                 consistency_checks.append(
                     f'{year}: Invalid positions found: {invalid_positions}'
@@ -335,26 +373,37 @@ def perform_outlier_detection(df, year):
     outlier_checks = []
 
     try:
-        # Fantasy point outliers using IQR method
+        # Fantasy point outliers using position-aware IQR method.
         if 'FantPt' in df.columns:
-            # Ensure FantPt is numeric
             df_fant_pt = pd.to_numeric(df['FantPt'], errors='coerce')
-            Q1 = df_fant_pt.quantile(0.25)
-            Q3 = df_fant_pt.quantile(0.75)
-            IQR = Q3 - Q1
-
-            lower_bound = Q1 - 1.5 * IQR
-            upper_bound = Q3 + 1.5 * IQR
-
-            outliers = df_fant_pt[
-                (df_fant_pt < lower_bound) | (df_fant_pt > upper_bound)
-            ]
-
-            if len(outliers) > 0:
-                outlier_percentage = (len(outliers) / len(df_fant_pt)) * 100
-                if outlier_percentage > 5:  # Flag if more than 5% are outliers
+            position_series = (
+                df['Position'].map(_normalize_position)
+                if 'Position' in df.columns
+                else pd.Series(['UNKNOWN'] * len(df), index=df.index)
+            )
+            position_frame = pd.DataFrame(
+                {'FantPt': df_fant_pt, 'Position': position_series}
+            ).dropna(subset=['FantPt'])
+            for position, sub in position_frame.groupby('Position'):
+                if len(sub) < 12:
+                    continue
+                q1 = sub['FantPt'].quantile(0.25)
+                q3 = sub['FantPt'].quantile(0.75)
+                iqr = q3 - q1
+                if pd.isna(iqr) or iqr == 0:
+                    continue
+                lower_bound = q1 - 1.5 * iqr
+                upper_bound = q3 + 1.5 * iqr
+                outlier_mask = (sub['FantPt'] < lower_bound) | (
+                    sub['FantPt'] > upper_bound
+                )
+                outlier_count = int(outlier_mask.sum())
+                if outlier_count == 0:
+                    continue
+                outlier_percentage = (outlier_count / len(sub)) * 100.0
+                if outlier_percentage > 10.0:
                     outlier_checks.append(
-                        f'{year}: {len(outliers)} fantasy point outliers ({outlier_percentage:.1f}%)'
+                        f'{year}: {position} fantasy-point outliers ({outlier_count} of {len(sub)}, {outlier_percentage:.1f}%)'
                     )
 
         # Game number outliers
@@ -362,7 +411,12 @@ def perform_outlier_detection(df, year):
             # Ensure G# is numeric
             df_game = pd.to_numeric(df['G#'], errors='coerce')
             game_stats = df_game.describe()
-            if game_stats['max'] > 20:  # NFL regular season is 18 games max
+            season_type = df['season_type'] if 'season_type' in df.columns else None
+            has_postseason = False
+            if season_type is not None:
+                season_type_values = season_type.fillna('').astype(str).str.upper()
+                has_postseason = season_type_values.str.contains('POST').any()
+            if game_stats['max'] > (25 if has_postseason else 20):
                 outlier_checks.append(
                     f'{year}: Unusually high game numbers: {game_stats["max"]}'
                 )
@@ -474,9 +528,9 @@ def main(args=None):
     logger.info(f'Data complete: {is_complete}')
 
     # Log errors and warnings
-    if quality_results['errors']:
-        logger.error(f'Errors found ({len(quality_results["errors"])}):')
-        for error in quality_results['errors']:
+    if quality_results['blockers']:
+        logger.error(f'Blocking errors found ({len(quality_results["blockers"])}):')
+        for error in quality_results['blockers']:
             logger.error(f'  • {error}')
 
     if quality_results['warnings']:
@@ -508,10 +562,10 @@ def main(args=None):
     if (
         is_complete
         and quality_results['quality_score'] > 80
-        and not quality_results['errors']
+        and not quality_results['blockers']
     ):
         interface.log_completion('Data validation passed! Ready for processing.')
-    elif quality_results['errors']:
+    elif quality_results['blockers']:
         interface.log_error(
             'Critical validation errors found. Fix data collection issues first.',
             interface.EXIT_DATA_ERROR,

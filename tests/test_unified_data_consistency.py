@@ -77,3 +77,37 @@ def test_unified_loader_supports_explicit_override(monkeypatch, tmp_path):
     loaded_override = load_unified_dataset(str(override_root))
 
     assert loaded_override.equals(expected)
+
+
+def test_unified_loader_prefers_csv_when_both_formats_exist(monkeypatch, tmp_path):
+    (tmp_path / 'workspace').mkdir()
+    monkeypatch.chdir(tmp_path / 'workspace')
+    path_constants = _reload_path_constants(monkeypatch, tmp_path)
+
+    csv_path = path_constants.get_unified_dataset_csv_path()
+    json_path = path_constants.get_unified_dataset_path()
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+
+    csv_expected = pd.DataFrame(
+        {
+            'Name': ['CSV Player'],
+            'Position': ['QB'],
+            'Season': [2026],
+            'FantPt': [30.5],
+        }
+    )
+    json_poison = pd.DataFrame(
+        {
+            'Name': ['JSON Player'],
+            'Position': ['RB'],
+            'Season': [2026],
+            'FantPt': [2.5],
+        }
+    )
+    csv_expected.to_csv(csv_path, index=False)
+    json_poison.to_json(json_path)
+
+    loaded = load_unified_dataset()
+
+    assert loaded.equals(csv_expected)

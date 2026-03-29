@@ -353,9 +353,6 @@ def create_dataset(year):
             'FantPt'
         ].transform(lambda x: x.rolling(window=7, min_periods=1).mean())
 
-        # Add player rankings from VOR data
-        merged_df = add_player_rankings(merged_df, year)
-
         # Add team defense data if available
         if not defense_data.empty:
             defense_df = process_team_defense_data(defense_data, schedules_df, year)
@@ -715,6 +712,12 @@ def process_dataset(final_df, year):
             team = _first_present_row_value(row, team_column, 'recent_team', 'player_team')
             home = row.home_team
             away = row.away_team
+
+            game_date_value = pd.to_datetime(game_date, errors='coerce')
+            if pd.notna(game_date_value):
+                game_date = game_date_value.strftime('%Y-%m-%d')
+            else:
+                game_date = None
 
             if _value_is_missing(team):
                 raise ValueError('missing team value')

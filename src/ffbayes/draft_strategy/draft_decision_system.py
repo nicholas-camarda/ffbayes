@@ -1008,7 +1008,7 @@ def _build_strategy_ranker(strategy_name: str):
                 method='first', ascending=True
             )
             frame['strategy_score'] = -frame['market_rank']
-        elif strategy_name == 'vor':
+        elif strategy_name in {'vor', 'historical_vor_proxy'}:
             frame['strategy_rank'] = frame['replacement_delta'].rank(
                 method='first', ascending=False
             )
@@ -1032,6 +1032,43 @@ def _build_strategy_ranker(strategy_name: str):
         ).reset_index(drop=True)
 
     return _rank
+
+
+def build_historical_vor_proxy_table(
+    test_frame: pd.DataFrame, train_frame: pd.DataFrame
+) -> pd.DataFrame:
+    """Build a clearly labeled historical VOR proxy from pre-holdout information."""
+    if test_frame is None or test_frame.empty:
+        return pd.DataFrame(columns=['Season', 'Name', 'Position', 'historical_vor_proxy'])
+
+    proxy = test_frame.copy()
+    replacement_values: dict[str, float] = {}
+    for position in proxy['Position'].dropna().unique():
+        pos_train = pd.to_numeric(
+            train_frame.loc[train_frame['Position'] == position, 'actual_points'],
+            errors='coerce',
+        ).dropna()
+        if pos_train.empty:
+            replacement_values[position] = 0.0
+        else:
+            slot_count = max(1, min(len(pos_train), 12))
+            replacement_values[position] = float(
+                pos_train.sort_values(ascending=False).reset_index(drop=True).iloc[
+                    slot_count - 1
+                ]
+            )
+
+    proxy['historical_vor_proxy'] = proxy.apply(
+        lambda row: float(row['proj_points_mean'])
+        - replacement_values.get(row['Position'], 0.0),
+        axis=1,
+    )
+    proxy['historical_vor_proxy_rank'] = proxy.groupby('Position')[
+        'historical_vor_proxy'
+    ].rank(method='first', ascending=False)
+    proxy['historical_vor_proxy_label'] = 'historical_vor_proxy'
+    proxy['source_name'] = proxy.get('source_name', 'historical_vor_proxy')
+    return proxy
 
 
 def _draft_team_from_pool(
@@ -1176,8 +1213,30 @@ def run_draft_backtest(
             current_pick_number=settings.draft_position, drafted_players=set()
         )
         decision_table = build_decision_table(test, settings, context)
+        historical_vor_proxy_table = build_historical_vor_proxy_table(test, train)
+        if not historical_vor_proxy_table.empty:
+            historical_vor_proxy_table = historical_vor_proxy_table.rename(
+                columns={'Name': 'player_name', 'Position': 'position'}
+            )
+            decision_table = decision_table.merge(
+                historical_vor_proxy_table[
+                    [
+                        'player_name',
+                        'position',
+                        'historical_vor_proxy',
+                        'historical_vor_proxy_rank',
+                    ]
+                ],
+                on=['player_name', 'position'],
+                how='left',
+            )
+            decision_table['historical_vor_proxy'] = decision_table[
+                'historical_vor_proxy'
+            ].fillna(decision_table['replacement_delta'])
+        else:
+            decision_table['historical_vor_proxy'] = decision_table['replacement_delta']
         by_strategy = {}
-        for strategy in ['market', 'vor', 'consensus', 'draft_score']:
+        for strategy in ['market', 'historical_vor_proxy', 'consensus', 'draft_score']:
             available = decision_table.copy()
             team_rosters = [[] for _ in range(settings.league_size)]
             picks_per_team = settings.round_count()
@@ -1239,7 +1298,7 @@ def run_draft_backtest(
             metric_rank = {}
             for metric_name, score_col in [
                 ('market', 'market_rank'),
-                ('vor', 'proj_points_mean'),
+                ('historical_vor_proxy', 'historical_vor_proxy'),
                 ('consensus', 'proj_points_mean'),
                 ('draft_score', 'draft_score'),
             ]:
@@ -1304,7 +1363,7 @@ def run_draft_backtest(
         raise ValueError('Unable to run backtest with the provided seasons')
 
     overall_rows = []
-    for strategy in ['market', 'vor', 'consensus', 'draft_score']:
+    for strategy in ['market', 'historical_vor_proxy', 'consensus', 'draft_score']:
         season_values = [
             season['by_strategy'][strategy]['our_team_lineup_points']
             for season in by_season
@@ -1896,6 +1955,10 @@ def save_draft_decision_artifacts(
     backtest_path = (
         output_dir / f'draft_decision_backtest_{filename_prefix}{backtest_suffix}.json'
     )
+    historical_backtest_path = (
+        output_dir
+        / f'historical_strategy_backtest_{filename_prefix}{backtest_suffix}.json'
+    )
 
     export_workbook(
         artifacts.decision_table,
@@ -1922,10 +1985,14 @@ def save_draft_decision_artifacts(
         backtest_path.write_text(
             json.dumps(artifacts.backtest, default=str, indent=2), encoding='utf-8'
         )
+        historical_backtest_path.write_text(
+            json.dumps(artifacts.backtest, default=str, indent=2), encoding='utf-8'
+        )
 
     return {
         'workbook_path': workbook_path,
         'payload_path': payload_path,
         'html_path': html_path,
         'backtest_path': backtest_path,
+        'historical_backtest_path': historical_backtest_path,
     }

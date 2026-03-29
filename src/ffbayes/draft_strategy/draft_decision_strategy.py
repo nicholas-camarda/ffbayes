@@ -423,6 +423,82 @@ def _position_priority(recommendations: pd.DataFrame) -> str:
     return top_positions.index[0]
 
 
+def _build_current_year_model_comparison(
+    artifacts: DraftDecisionArtifacts, current_year: int
+) -> dict[str, Any]:
+    """Build a compact comparison payload for the current draft-year board."""
+    table = artifacts.decision_table.copy()
+    if table.empty:
+        return {
+            'model_type': 'current_year_model_comparison',
+            'year': current_year,
+            'labels': ['current_vor', 'market_rank', 'consensus', 'draft_score'],
+            'top_players': [],
+        }
+
+    table['current_vor'] = pd.to_numeric(
+        table.get(
+            'current_vor_value',
+            table.get('vor_value', table.get('replacement_delta', np.nan)),
+        ),
+        errors='coerce',
+    )
+    table['consensus'] = (
+        0.65 * pd.to_numeric(table.get('proj_points_mean'), errors='coerce').fillna(0.0)
+        + 0.35
+        * pd.to_numeric(table.get('availability_at_pick'), errors='coerce').fillna(0.0)
+    )
+    table['market_rank'] = pd.to_numeric(table.get('market_rank'), errors='coerce')
+    table['draft_score'] = pd.to_numeric(table.get('draft_score'), errors='coerce')
+    table['current_vor_rank'] = pd.to_numeric(
+        table.get('current_vor_rank', table['current_vor'].rank(ascending=False)),
+        errors='coerce',
+    )
+
+    def _top_players(frame: pd.DataFrame, score_col: str, ascending: bool) -> list[str]:
+        ranked = frame.sort_values(score_col, ascending=ascending)
+        return ranked.head(10)['player_name'].tolist()
+
+    summary = {
+        'current_vor': {
+            'top_players': _top_players(table, 'current_vor', ascending=False),
+            'mean_score': float(table['current_vor'].mean(skipna=True)),
+        },
+        'market_rank': {
+            'top_players': _top_players(table, 'market_rank', ascending=True),
+            'mean_score': float(table['market_rank'].mean(skipna=True)),
+        },
+        'consensus': {
+            'top_players': _top_players(table, 'consensus', ascending=False),
+            'mean_score': float(table['consensus'].mean(skipna=True)),
+        },
+        'draft_score': {
+            'top_players': _top_players(table, 'draft_score', ascending=False),
+            'mean_score': float(table['draft_score'].mean(skipna=True)),
+        },
+    }
+
+    return {
+        'model_type': 'current_year_model_comparison',
+        'year': current_year,
+        'labels': ['current_vor', 'market_rank', 'consensus', 'draft_score'],
+        'strategy_summary': summary,
+        'top_players': table[
+            [
+                'player_name',
+                'position',
+                'current_vor',
+                'current_vor_rank',
+                'market_rank',
+                'consensus',
+                'draft_score',
+            ]
+        ]
+        .head(50)
+        .to_dict(orient='records'),
+    }
+
+
 def _compatibility_payload(artifacts: DraftDecisionArtifacts) -> dict[str, Any]:
     picks = {}
     recommendation_window = artifacts.recommendations.copy()
@@ -525,6 +601,12 @@ def _run_single_slot(
         dashboard_dir=dashboard_output_dir,
     )
 
+    comparison_path = results_dir / f'current_year_model_comparison_{current_year}.json'
+    comparison_payload = _build_current_year_model_comparison(artifacts, current_year)
+    comparison_path.write_text(
+        json.dumps(comparison_payload, default=str, indent=2), encoding='utf-8'
+    )
+
     compat_path = Path(get_draft_board_path(current_year)).with_name(
         f'draft_board_{filename_prefix}{current_year}.json'
     )
@@ -557,6 +639,7 @@ def _run_single_slot(
     return {
         'artifacts': artifacts,
         'saved': saved,
+        'comparison_path': comparison_path,
         'compat_path': compat_path,
         'legacy_path': legacy_path,
         'backtest_path': backtest_path,
@@ -687,6 +770,7 @@ def main() -> int:
     logger.info('  workbook: %s', result['saved']['workbook_path'])
     logger.info('  dashboard payload: %s', result['saved']['payload_path'])
     logger.info('  dashboard html: %s', result['saved']['html_path'])
+    logger.info('  current-year comparison: %s', result['comparison_path'])
     logger.info('  compatibility json: %s', result['compat_path'])
     logger.info('  legacy strategy json: %s', result['legacy_path'])
     if artifacts.backtest:

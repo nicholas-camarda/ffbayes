@@ -211,3 +211,29 @@ def test_backtest_payload_has_expected_shape():
     assert 'overall' in backtest
     assert 'by_strategy' in backtest['overall']
     assert len(backtest['overall']['by_strategy']) >= 1
+
+
+def test_backtest_labels_historical_vor_proxy_explicitly():
+    season_history = pd.DataFrame(
+        {
+            'Season': [2021, 2021, 2022, 2022, 2023, 2023, 2024, 2024],
+            'Name': [
+                'Alpha QB',
+                'Alpha RB',
+                'Alpha QB',
+                'Alpha RB',
+                'Alpha QB',
+                'Alpha RB',
+                'Alpha QB',
+                'Alpha RB',
+            ],
+            'Position': ['QB', 'RB', 'QB', 'RB', 'QB', 'RB', 'QB', 'RB'],
+            'FantPt': [250, 180, 260, 190, 270, 200, 280, 210],
+        }
+    )
+
+    backtest = run_draft_backtest(season_history, LeagueSettings())
+    strategies = [row['strategy'] for row in backtest['overall']['by_strategy']]
+
+    assert 'historical_vor_proxy' in strategies
+    assert 'vor' not in strategies

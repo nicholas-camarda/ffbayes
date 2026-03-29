@@ -22,6 +22,7 @@ No side effects - only creates the unified dataset.
 
 import logging
 import os
+import time
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
@@ -39,6 +40,326 @@ logger = logging.getLogger(__name__)
 # Pipeline configuration
 QUICK_TEST = os.getenv('QUICK_TEST', 'false').lower() == 'true'
 ALLOW_STALE_SEASON = os.getenv('FFBAYES_ALLOW_STALE_SEASON', 'false').lower() == 'true'
+
+
+def _normalize_player_name(value) -> str:
+    """Normalize player names for deterministic matching."""
+    if pd.isna(value):
+        return ''
+
+    name = ' '.join(str(value).strip().split()).lower()
+    for suffix in [' jr.', ' sr.', ' iii', ' iv', ' v', ' ii', ' i']:
+        if name.endswith(suffix):
+            return name[: -len(suffix)].strip()
+    return name
+
+
+def _normalize_match_position(value) -> str:
+    """Normalize positions so common aliases compare consistently."""
+    position = ' '.join(str(value).strip().upper().split())
+    if position in {'D/ST', 'DEF', 'DEFENSE'}:
+        return 'DST'
+    if position in {'SAF', 'S'}:
+        return 'S'
+    if position.startswith('RB'):
+        return 'RB'
+    if position.startswith('WR'):
+        return 'WR'
+    if position.startswith('QB'):
+        return 'QB'
+    if position.startswith('TE'):
+        return 'TE'
+    if position.startswith('K'):
+        return 'K'
+    return position
+
+
+def _resolve_existing_vor_csv(current_year: int) -> Path | None:
+    """Find an existing current-year VOR CSV in the canonical runtime locations."""
+    from ffbayes.utils.path_constants import SNAKE_DRAFT_DATASETS_DIR
+    from ffbayes.utils.vor_filename_generator import get_vor_csv_filename
+
+    filename = get_vor_csv_filename(current_year)
+    from ffbayes.utils.path_constants import get_vor_strategy_dir
+
+    candidates = [
+        SNAKE_DRAFT_DATASETS_DIR / filename,
+        get_vor_strategy_dir(current_year) / filename,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    wildcard_matches = []
+    for directory in [SNAKE_DRAFT_DATASETS_DIR, get_vor_strategy_dir(current_year)]:
+        wildcard_matches.extend(
+            sorted(directory.glob(f'snake-draft_ppr-*_{current_year}.csv'))
+        )
+    if wildcard_matches:
+        return max(wildcard_matches, key=lambda path: path.stat().st_mtime)
+
+    return None
+
+
+def _load_vor_source(current_year: int, config: Dict) -> tuple[pd.DataFrame, Path, bool]:
+    """Load the current-year market/VOR snapshot or build it if absent."""
+    existing_vor = _resolve_existing_vor_csv(current_year)
+    if existing_vor is not None:
+        logger.info('🔄 Reusing current-year VOR snapshot: %s', existing_vor)
+        return pd.read_csv(existing_vor), existing_vor, False
+
+    logger.info('🔄 No current-year VOR snapshot found; rebuilding it now...')
+    projection_data = scrape_projection_data(config)
+    if projection_data is None:
+        raise RuntimeError('Failed to scrape projection data from FantasyPros')
+
+    vor_data = calculate_vor_rankings(projection_data, config)
+    vor_file_path = Path(save_vor_data(vor_data, config))
+    return vor_data, vor_file_path, True
+
+
+def _build_player_snapshot(data: pd.DataFrame) -> pd.DataFrame:
+    """Collapse the historical table to one row per player-position snapshot."""
+    if data is None or data.empty:
+        return pd.DataFrame(columns=['Name', 'Position'])
+
+    snapshot = data.copy()
+    snapshot['Name'] = snapshot['Name'].map(_normalize_player_name)
+    snapshot['Position'] = snapshot['Position'].map(_normalize_match_position)
+    sort_columns = [
+        column
+        for column in ['Season', 'G#', 'Date', 'source_updated_at']
+        if column in snapshot.columns
+    ]
+    for column in ['Season', 'G#']:
+        if column in snapshot.columns:
+            snapshot[column] = pd.to_numeric(snapshot[column], errors='coerce')
+    if 'Date' in snapshot.columns:
+        snapshot['Date'] = pd.to_datetime(snapshot['Date'], errors='coerce')
+    if 'source_updated_at' in snapshot.columns:
+        snapshot['source_updated_at'] = pd.to_datetime(
+            snapshot['source_updated_at'], errors='coerce'
+        )
+    if sort_columns:
+        snapshot = snapshot.sort_values(sort_columns)
+    snapshot = snapshot.drop_duplicates(subset=['Name', 'Position'], keep='last')
+    return snapshot.reset_index(drop=True)
+
+
+def _prepare_market_snapshot(vor_df: pd.DataFrame, current_year: int) -> pd.DataFrame:
+    """Normalize the current-year market snapshot into a player-level table."""
+    if vor_df is None or vor_df.empty:
+        return pd.DataFrame(
+            columns=[
+                'Name',
+                'Position',
+                'player_name',
+                'position',
+                'current_vor_value',
+                'current_vor_rank',
+            ]
+        )
+
+    snapshot = vor_df.copy()
+    rename_map = {
+        'PLAYER': 'player_name',
+        'POS': 'position',
+        'AVG': 'adp',
+        'FPTS': 'proj_points_mean',
+        'VOR': 'current_vor_value',
+        'VALUERANK': 'current_vor_rank',
+    }
+    snapshot = snapshot.rename(columns=rename_map)
+    snapshot['player_name'] = snapshot['player_name'].map(_normalize_player_name)
+    snapshot['position'] = snapshot['position'].map(_normalize_match_position)
+    snapshot['Name'] = snapshot['player_name']
+    snapshot['Position'] = snapshot['position']
+    snapshot['current_vor_value'] = pd.to_numeric(
+        snapshot.get('current_vor_value'), errors='coerce'
+    )
+    snapshot['current_vor_rank'] = pd.to_numeric(
+        snapshot.get('current_vor_rank'), errors='coerce'
+    )
+    snapshot['adp'] = pd.to_numeric(snapshot.get('adp'), errors='coerce')
+    snapshot['proj_points_mean'] = pd.to_numeric(
+        snapshot.get('proj_points_mean'), errors='coerce'
+    )
+    snapshot['vor_value'] = snapshot['current_vor_value']
+    snapshot['vor_global_rank'] = snapshot['current_vor_rank']
+    snapshot['vor_match_confidence'] = 1.0
+    snapshot['source_name'] = f'current_market_snapshot_{current_year}'
+    snapshot['source_updated_at'] = pd.Timestamp.now()
+    snapshot['current_vor'] = snapshot['current_vor_value']
+    snapshot['current_vor_rank_label'] = snapshot['current_vor_rank']
+    return snapshot.drop_duplicates(subset=['Name', 'Position'], keep='last')
+
+
+def _attach_market_snapshot(data: pd.DataFrame, market_snapshot: pd.DataFrame) -> pd.DataFrame:
+    """Attach market snapshot columns to the historical table using unique players."""
+    if data is None or data.empty or market_snapshot is None or market_snapshot.empty:
+        return data.copy()
+
+    df = data.copy()
+    df['__match_name'] = df['Name'].map(_normalize_player_name)
+    df['__match_position'] = df['Position'].map(_normalize_match_position)
+
+    snapshot = _build_player_snapshot(df)
+    if snapshot.empty:
+        return df.drop(columns=['__match_name', '__match_position'], errors='ignore')
+    snapshot['__match_name'] = snapshot['Name']
+    snapshot['__match_position'] = snapshot['Position']
+
+    market = market_snapshot.copy()
+    market['__match_name'] = market['Name'].map(_normalize_player_name)
+    market['__match_position'] = market['Position'].map(_normalize_match_position)
+    market = market.drop_duplicates(subset=['__match_name', '__match_position'], keep='last')
+
+    match_columns = [
+        column
+        for column in [
+            'player_name',
+            'position',
+            'adp',
+            'proj_points_mean',
+            'current_vor_value',
+            'current_vor_rank',
+            'vor_value',
+            'vor_global_rank',
+            'vor_match_confidence',
+            'source_name',
+            'source_updated_at',
+            'current_vor',
+            'current_vor_rank_label',
+        ]
+        if column in market.columns
+    ]
+
+    merged = snapshot.merge(
+        market[['__match_name', '__match_position', *match_columns]],
+        left_on=['Name', 'Position'],
+        right_on=['__match_name', '__match_position'],
+        how='left',
+        suffixes=('', '_market'),
+    )
+
+    unmatched = merged[merged['current_vor_rank'].isna()].copy()
+    if not unmatched.empty:
+        from fuzzywuzzy import fuzz
+
+        market_index = {}
+        for position, group in market.groupby('__match_position'):
+            normalized_names = [
+                (_normalize_player_name(name), idx)
+                for idx, name in enumerate(group['player_name'].tolist())
+            ]
+            market_index[position] = {
+                'frame': group.reset_index(drop=True),
+                'normalized_names': normalized_names,
+            }
+
+        cache: dict[tuple[str, str], tuple[int, int] | None] = {}
+        for snapshot_idx, row in unmatched.iterrows():
+            key = (row['Name'], row['Position'])
+            if key in cache:
+                match_idx, score = cache[key] or (None, None)
+            else:
+                best_score = 0
+                best_idx = None
+                position_bucket = market_index.get(row['Position'])
+                if position_bucket is not None:
+                    for idx, candidate_name in position_bucket['normalized_names']:
+                        scores = [
+                            fuzz.ratio(row['Name'], candidate_name),
+                            fuzz.partial_ratio(row['Name'], candidate_name),
+                            fuzz.token_sort_ratio(row['Name'], candidate_name),
+                            fuzz.token_set_ratio(row['Name'], candidate_name),
+                        ]
+                        score = max(scores)
+                        if score > best_score:
+                            best_score = score
+                            best_idx = idx
+                cache[key] = (best_idx, best_score) if best_idx is not None else None
+                match_idx, score = cache[key] or (None, None)
+
+            if match_idx is None:
+                continue
+
+            candidate = market_index[row['Position']]['frame'].iloc[match_idx]
+            for column in match_columns:
+                if column in merged.columns and column in candidate.index:
+                    merged.at[snapshot_idx, column] = candidate[column]
+            merged.at[snapshot_idx, 'vor_match_confidence'] = (
+                float(score) / 100.0 if score is not None else np.nan
+            )
+            merged.at[snapshot_idx, 'current_vor_value'] = candidate.get(
+                'current_vor_value', np.nan
+            )
+            merged.at[snapshot_idx, 'current_vor_rank'] = candidate.get(
+                'current_vor_rank', np.nan
+            )
+            merged.at[snapshot_idx, 'vor_value'] = candidate.get(
+                'vor_value', np.nan
+            )
+            merged.at[snapshot_idx, 'vor_global_rank'] = candidate.get(
+                'vor_global_rank', np.nan
+            )
+            merged.at[snapshot_idx, 'current_vor'] = candidate.get(
+                'current_vor', np.nan
+            )
+
+    lookup = merged[
+        [
+            '__match_name',
+            '__match_position',
+            *[
+                column
+                for column in [
+                    'player_name',
+                    'position',
+                    'adp',
+                    'proj_points_mean',
+                    'current_vor_value',
+                    'current_vor_rank',
+                    'vor_value',
+                    'vor_global_rank',
+                    'vor_match_confidence',
+                    'source_name',
+                    'source_updated_at',
+                    'current_vor',
+                    'current_vor_rank_label',
+                ]
+                if column in merged.columns
+            ],
+        ]
+    ].drop_duplicates(subset=['__match_name', '__match_position'], keep='last')
+
+    df = df.merge(
+        lookup,
+        on=['__match_name', '__match_position'],
+        how='left',
+        suffixes=('', '_market'),
+    )
+    for column in ['player_name', 'position', 'adp', 'proj_points_mean', 'current_vor_value', 'current_vor_rank', 'vor_value', 'vor_global_rank', 'vor_match_confidence', 'source_name', 'source_updated_at', 'current_vor', 'current_vor_rank_label']:
+        market_column = f'{column}_market'
+        if market_column in df.columns:
+            if column in df.columns:
+                df[column] = df[column].combine_first(df[market_column])
+                df = df.drop(columns=[market_column])
+            else:
+                df[column] = df[market_column]
+                df = df.drop(columns=[market_column])
+
+    if 'vor_value' not in df.columns:
+        df['vor_value'] = np.nan
+    if 'vor_global_rank' not in df.columns:
+        df['vor_global_rank'] = np.nan
+    if 'vor_match_confidence' not in df.columns:
+        df['vor_match_confidence'] = np.nan
+    if 'current_vor' not in df.columns:
+        df['current_vor'] = df['vor_value']
+    if 'current_vor_rank' not in df.columns:
+        df['current_vor_rank'] = df['vor_global_rank']
+    return df.drop(columns=['__match_name', '__match_position'], errors='ignore')
 
 
 def load_config() -> Dict:
@@ -817,83 +1138,79 @@ def create_unified_dataset(data_directory=None):
     logger.info('=' * 60)
 
     try:
-        # Step 1: Scrape VOR data from FantasyPros
-        logger.info('Step 1: Scraping VOR data from FantasyPros...')
+        current_year = datetime.now().year
         config = load_config()
 
-        # Scrape ADP data
-        adp_data = scrape_adp_data(config)
-        if adp_data is None:
-            raise RuntimeError('Failed to scrape ADP data from FantasyPros')
-
-        # Scrape projection data
-        projection_data = scrape_projection_data(config)
-        if projection_data is None:
-            raise RuntimeError('Failed to scrape projection data from FantasyPros')
-
-        # Calculate VOR rankings
-        vor_data = calculate_vor_rankings(projection_data, config)
-
-        # Save VOR data
-        vor_file_path = save_vor_data(vor_data, config)
-
-        # Step 2: Load historical NFL data
-        logger.info('Step 2: Loading historical NFL data...')
+        phase_start = time.perf_counter()
         data = load_combined_dataset(data_directory)
+        logger.info(
+            'Phase load_combined_dataset completed in %.1fs with %d rows',
+            time.perf_counter() - phase_start,
+            len(data),
+        )
 
-        # Step 3: Validate quality
-        logger.info('Step 3: Validating data quality...')
+        phase_start = time.perf_counter()
         validate_data_quality(data)
-
-        # Step 4: Clean data types
-        logger.info('Step 4: Cleaning data types...')
         data = clean_data_types(data)
+        logger.info(
+            'Phase validate_and_clean completed in %.1fs',
+            time.perf_counter() - phase_start,
+        )
 
-        # Step 5: Add VOR rankings
-        logger.info('Step 5: Adding VOR rankings...')
-        data = add_vor_rankings(data, vor_file_path)
+        phase_start = time.perf_counter()
+        vor_data, vor_file_path, rebuilt_vor = _load_vor_source(current_year, config)
+        market_snapshot = _prepare_market_snapshot(vor_data, current_year)
+        logger.info(
+            'Phase attach_current_market_snapshot prepared %d market rows in %.1fs (%s)',
+            len(market_snapshot),
+            time.perf_counter() - phase_start,
+            'rebuilt' if rebuilt_vor else 'reused',
+        )
 
-        # Step 6: Merge ADP to unified dataset
-        logger.info('Step 6: Merging ADP into unified dataset...')
-        data = add_adp_data(data, adp_data)
+        phase_start = time.perf_counter()
+        data = _attach_market_snapshot(data, market_snapshot)
+        logger.info(
+            'Phase attach_current_market_snapshot merged snapshot onto %d rows in %.1fs',
+            len(data),
+            time.perf_counter() - phase_start,
+        )
 
-        # Step 7: Calculate basic features
-        logger.info('Step 7: Calculating basic features...')
+        phase_start = time.perf_counter()
         data = calculate_basic_features(data)
+        logger.info(
+            'Phase calculate_basic_features completed in %.1fs',
+            time.perf_counter() - phase_start,
+        )
 
-        # Step 8: Compute and embed pre-draft composite features (RAV, cliffs, role, momentum)
-        logger.info('Step 8: Computing pre-draft composite features...')
+        phase_start = time.perf_counter()
         risk_tol = os.getenv('RISK_TOLERANCE', 'medium')
         data = add_predraft_composites(data, risk_tolerance=risk_tol)
+        logger.info(
+            'Phase compute_composites completed in %.1fs',
+            time.perf_counter() - phase_start,
+        )
 
-        # Step 9: Save unified dataset
-        logger.info('Step 9: Saving unified dataset...')
+        phase_start = time.perf_counter()
         from ffbayes.utils.path_constants import (
             get_unified_dataset_csv_path,
-            get_unified_dataset_excel_path,
             get_unified_dataset_path,
         )
 
-        # Get paths (directories will be created automatically)
         output_path = get_unified_dataset_path()
-        excel_path = get_unified_dataset_excel_path()
         csv_path = get_unified_dataset_csv_path()
 
-        # Save as Excel for human readability (not JSON for computers)
-        data.to_excel(excel_path, index=False, engine='openpyxl')
-
-        # Also save as CSV for compatibility
         data.to_csv(csv_path, index=False)
-
-        # Keep JSON for programmatic use but make it clear it's not for humans
-        data.to_json(output_path, orient='records', indent=2)
-
-        logger.info('✅ Unified dataset saved in multiple formats:')
-        logger.info(f'   📊 Excel (human-readable): {excel_path}')
-        logger.info(f'   📋 CSV (compatibility): {csv_path}')
-        logger.info(f'   🤖 JSON (programmatic): {output_path}')
-        logger.info(f'✅ Final shape: {data.shape}')
-        logger.info(f'✅ Available columns: {list(data.columns)}')
+        data.to_json(output_path, orient='records')
+        logger.info(
+            'Phase write_outputs completed in %.1fs: csv=%s json=%s',
+            time.perf_counter() - phase_start,
+            csv_path,
+            output_path,
+        )
+        logger.info('✅ Unified dataset saved in compact machine-readable formats')
+        logger.info('✅ Current-year VOR source: %s', vor_file_path)
+        logger.info('✅ Final shape: %s', data.shape)
+        logger.info('✅ Available columns: %s', list(data.columns))
 
         return data
 

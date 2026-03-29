@@ -129,3 +129,65 @@ def test_process_dataset_suppresses_row_progress_in_summary_mode(
     assert len(processed_df) == 2
     assert 'Processed 0/2 rows' not in output
     assert 'Processing summary for 2025' in output
+
+
+def test_create_dataset_does_not_attach_vor_rankings(monkeypatch):
+    players = pd.DataFrame(
+        [
+            {
+                'player_id': 'p1',
+                'player_display_name': 'Alpha Player',
+                'position': 'RB',
+                'recent_team': 'NYG',
+                'season': 2025,
+                'week': 1,
+                'season_type': 'REG',
+                'fantasy_points': 12.5,
+                'fantasy_points_ppr': 15.0,
+                'game_injury_report_status': 'ACTIVE',
+                'practice_injury_report_status': 'FULL',
+            }
+        ]
+    )
+    schedules = pd.DataFrame(
+        [
+            {
+                'game_id': '2025_01_NYG_DAL',
+                'week': 1,
+                'season': 2025,
+                'gameday': '2025-09-01',
+                'home_team': 'NYG',
+                'away_team': 'DAL',
+                'away_score': 10,
+                'home_score': 17,
+            }
+        ]
+    )
+
+    monkeypatch.setattr(
+        collect_data.nflverse_backend,
+        'load_weekly_player_stats',
+        lambda years: players,
+    )
+    monkeypatch.setattr(
+        collect_data.nflverse_backend,
+        'load_schedules',
+        lambda years: schedules,
+    )
+    monkeypatch.setattr(
+        collect_data.nflverse_backend,
+        'load_weekly_defense_stats',
+        lambda years: pd.DataFrame(),
+    )
+    monkeypatch.setattr(
+        collect_data,
+        'add_player_rankings',
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError('add_player_rankings should not be called')
+        ),
+    )
+
+    merged_df = collect_data.create_dataset(2025)
+
+    assert 'rank' not in merged_df.columns
+    assert 'Name' in merged_df.columns

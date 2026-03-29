@@ -19,20 +19,29 @@ def load_unified_dataset(data_directory=None):
     from ffbayes.utils.path_constants import get_unified_dataset_path
 
     if data_directory in (None, '', 'datasets'):
-        dataset_path = get_unified_dataset_path()
+        json_path = get_unified_dataset_path()
+        csv_path = json_path.with_suffix('.csv')
     else:
         candidate = Path(data_directory).expanduser()
         if candidate.is_dir():
-            candidate = candidate / 'unified_dataset' / 'unified_dataset.json'
-        dataset_path = candidate
+            json_path = candidate / 'unified_dataset' / 'unified_dataset.json'
+            csv_path = candidate / 'unified_dataset' / 'unified_dataset.csv'
+        else:
+            json_path = candidate
+            csv_path = candidate.with_suffix('.csv')
+
+    dataset_path = csv_path if csv_path.exists() else json_path
 
     if not dataset_path.exists():
         raise FileNotFoundError(
             f"Unified dataset not found at {dataset_path}. "
             "Run create_unified_dataset.py first."
         )
-    
-    data = pd.read_json(dataset_path)
+
+    if dataset_path.suffix.lower() == '.csv':
+        data = pd.read_csv(dataset_path)
+    else:
+        data = pd.read_json(dataset_path)
     return data
 
 def get_player_data(player_name, data=None):
