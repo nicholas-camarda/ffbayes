@@ -19,9 +19,9 @@ def main() -> int:
     )
     parser.add_argument(
         '--phase',
-        choices=['pre_draft', 'post_draft', 'both'],
-        default='both',
-        help='Which phase artifacts to publish',
+        choices=['pre_draft'],
+        default='pre_draft',
+        help='Which supported phase artifacts to publish',
     )
     args = parser.parse_args()
 

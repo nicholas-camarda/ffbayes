@@ -17,13 +17,13 @@ from ffbayes.draft_strategy.draft_decision_system import (
     DraftContext,
     LeagueSettings,
     build_draft_decision_artifacts,
-    save_draft_decision_artifacts,
 )
-from ffbayes.utils.path_constants import (get_pre_draft_plots_dir,
-                                          get_draft_strategy_dir,
-                                          get_unified_dataset_csv_path,
-                                          SEASON_DATASETS_DIR,
-                                          get_user_config_file)
+from ffbayes.utils.path_constants import (
+    SEASON_DATASETS_DIR,
+    get_pre_draft_diagnostics_dir,
+    get_unified_dataset_csv_path,
+    get_user_config_file,
+)
 from ffbayes.utils.strategy_path_generator import (
     get_bayesian_strategy_path,
     get_hybrid_mc_results_path,
@@ -36,7 +36,7 @@ from ffbayes.visualization.uncertainty_overview_unified import UncertaintyOvervi
 def get_output_directory():
     """Determine output directory for pre-draft visualizations."""
     current_year = datetime.now().year
-    base_dir = str(get_pre_draft_plots_dir(current_year) / "visualizations")
+    base_dir = str(get_pre_draft_diagnostics_dir(current_year) / "visualizations")
     os.makedirs(base_dir, exist_ok=True)
     return base_dir
 
@@ -363,7 +363,7 @@ def main():
         print(f"✅ Uncertainty Overview saved to: {output_dir}")
 
         print("\n" + "="*60)
-        print("DRAFT DECISION ARTIFACTS")
+        print("DRAFT DIAGNOSTICS")
         print("="*60)
         try:
             league_settings = LeagueSettings.from_mapping(
@@ -379,13 +379,24 @@ def main():
             context=DraftContext(current_pick_number=league_settings.draft_position),
             season_history=season_history,
         )
-        decision_dir = get_draft_strategy_dir(current_year)
-        saved_paths = save_draft_decision_artifacts(artifacts, decision_dir, year=current_year)
-        print(f"✅ Draft board workbook: {saved_paths['workbook_path']}")
-        print(f"✅ Dashboard payload: {saved_paths['payload_path']}")
-        print(f"✅ Dashboard HTML: {saved_paths['html_path']}")
-        if artifacts.backtest:
-            print(f"✅ Backtest JSON: {saved_paths['backtest_path']}")
+        diagnostics_dir = Path(get_output_directory())
+        summary_path = diagnostics_dir / f'draft_diagnostics_summary_{current_year}.json'
+        summary_path.write_text(
+            json.dumps(
+                {
+                    'league_settings': artifacts.league_settings.to_dict(),
+                    'current_pick_number': artifacts.dashboard_payload['current_pick_number'],
+                    'next_pick_number': artifacts.dashboard_payload['next_pick_number'],
+                    'pick_now': artifacts.dashboard_payload['live_state'].get('pick_now', {}),
+                    'fallbacks': artifacts.dashboard_payload['live_state'].get('fallbacks', []),
+                    'can_wait': artifacts.dashboard_payload['live_state'].get('can_wait', []),
+                },
+                default=str,
+                indent=2,
+            ),
+            encoding='utf-8',
+        )
+        print(f"✅ Diagnostics summary: {summary_path}")
 
         print("\n" + "="*60)
         print("PLOTS COMPLETED")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Split pipeline runner for fantasy football analysis.
-Runs either pre-draft or post-draft pipeline based on user selection.
+Runs the supported pre-draft pipeline.
 Only creates directories when steps actually run.
 """
 
@@ -18,25 +18,24 @@ from typing import Dict
 class SplitPipelineRunner:
     """Pipeline runner that dynamically creates directories and runs split pipelines."""
 
-    def __init__(self, pipeline_type: str = 'pre_draft'):
+    def __init__(self, pipeline_type: str = 'pre_draft', year: int | None = None):
         """
         Initialize pipeline runner.
 
         Args:
-            pipeline_type: Either "pre_draft" or "post_draft"
+            pipeline_type: Supported phase, kept for compatibility. Only pre_draft.
+            year: Optional season year override for logging and file organization.
         """
-        self.pipeline_type = pipeline_type
-        self.current_year = datetime.now().year
+        if pipeline_type != 'pre_draft':
+            raise ValueError('Only pre_draft pipeline execution is supported')
+        self.pipeline_type = 'pre_draft'
+        self.current_year = year or datetime.now().year
         from ffbayes.utils.path_constants import (
             get_logs_dir,
-            get_post_draft_config_file,
             get_pre_draft_config_file,
         )
 
-        if pipeline_type == 'pre_draft':
-            self.config_file = str(get_pre_draft_config_file())
-        else:
-            self.config_file = str(get_post_draft_config_file())
+        self.config_file = str(get_pre_draft_config_file())
         self.config = self.load_config()
         self.created_dirs = set()  # Track which directories we actually create
 
@@ -111,6 +110,7 @@ class SplitPipelineRunner:
         step_env = step.get('env') or {}
         env.update({str(key): str(value) for key, value in step_env.items()})
         env['FFBAYES_PIPELINE_PHASE'] = self.pipeline_type
+        env['FFBAYES_PIPELINE_YEAR'] = str(getattr(self, 'current_year', datetime.now().year))
 
         try:
             # Run the step
@@ -305,7 +305,7 @@ class SplitPipelineRunner:
 
     def organize_vor_outputs(self):
         """Organize VOR strategy outputs automatically."""
-        current_year = datetime.now().year
+        current_year = self.current_year
 
         # Source: Raw VOR data and processed strategy in datasets
         from ffbayes.utils.path_constants import SNAKE_DRAFT_DATASETS_DIR
@@ -354,19 +354,21 @@ class SplitPipelineRunner:
 
 def main():
     """Main function to run split pipeline."""
-    if len(sys.argv) < 2:
-        print('Usage: python run_pipeline_split.py <pipeline_type>')
-        print("  pipeline_type: 'pre_draft' or 'post_draft'")
-        sys.exit(1)
+    import argparse
 
-    pipeline_type = sys.argv[1].lower()
-
-    if pipeline_type not in ['pre_draft', 'post_draft']:
-        print("❌ Invalid pipeline type. Use 'pre_draft' or 'post_draft'")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description='Run the supported pre-draft pipeline.'
+    )
+    parser.add_argument(
+        '--year',
+        type=int,
+        default=None,
+        help='Season year to use for logging and artifact naming.',
+    )
+    args, _ = parser.parse_known_args()
 
     try:
-        runner = SplitPipelineRunner(pipeline_type)
+        runner = SplitPipelineRunner(year=args.year)
         success = runner.run_pipeline()
 
         if success:

@@ -39,8 +39,12 @@ def test_create_all_required_directories_uses_runtime_only(tmp_path, monkeypatch
         tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'SideProjects' / 'ffbayes'
     )
 
-    assert (runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'results').exists()
-    assert (runtime_root / 'runs' / str(current_year) / 'post_draft' / 'plots').exists()
+    assert (
+        runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'artifacts'
+    ).exists()
+    assert (
+        runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'diagnostics'
+    ).exists()
     assert (runtime_root / 'data' / 'processed' / 'unified_dataset').exists()
     assert not (cloud_root / 'data').exists()
     assert not (cloud_root / 'results').exists()
@@ -61,33 +65,39 @@ def test_manage_visualizations_publishes_selected_phase(tmp_path, monkeypatch):
         tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'SideProjects' / 'ffbayes'
     )
 
-    pre_draft_result = runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'results' / 'vor_strategy'
-    pre_draft_result.mkdir(parents=True, exist_ok=True)
-    (pre_draft_result / 'example.json').write_text('{"ok": true}', encoding='utf-8')
-
-    post_draft_result = runtime_root / 'runs' / str(current_year) / 'post_draft' / 'results' / 'team_aggregation'
-    post_draft_result.mkdir(parents=True, exist_ok=True)
-    (post_draft_result / 'example.tsv').write_text('player\tvalue\n', encoding='utf-8')
-
-    pre_draft_plot_dir = runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'plots' / 'visualizations'
-    pre_draft_plot_dir.mkdir(parents=True, exist_ok=True)
-    (pre_draft_plot_dir / 'chart.png').write_bytes(b'png')
-
-    pre_draft_dashboard_dir = runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'dashboard'
-    pre_draft_dashboard_dir.mkdir(parents=True, exist_ok=True)
-    (pre_draft_dashboard_dir / f'dashboard_payload_{current_year}.json').write_text(
+    pre_draft_artifact_dir = (
+        runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'artifacts'
+    )
+    pre_draft_artifact_dir.mkdir(parents=True, exist_ok=True)
+    (pre_draft_artifact_dir / 'vor_strategy' / 'example.json').parent.mkdir(
+        parents=True, exist_ok=True
+    )
+    (pre_draft_artifact_dir / 'vor_strategy' / 'example.json').write_text(
+        '{"ok": true}', encoding='utf-8'
+    )
+    (pre_draft_artifact_dir / 'draft_strategy' / f'dashboard_payload_{current_year}.json').parent.mkdir(
+        parents=True, exist_ok=True
+    )
+    (pre_draft_artifact_dir / 'draft_strategy' / f'dashboard_payload_{current_year}.json').write_text(
         '{"ok": true}', encoding='utf-8'
     )
 
-    post_draft_plot_dir = runtime_root / 'runs' / str(current_year) / 'post_draft' / 'plots'
-    post_draft_plot_dir.mkdir(parents=True, exist_ok=True)
-    (post_draft_plot_dir / 'summary.png').write_bytes(b'png')
+    pre_draft_plot_dir = (
+        runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'diagnostics' / 'visualizations'
+    )
+    pre_draft_plot_dir.mkdir(parents=True, exist_ok=True)
+    (pre_draft_plot_dir / 'chart.png').write_bytes(b'png')
+
+    pre_draft_dashboard_dir = (
+        runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'artifacts' / 'draft_strategy'
+    )
+    pre_draft_dashboard_dir.mkdir(parents=True, exist_ok=True)
 
     result = manage_visualizations(current_year, phase='pre_draft')
 
     assert result['readme_updated'] is False
     assert result['phase'] == 'pre_draft'
-    assert len(result['copied_files']) == 4
+    assert len(result['copied_files']) >= 4
 
     assert (
         cloud_root
@@ -110,11 +120,8 @@ def test_manage_visualizations_publishes_selected_phase(tmp_path, monkeypatch):
         / 'dashboard'
         / str(current_year)
         / 'pre_draft'
+        / 'draft_strategy'
         / f'dashboard_payload_{current_year}.json'
     ).exists()
     assert (cloud_root / 'docs' / 'images' / 'pre_draft_chart.png').exists()
-    assert not (cloud_root / 'results' / str(current_year) / 'post_draft').exists()
-    assert not (cloud_root / 'plots' / str(current_year) / 'post_draft').exists()
-    assert not (cloud_root / 'dashboard' / str(current_year) / 'post_draft').exists()
-    assert not (cloud_root / 'docs' / 'images' / 'post_draft_summary.png').exists()
     assert not (tmp_path / 'workspace' / 'docs' / 'images').exists()

@@ -14,7 +14,6 @@ def _load_step_map(config_name: str) -> dict[str, dict]:
 
 def test_pipeline_configs_explicitly_allow_stale_season():
     pre_steps = _load_step_map('pipeline_pre_draft.json')
-    post_steps = _load_step_map('pipeline_post_draft.json')
 
     assert pre_steps['data_collection']['args'] == '--allow-stale-season'
     assert (
@@ -32,17 +31,8 @@ def test_pipeline_configs_explicitly_allow_stale_season():
         == 'true'
     )
 
-    assert post_steps['data_collection']['args'] == '--allow-stale-season'
-    assert (
-        post_steps['data_collection']['env']['FFBAYES_PROCESS_DATASET_PROGRESS']
-        == 'summary'
-    )
-    assert post_steps['data_validation']['env']['FFBAYES_ALLOW_STALE_SEASON'] == 'true'
-    assert post_steps['data_preprocessing']['env']['FFBAYES_ALLOW_STALE_SEASON'] == 'true'
-    assert (
-        post_steps['create_unified_dataset']['env']['FFBAYES_ALLOW_STALE_SEASON']
-        == 'true'
-    )
+    config_root = Path(__file__).resolve().parents[1] / 'config'
+    assert not (config_root / 'pipeline_post_draft.json').exists()
 
 
 def test_split_runner_forwards_step_env_and_args(monkeypatch):

@@ -34,21 +34,13 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec(
         name='split',
         module='ffbayes.run_pipeline_split',
-        help_text='Run the split pipeline with an explicit phase argument.',
+        help_text='Run the pre-draft split pipeline.',
     ),
     CommandSpec(
         name='pre-draft',
         module='ffbayes.run_pipeline_split',
         help_text='Run only the pre-draft pipeline.',
         aliases=('pre_draft',),
-        argv_prefix=('pre_draft',),
-    ),
-    CommandSpec(
-        name='post-draft',
-        module='ffbayes.run_pipeline_split',
-        help_text='Run only the post-draft pipeline.',
-        aliases=('post_draft',),
-        argv_prefix=('post_draft',),
     ),
     CommandSpec(
         name='collect',
@@ -93,7 +85,7 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec(
         name='draft-strategy',
         module='ffbayes.draft_strategy.draft_decision_strategy',
-        help_text='Generate the canonical draft strategy workbook and dashboard.',
+        help_text='Generate the live draft command center and workbook.',
     ),
     CommandSpec(
         name='draft-backtest',
@@ -116,10 +108,9 @@ COMMANDS: tuple[CommandSpec, ...] = (
         help_text='Mirror selected runtime artifacts into cloud storage.',
     ),
     CommandSpec(
-        name='validate-team',
-        module='ffbayes.validation.validate_draft_team',
-        help_text='Validate the drafted team TSV before post-draft analysis.',
-        aliases=('team-validate',),
+        name='publish-pages',
+        module='ffbayes.publish_pages',
+        help_text='Stage the live dashboard for GitHub Pages.',
     ),
 )
 
@@ -148,9 +139,10 @@ def build_parser() -> argparse.ArgumentParser:
             'Examples:\n'
             '  ffbayes collect --years 2021,2022,2023\n'
             '  ffbayes preprocess\n'
-            '  ffbayes pre-draft\n'
-            '  ffbayes post-draft\n'
-            '  ffbayes publish --year 2025 --phase pre_draft\n\n'
+            '  ffbayes split\n'
+            '  ffbayes draft-strategy --draft-position 10\n'
+            '  ffbayes publish --year 2025\n\n'
+            '  ffbayes publish-pages --year 2025\n\n'
             'Any extra arguments after the command are forwarded to the existing '
             'module-level CLI.'
         ),
@@ -206,22 +198,6 @@ def dispatch(command: str, argv: Sequence[str]) -> int:
     if spec is None:
         print(f"Unknown command: {command}", file=sys.stderr)
         return 2
-
-    if canonical_name == 'split':
-        if not argv:
-            print(
-                'ffbayes split requires a phase argument: pre_draft or post_draft',
-                file=sys.stderr,
-            )
-            return 2
-        if argv[0] not in {'pre_draft', 'post_draft'}:
-            print(
-                'ffbayes split expects the first argument to be pre_draft or '
-                'post_draft',
-                file=sys.stderr,
-            )
-            return 2
-        return _run_module(spec.module, argv)
 
     return _run_module(spec.module, [*spec.argv_prefix, *argv])
 

@@ -29,7 +29,7 @@ def test_collect_command_forwards_extra_arguments(monkeypatch):
     ]
 
 
-def test_pre_draft_shortcut_injects_phase_argument(monkeypatch):
+def test_split_command_forwards_without_phase_argument(monkeypatch):
     captured = {}
 
     def fake_import(module_name):
@@ -43,20 +43,37 @@ def test_pre_draft_shortcut_injects_phase_argument(monkeypatch):
 
     monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
 
-    exit_code = cli.main(['pre-draft', '--year', '2025'])
+    exit_code = cli.main(['split', '--year', '2025'])
 
     assert exit_code == 0
     assert captured['module_name'] == 'ffbayes.run_pipeline_split'
     assert captured['argv'] == [
         'ffbayes.run_pipeline_split',
-        'pre_draft',
         '--year',
         '2025',
     ]
 
 
-def test_split_command_requires_phase_argument(capsys):
-    exit_code = cli.main(['split'])
+def test_publish_pages_command_forwards_extra_arguments(monkeypatch):
+    captured = {}
 
-    assert exit_code == 2
-    assert 'requires a phase argument' in capsys.readouterr().err
+    def fake_import(module_name):
+        captured['module_name'] = module_name
+
+        def fake_main():
+            captured['argv'] = sys.argv[:]
+            return 0
+
+        return SimpleNamespace(main=fake_main)
+
+    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
+
+    exit_code = cli.main(['publish-pages', '--year', '2026'])
+
+    assert exit_code == 0
+    assert captured['module_name'] == 'ffbayes.publish_pages'
+    assert captured['argv'] == [
+        'ffbayes.publish_pages',
+        '--year',
+        '2026',
+    ]

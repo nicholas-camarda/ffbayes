@@ -3,6 +3,7 @@
 Welcome to the FFBayes documentation! This guide helps you find the right information for your needs.
 
 Generated outputs are written to `~/ProjectsRuntime/ffbayes` during execution. Published copies are mirrored to `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes` only when you run `ffbayes-publish`.
+The live dashboard is staged into `site/index.html` for GitHub Pages with `ffbayes publish-pages`.
 
 ## 📚 **Documentation Guide**
 
@@ -41,8 +42,8 @@ python -m ffbayes.analysis.draft_decision_backtest
 # Explicit publication
 python -m ffbayes.publish_artifacts --year 2026 --phase pre_draft
 
-# Post-draft analysis  
-python -m ffbayes.run_pipeline_split post_draft
+# GitHub Pages dashboard
+python -m ffbayes.publish_pages --year 2026
 
 # Individual components
 python -m ffbayes.draft_strategy.traditional_vor_draft
@@ -54,6 +55,7 @@ python -m ffbayes.analysis.montecarlo_historical_ff
 - **Main Output**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/draft_strategy/draft_board_<year>.xlsx`
 - **Dashboard Payload**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/dashboard/dashboard_payload_<year>.json`
 - **HTML Fallback**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/dashboard/draft_board_<year>.html`
+- **GitHub Pages Site**: `site/index.html`
 - **Decision Backtest**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/draft_strategy/draft_decision_backtest_<year_range>.json`
 - **Configuration**: JSON config files (see main README)
 
@@ -98,6 +100,6 @@ docs/
 - **Technical Questions**: See the Technical Deep Dive documentation
 - **Development**: Review the Development Setup and Contributing guides
 - **Bugs**: Check the logs in `~/ProjectsRuntime/ffbayes/logs/`
-- **Publishing**: Run `python -m ffbayes.publish_artifacts --year <year> --phase pre_draft` or `post_draft`
+- **Publishing**: Run `python -m ffbayes.publish_artifacts --year <year> --phase pre_draft` for the cloud mirror, or `python -m ffbayes.publish_pages --year <year>` for GitHub Pages
 
 ---

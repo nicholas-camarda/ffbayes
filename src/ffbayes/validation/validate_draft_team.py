@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Validate that a draft team exists and is properly formatted.
-This script must pass before any post-draft analysis can run.
+This script validates the drafted team file before any downstream analysis.
 """
 
 import os
@@ -22,8 +22,8 @@ def validate_draft_team():
     if not os.path.exists(team_file):
         raise FileNotFoundError(
             f"❌ Draft team file not found: {team_file}\n"
-            "💡 You must draft players first before running post-draft analysis.\n"
-            "📝 Fill in your drafted players in the team file, then run the post-draft pipeline."
+            "💡 You must draft players first before running downstream analysis.\n"
+            "📝 Fill in your drafted players in the team file, then run the relevant analysis pipeline."
         )
     
     # Load and validate team data
@@ -153,7 +153,7 @@ def main():
     
     try:
         validate_draft_team()
-        print("\n🎉 Validation successful! Ready for post-draft analysis.")
+        print("\n🎉 Validation successful! Ready for downstream analysis.")
     except Exception as e:
         print(f"\n❌ Validation failed: {e}")
         print("\n💡 To fix this:")

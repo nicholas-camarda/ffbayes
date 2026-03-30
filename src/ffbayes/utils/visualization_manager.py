@@ -34,14 +34,10 @@ def _phase_directories(
 ) -> list[tuple[str, Path, Path, Path, Path]]:
     """Return runtime/cloud directory pairs for the requested phase."""
     from ffbayes.utils.path_constants import (
-        get_cloud_post_draft_dir,
-        get_cloud_post_draft_plots_dir,
         get_cloud_pre_draft_dir,
         get_cloud_pre_draft_plots_dir,
-        get_post_draft_dir,
-        get_post_draft_plots_dir,
-        get_pre_draft_dir,
-        get_pre_draft_plots_dir,
+        get_pre_draft_artifacts_dir,
+        get_pre_draft_diagnostics_dir,
     )
 
     resolved = (phase or 'both').lower()
@@ -50,20 +46,10 @@ def _phase_directories(
         mappings.append(
             (
                 'pre_draft',
-                get_pre_draft_dir(current_year),
+                get_pre_draft_artifacts_dir(current_year),
                 get_cloud_pre_draft_dir(current_year),
-                get_pre_draft_plots_dir(current_year),
+                get_pre_draft_diagnostics_dir(current_year),
                 get_cloud_pre_draft_plots_dir(current_year),
-            )
-        )
-    if resolved in {'post_draft', 'both'}:
-        mappings.append(
-            (
-                'post_draft',
-                get_post_draft_dir(current_year),
-                get_cloud_post_draft_dir(current_year),
-                get_post_draft_plots_dir(current_year),
-                get_cloud_post_draft_plots_dir(current_year),
             )
         )
     if not mappings:
@@ -95,32 +81,6 @@ VISUALIZATION_DESCRIPTIONS = {
         'when_to_use': 'When evaluating players with similar projections to assess risk',
     },
     # REMOVED: vor_vs_bayesian_comparison - was just a useless diagonal line with no insights
-    # Post-draft visualizations
-    'team_composition': {
-        'title': 'Team Composition Chart',
-        'description': 'Visual breakdown of your drafted team by position, showing roster balance and depth. Helps identify strengths and potential weaknesses in your team structure.',
-        'when_to_use': 'After your draft to assess roster balance and identify waiver wire needs',
-    },
-    'team_strength_analysis': {
-        'title': 'Team Strength Analysis',
-        'description': "Shows your team's projected weekly scoring potential with confidence intervals. Includes both mean projections and uncertainty ranges.",
-        'when_to_use': "To understand your team's expected performance and variance",
-    },
-    'player_performance_projections': {
-        'title': 'Player Performance Projections',
-        'description': 'Individual player projections with confidence intervals. Shows which players are expected to be your top performers and which have high upside/downside risk.',
-        'when_to_use': 'For lineup decisions and trade evaluations',
-    },
-    'monte_carlo_validation': {
-        'title': 'Monte Carlo Validation',
-        'description': "Simulation results showing your team's performance distribution across 5000 scenarios. Provides realistic range of outcomes based on historical data.",
-        'when_to_use': "To understand your team's floor, ceiling, and most likely outcomes",
-    },
-    'team_summary_dashboard': {
-        'title': 'Team Summary Dashboard',
-        'description': 'Comprehensive post-draft analysis combining all metrics into one view. Shows team projections, player contributions, and key insights for the season.',
-        'when_to_use': "Your main reference for understanding your team's outlook",
-    },
     # Model comparison visualizations
     'model_quality_comparison': {
         'title': 'Model Quality Comparison',
@@ -191,26 +151,6 @@ These help you prepare for your draft:
             desc = VISUALIZATION_DESCRIPTIONS[viz_key]
             section += f'**{desc["title"]}** - {desc["description"]} *({desc["when_to_use"]})*\n\n'
 
-    section += """### Post-Draft Visualizations
-
-These help you analyze your drafted team:
-
-"""
-
-    # Add post-draft visualizations
-    post_draft_viz = [
-        'team_composition',
-        'team_strength_analysis',
-        'player_performance_projections',
-        'monte_carlo_validation',
-        'team_summary_dashboard',
-    ]
-
-    for viz_key in post_draft_viz:
-        if viz_key in VISUALIZATION_DESCRIPTIONS:
-            desc = VISUALIZATION_DESCRIPTIONS[viz_key]
-            section += f'**{desc["title"]}** - {desc["description"]} *({desc["when_to_use"]})*\n\n'
-
     section += """### Model Comparison Visualizations
 
 These help you understand projection accuracy:
@@ -227,10 +167,9 @@ These help you understand projection accuracy:
 
     section += """### How to Use These Visualizations
 
-1. **Before Your Draft**: Review pre-draft visualizations to understand optimal strategies
-2. **During Your Draft**: Use the draft summary dashboard as your primary reference
-3. **After Your Draft**: Analyze post-draft visualizations to understand your team's outlook
-4. **Throughout the Season**: Refer back to projections and uncertainty analysis for lineup decisions
+1. **Before Your Draft**: Review the live command center to understand optimal strategies
+2. **During Your Draft**: Use the draft board as your primary reference
+3. **Throughout the Season**: Refer back to projections and uncertainty analysis for lineup decisions
 
 All visualizations remain local unless you run the explicit publish command."""
 
@@ -278,14 +217,15 @@ def manage_visualizations(
     if current_year is None:
         current_year = datetime.now().year
 
-    resolved_phase = (phase or 'both').lower()
+    resolved_phase = (phase or 'pre_draft').lower()
+    if resolved_phase != 'pre_draft':
+        raise ValueError('Only pre_draft visualization publication is supported')
     print(f'🖼️  Publishing {resolved_phase} visualizations for {current_year}...')
 
     from ffbayes.utils.path_constants import (
-        get_cloud_post_draft_dashboard_dir,
         get_cloud_pre_draft_dashboard_dir,
-        get_post_draft_dashboard_dir,
-        get_pre_draft_dashboard_dir,
+        get_pre_draft_artifacts_dir,
+        get_pre_draft_diagnostics_dir,
     )
 
     published_result_files = []
@@ -302,12 +242,8 @@ def manage_visualizations(
         published_result_files.extend(_copy_tree(runtime_result_dir, cloud_result_dir))
         published_plot_files.extend(_copy_tree(runtime_plot_dir, cloud_plot_dir))
 
-        if phase_name == 'pre_draft':
-            runtime_dashboard_dir = get_pre_draft_dashboard_dir(current_year)
-            cloud_dashboard_dir = get_cloud_pre_draft_dashboard_dir(current_year)
-        else:
-            runtime_dashboard_dir = get_post_draft_dashboard_dir(current_year)
-            cloud_dashboard_dir = get_cloud_post_draft_dashboard_dir(current_year)
+        runtime_dashboard_dir = get_pre_draft_artifacts_dir(current_year)
+        cloud_dashboard_dir = get_cloud_pre_draft_dashboard_dir(current_year)
         published_dashboard_files.extend(
             _copy_tree(runtime_dashboard_dir, cloud_dashboard_dir)
         )

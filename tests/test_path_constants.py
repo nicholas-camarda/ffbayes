@@ -31,6 +31,29 @@ def test_get_runtime_root_prefers_default_when_writable(monkeypatch, tmp_path):
     assert path_constants.get_runtime_root() == expected
 
 
+def test_pre_draft_paths_live_under_artifacts_and_diagnostics(monkeypatch, tmp_path):
+    monkeypatch.delenv('FFBAYES_RUNTIME_ROOT', raising=False)
+    monkeypatch.setattr(path_constants, '_path_is_writable', lambda _: True)
+    monkeypatch.setattr(path_constants, 'RUNTIME_DIR', tmp_path / 'runtime', raising=False)
+    monkeypatch.setattr(path_constants, 'BASE_DIR', tmp_path / 'project', raising=False)
+
+    artifacts_dir = path_constants.get_pre_draft_artifacts_dir(2026)
+    diagnostics_dir = path_constants.get_pre_draft_diagnostics_dir(2026)
+    pages_dir = path_constants.get_pages_site_dir()
+
+    assert artifacts_dir == tmp_path / 'runtime' / 'runs' / '2026' / 'pre_draft' / 'artifacts'
+    assert diagnostics_dir == tmp_path / 'runtime' / 'runs' / '2026' / 'pre_draft' / 'diagnostics'
+    assert path_constants.get_dashboard_payload_path(2026).parent == (
+        tmp_path / 'runtime' / 'runs' / '2026' / 'pre_draft' / 'artifacts' / 'draft_strategy'
+    )
+    assert path_constants.get_dashboard_html_path(2026).parent == (
+        tmp_path / 'runtime' / 'runs' / '2026' / 'pre_draft' / 'artifacts' / 'draft_strategy'
+    )
+    assert pages_dir == tmp_path / 'project' / 'site'
+    assert path_constants.get_results_dir(2026) == artifacts_dir
+    assert path_constants.get_plots_dir(2026) == diagnostics_dir
+
+
 def test_get_cloud_root_falls_back_when_default_is_unwritable(monkeypatch):
     monkeypatch.delenv('FFBAYES_CLOUD_ROOT', raising=False)
     monkeypatch.setattr(path_constants, '_path_is_writable', lambda _: False)

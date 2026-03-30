@@ -201,10 +201,47 @@ class DraftContext:
     current_pick_number: int
     drafted_players: set[str] = field(default_factory=set)
     keepers: set[str] = field(default_factory=set)
+    your_players: set[str] = field(default_factory=set)
     roster_counts: dict[str, int] = field(default_factory=dict)
+    action_history: list[dict[str, Any]] = field(default_factory=list)
+    selected_player: str | None = None
 
     def drafted_set(self) -> set[str]:
-        return {name.strip().lower() for name in self.drafted_players if name}
+        drafted = {
+            name.strip().lower()
+            for name in self.drafted_players
+            if isinstance(name, str) and name.strip()
+        }
+        drafted.update(
+            {
+                name.strip().lower()
+                for name in self.keepers
+                if isinstance(name, str) and name.strip()
+            }
+        )
+        drafted.update(
+            {
+                name.strip().lower()
+                for name in self.your_players
+                if isinstance(name, str) and name.strip()
+            }
+        )
+        return drafted
+
+
+@dataclass(frozen=True)
+class LiveDraftState:
+    """Client-side draft state tracked by the dashboard."""
+
+    current_pick_number: int
+    next_pick_number: int
+    taken_players: list[str] = field(default_factory=list)
+    your_players: list[str] = field(default_factory=list)
+    roster_counts: dict[str, int] = field(default_factory=dict)
+    action_history: list[dict[str, Any]] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass
@@ -752,6 +789,8 @@ def build_recommendations(
                 'position_run_risk',
                 'roster_fit_score',
                 'pick_mode',
+                'recommendation_lane',
+                'lane_rank',
                 'rationale',
             ]
         )
@@ -826,6 +865,8 @@ def build_recommendations(
         .copy()
     )
     now['pick_mode'] = 'now'
+    now['recommendation_lane'] = ['pick_now'] + ['fallback'] * max(0, len(now) - 1)
+    now['lane_rank'] = list(range(1, len(now) + 1))
     now['rationale'] = now.apply(_rationale_now, axis=1)
 
     wait = (
@@ -837,6 +878,8 @@ def build_recommendations(
     )
     wait = wait[~wait['player_name'].isin(now['player_name'])].copy()
     wait['pick_mode'] = 'wait'
+    wait['recommendation_lane'] = 'can_wait'
+    wait['lane_rank'] = list(range(1, len(wait) + 1))
     wait['rationale'] = wait.apply(_rationale_wait, axis=1)
 
     cols = [
@@ -858,13 +901,20 @@ def build_recommendations(
         'position_run_risk',
         'roster_fit_score',
         'expected_regret',
+        'current_pick_utility',
+        'wait_utility',
         'pick_mode',
+        'recommendation_lane',
+        'lane_rank',
         'rationale',
     ]
     combined = pd.concat([now[cols], wait[cols]], ignore_index=True)
+    lane_order = {'pick_now': 0, 'fallback': 1, 'can_wait': 2}
+    combined['lane_order'] = combined['recommendation_lane'].map(lane_order).fillna(9)
     combined = combined.sort_values(
-        ['pick_mode', 'draft_score'], ascending=[True, False]
-    ).reset_index(drop=True)
+        ['lane_order', 'lane_rank', 'draft_score'], ascending=[True, True, False]
+    ).drop(columns=['lane_order'])
+    combined = combined.reset_index(drop=True)
     return combined
 
 
@@ -884,6 +934,86 @@ def _rationale_wait(row: pd.Series) -> str:
     if pd.notna(row.get('expected_regret')):
         parts.append(f'regret={row["expected_regret"]:.2f}')
     return '; '.join(parts)
+
+
+def _recommendation_rows_to_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
+    if frame is None or frame.empty:
+        return []
+    return frame.to_dict(orient='records')
+
+
+def build_live_recommendation_snapshot(
+    decision_table: pd.DataFrame,
+    recommendations: pd.DataFrame,
+    roster_scenarios: pd.DataFrame,
+    league_settings: LeagueSettings,
+    context: DraftContext,
+) -> dict[str, Any]:
+    """Build the live contingency view used by the dashboard and workbook."""
+    next_turn_pick = next_pick_number(
+        context.current_pick_number,
+        league_settings.draft_position,
+        league_settings.league_size,
+    )
+    recommendation_rows = recommendations.copy()
+    if recommendation_rows.empty:
+        recommendation_rows = pd.DataFrame(
+            columns=[
+                'player_name',
+                'position',
+                'draft_score',
+                'availability_to_next_pick',
+                'expected_regret',
+                'roster_fit_score',
+                'position_run_risk',
+                'why_flags',
+                'recommendation_lane',
+                'lane_rank',
+            ]
+        )
+
+    pick_now = recommendation_rows[
+        recommendation_rows['recommendation_lane'] == 'pick_now'
+    ].head(1)
+    fallbacks = recommendation_rows[
+        recommendation_rows['recommendation_lane'] == 'fallback'
+    ].head(5)
+    can_wait = recommendation_rows[
+        recommendation_rows['recommendation_lane'] == 'can_wait'
+    ].sort_values(
+        ['availability_to_next_pick', 'draft_score'], ascending=[False, False]
+    )
+
+    roster_need = {
+        pos: max(
+            0, league_settings.roster_spots.get(pos, 0) - context.roster_counts.get(pos, 0)
+        )
+        for pos in ['QB', 'RB', 'WR', 'TE', 'FLEX', 'DST', 'K']
+    }
+
+    best_roster_paths = roster_scenarios.head(3).to_dict(orient='records')
+    wait_survival = can_wait.head(5).to_dict(orient='records')
+
+    primary = pick_now.head(1).to_dict(orient='records')
+    primary_pick = primary[0] if primary else {}
+
+    return {
+        'current_pick_number': context.current_pick_number,
+        'next_pick_number': next_turn_pick,
+        'roster_need': roster_need,
+        'pick_now': primary_pick,
+        'fallbacks': _recommendation_rows_to_records(fallbacks),
+        'can_wait': _recommendation_rows_to_records(can_wait.head(5)),
+        'wait_candidates': wait_survival,
+        'best_roster_paths': best_roster_paths,
+        'board_pressure': (
+            decision_table.groupby('position')['player_name'].count().sort_values(
+                ascending=False
+            ).to_dict()
+            if not decision_table.empty
+            else {}
+        ),
+    }
 
 
 def build_tier_cliffs(decision_table: pd.DataFrame) -> pd.DataFrame:
@@ -1439,8 +1569,50 @@ def build_dashboard_payload(
     context = context or DraftContext(
         current_pick_number=league_settings.draft_position
     )
-
-    top_targets = recommendations.head(10).to_dict(orient='records')
+    live_state = build_live_recommendation_snapshot(
+        decision_table,
+        recommendations,
+        roster_scenarios,
+        league_settings,
+        context,
+    )
+    recommendation_inputs_cols = [
+        'player_name',
+        'position',
+        'proj_points_mean',
+        'proj_points_floor',
+        'proj_points_ceiling',
+        'adp',
+        'adp_std',
+        'market_rank',
+        'availability_at_pick',
+        'availability_to_next_pick',
+        'starter_delta',
+        'replacement_delta',
+        'upside_score',
+        'fragility_score',
+        'draft_score',
+        'draft_tier',
+        'why_flags',
+        'current_pick_utility',
+        'wait_utility',
+        'position_run_risk',
+        'roster_fit_score',
+        'expected_regret',
+        'recommendation_lane',
+        'lane_rank',
+        'pick_mode',
+        'rationale',
+    ]
+    recommendation_source = recommendations if not recommendations.empty else decision_table
+    recommendation_inputs = recommendation_source[
+        [
+            column
+            for column in recommendation_inputs_cols
+            if column in recommendation_source.columns
+        ]
+    ].copy()
+    recommendation_summary = recommendations.head(12).to_dict(orient='records')
     position_summary = (
         decision_table.groupby('position')
         .agg(
@@ -1463,13 +1635,36 @@ def build_dashboard_payload(
             league_settings.draft_position,
             league_settings.league_size,
         ),
-        'top_targets': top_targets,
+        'current_draft_context_defaults': {
+            'current_pick_number': context.current_pick_number,
+            'next_pick_number': live_state['next_pick_number'],
+            'taken_players': sorted(context.drafted_set()),
+            'your_players': sorted(context.your_players),
+            'roster_counts': context.roster_counts,
+        },
+        'recommendation_inputs': recommendation_inputs.to_dict(orient='records'),
+        'recommendation_summary': recommendation_summary,
+        'live_state': live_state,
         'decision_table': decision_table.to_dict(orient='records'),
         'position_summary': position_summary,
         'tier_cliffs': tier_cliffs.to_dict(orient='records'),
         'roster_scenarios': roster_scenarios.to_dict(orient='records'),
         'source_freshness': source_freshness.to_dict(orient='records'),
         'backtest': backtest,
+        'supporting_math': {
+            'draft_score_mean': float(decision_table['draft_score'].mean())
+            if not decision_table.empty
+            else 0.0,
+            'draft_score_std': float(decision_table['draft_score'].std(ddof=0))
+            if not decision_table.empty
+            else 0.0,
+            'availability_mean': float(decision_table['availability_at_pick'].mean())
+            if not decision_table.empty
+            else 0.0,
+            'top_draft_score': float(decision_table['draft_score'].max())
+            if not decision_table.empty
+            else 0.0,
+        },
     }
 
 
@@ -1558,8 +1753,52 @@ def export_workbook(
     ).copy()
     _write_dataframe_sheet(wb, 'By Position', by_position)
 
-    my_picks = recommendations.copy()
-    _write_dataframe_sheet(wb, 'My Picks', my_picks)
+    live_summary = pd.DataFrame(
+        [
+            {
+                'metric': 'current_pick_number',
+                'value': context.current_pick_number if context else league_settings.draft_position,
+            },
+            {
+                'metric': 'next_pick_number',
+                'value': next_pick_number(
+                    context.current_pick_number
+                    if context
+                    else league_settings.draft_position,
+                    league_settings.draft_position,
+                    league_settings.league_size,
+                ),
+            },
+            {
+                'metric': 'draft_position',
+                'value': league_settings.draft_position,
+            },
+            {
+                'metric': 'league_size',
+                'value': league_settings.league_size,
+            },
+        ]
+    )
+    _write_dataframe_sheet(wb, 'Live Context', live_summary)
+
+    pick_now = recommendations[
+        recommendations.get('recommendation_lane', pd.Series(dtype=object)) == 'pick_now'
+    ].copy()
+    if pick_now.empty and not recommendations.empty:
+        pick_now = recommendations.head(1).copy()
+    _write_dataframe_sheet(wb, 'Pick Now', pick_now)
+
+    fallbacks = recommendations[
+        recommendations.get('recommendation_lane', pd.Series(dtype=object)) == 'fallback'
+    ].copy()
+    _write_dataframe_sheet(wb, 'Fallback Ladder', fallbacks)
+
+    can_wait = recommendations[
+        recommendations.get('recommendation_lane', pd.Series(dtype=object)) == 'can_wait'
+    ].copy()
+    _write_dataframe_sheet(wb, 'Can Wait', can_wait)
+
+    _write_dataframe_sheet(wb, 'My Picks', recommendations.copy())
 
     _write_dataframe_sheet(wb, 'Tier Cliffs', tier_cliffs)
     availability = decision_table[
@@ -1732,6 +1971,7 @@ def export_dashboard_html(
     league_settings: LeagueSettings,
     backtest: dict[str, Any] | None = None,
     source_freshness: pd.DataFrame | None = None,
+    dashboard_payload: dict[str, Any] | None = None,
 ) -> Path:
     """Write a local interactive HTML dashboard."""
     output_path = Path(output_path)
@@ -1740,166 +1980,772 @@ def export_dashboard_html(
     source_freshness = (
         source_freshness if source_freshness is not None else pd.DataFrame()
     )
-
-    try:
-        figs = _build_charts(decision_table, recommendations, league_settings)
-    except Exception:
-        figs = []
-
-    if not figs:
-        html = f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>FFBayes Draft Board</title>
-  <style>
-    body {{
-      font-family: Arial, sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
-      margin: 0;
-      padding: 24px;
-    }}
-    pre {{
-      white-space: pre-wrap;
-      background: rgba(15, 23, 42, 0.9);
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      border-radius: 12px;
-      padding: 16px;
-      overflow: auto;
-    }}
-  </style>
-</head>
-<body>
-  <h1>FFBayes Draft Board</h1>
-  <p>Plotly is unavailable in this environment, so this is the lightweight fallback view.</p>
-  <h2>Top Targets</h2>
-  <pre>{json.dumps(recommendations.head(12).to_dict(orient='records'), default=str, indent=2)}</pre>
-  <h2>Dashboard Payload</h2>
-  <pre>{json.dumps({'league_settings': league_settings.to_dict(), 'backtest': backtest}, default=str, indent=2)}</pre>
-</body>
-</html>
-"""
-        output_path.write_text(html, encoding='utf-8')
-        return output_path
-
-    chart_divs = []
-    for fig in figs:
-        chart_divs.append(fig.to_html(full_html=False, include_plotlyjs='cdn'))
-
-    top_rows = recommendations.head(12).to_dict(orient='records')
-    freshness_rows = source_freshness.to_dict(orient='records')
-    backtest_summary = backtest.get('overall', {}).get('by_strategy', [])
+    payload = dashboard_payload or build_dashboard_payload(
+        decision_table,
+        recommendations,
+        build_tier_cliffs(decision_table),
+        build_roster_scenarios(decision_table, league_settings),
+        source_freshness,
+        league_settings,
+        backtest=backtest,
+        context=DraftContext(current_pick_number=league_settings.draft_position),
+    )
+    payload_json = json.dumps(payload, default=str)
 
     html = f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>FFBayes Draft Board</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FFBayes Draft Command Center</title>
   <style>
-    body {{
-      font-family: Arial, sans-serif;
-      background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
-      color: #f8fafc;
-      margin: 0;
-      padding: 24px;
+    :root {{
+      color-scheme: dark;
+      --bg: #081120;
+      --panel: rgba(15, 23, 42, 0.86);
+      --panel-strong: rgba(17, 24, 39, 0.96);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-soft: rgba(56, 189, 248, 0.16);
+      --border: rgba(148, 163, 184, 0.18);
+      --good: #34d399;
+      --warn: #f59e0b;
+      --bad: #f87171;
     }}
-    h1, h2, h3 {{ margin: 0 0 12px 0; }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 30%),
+        radial-gradient(circle at top right, rgba(99, 102, 241, 0.12), transparent 24%),
+        linear-gradient(180deg, #050b16 0%, #0b1324 100%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      padding: 20px;
+    }}
+    h1, h2, h3, h4, p {{ margin: 0; }}
+    .shell {{
+      max-width: 1600px;
+      margin: 0 auto;
+    }}
+    .hero {{
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }}
+    .hero-card, .card {{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(10px);
+    }}
+    .hero-card {{
+      padding: 22px;
+    }}
+    .hero-title {{
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 12px;
+    }}
+    .hero-title h1 {{
+      font-size: 30px;
+      letter-spacing: -0.03em;
+    }}
+    .muted {{ color: var(--muted); }}
+    .meta {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }}
+    .pill {{
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #c9f0ff;
+      border: 1px solid rgba(56, 189, 248, 0.24);
+      font-size: 12px;
+    }}
     .grid {{
       display: grid;
-      grid-template-columns: 1.25fr 0.85fr;
-      gap: 20px;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 16px;
       align-items: start;
     }}
+    .stack {{
+      display: grid;
+      gap: 16px;
+    }}
     .card {{
-      background: rgba(15, 23, 42, 0.85);
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      border-radius: 18px;
       padding: 18px;
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.24);
+    }}
+    .card.strong {{
+      background: var(--panel-strong);
+    }}
+    .card h2 {{
+      font-size: 18px;
+      margin-bottom: 8px;
+    }}
+    .card h3 {{
+      font-size: 15px;
+      margin-bottom: 8px;
+    }}
+    .section {{
+      margin-top: 14px;
+    }}
+    .subtle {{
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }}
+    .recommendation-primary {{
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }}
+    .primary-name {{
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }}
+    .primary-meta {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }}
+    .metric-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }}
+    .metric {{
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 14px;
+      padding: 10px 12px;
+    }}
+    .metric .label {{
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 3px;
+    }}
+    .metric .value {{
+      font-size: 15px;
+      font-weight: 600;
+    }}
+    .two-col {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }}
+    .table-wrap {{
+      overflow: auto;
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
     }}
     table {{
       width: 100%;
       border-collapse: collapse;
-      color: #e2e8f0;
+      color: var(--text);
       font-size: 13px;
     }}
     th, td {{
-      padding: 8px 10px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.10);
       text-align: left;
       vertical-align: top;
     }}
-    th {{ color: #93c5fd; }}
-    .muted {{ color: #94a3b8; }}
-    .pill {{
-      display: inline-block;
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: rgba(59, 130, 246, 0.18);
-      color: #bfdbfe;
-      margin-right: 8px;
-      margin-bottom: 8px;
+    th {{
+      color: #8cd3ff;
+      background: rgba(15, 23, 42, 0.8);
+      position: sticky;
+      top: 0;
+      z-index: 1;
     }}
-    .section {{ margin-top: 18px; }}
-    .small {{ font-size: 12px; }}
-    .charts > div {{ margin-bottom: 18px; }}
+    .search-row {{
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }}
+    input[type="search"] {{
+      flex: 1 1 260px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 11px 12px;
+    }}
+    button {{
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      cursor: pointer;
+    }}
+    button:hover {{
+      background: rgba(255, 255, 255, 0.09);
+    }}
+    .action-bar {{
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }}
+    .list {{
+      display: grid;
+      gap: 10px;
+    }}
+    .list-item {{
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 14px;
+    }}
+    .item-title {{
+      font-weight: 600;
+    }}
+    .item-subtitle {{
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }}
+    .lane {{
+      display: grid;
+      gap: 8px;
+    }}
+    .lane .lane-head {{
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }}
+    .tiny {{
+      font-size: 12px;
+    }}
+    .flag {{
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: rgba(148, 163, 184, 0.14);
+      color: #dbeafe;
+      margin-right: 6px;
+      margin-top: 4px;
+      font-size: 11px;
+    }}
+    .good {{ color: var(--good); }}
+    .warn {{ color: var(--warn); }}
+    .bad {{ color: var(--bad); }}
+    .responsive-hide {{ display: block; }}
+    @media (max-width: 1100px) {{
+      .hero, .grid, .two-col, .metric-grid {{
+        grid-template-columns: 1fr;
+      }}
+    }}
   </style>
 </head>
 <body>
-  <h1>FFBayes Draft Board</h1>
-  <p class="muted">Generated {datetime.now().strftime('%Y-%m-%d %H:%M')} | League {league_settings.league_size}-team, pick {league_settings.draft_position}</p>
-  <div class="grid">
-    <div class="card charts">
-      {''.join(chart_divs)}
-    </div>
-    <div class="card">
-      <h2>Top Targets</h2>
-      <div class="small muted">Best current options and the reasons they show up on the board.</div>
-      <table>
-        <thead>
-          <tr>
-            <th>Player</th><th>Pos</th><th>Score</th><th>Avail</th><th>Why</th>
-          </tr>
-        </thead>
-        <tbody>
-          {''.join(
-              f"<tr><td>{row.get('player_name', '')}</td><td>{row.get('position', '')}</td><td>{row.get('draft_score', 0):.2f}</td><td>{row.get('availability_to_next_pick', 0):.0%}</td><td>{row.get('why_flags', '')}</td></tr>"
-              for row in top_rows
-          )}
-        </tbody>
-      </table>
-      <div class="section">
-        <h3>Backtest</h3>
-        <div class="small muted">Season-level snake-draft proxy results.</div>
-        <table>
-          <thead><tr><th>Strategy</th><th>Mean lineup points</th></tr></thead>
-          <tbody>
-            {''.join(
-                f"<tr><td>{row.get('strategy', '')}</td><td>{row.get('mean_lineup_points', 0):.2f}</td></tr>"
-                for row in backtest_summary
-            )}
-          </tbody>
-        </table>
+  <div class="shell">
+    <div class="hero">
+      <div class="hero-card">
+        <div class="hero-title">
+          <h1>FFBayes Draft Command Center</h1>
+          <span class="pill">Live pre-draft board</span>
+        </div>
+        <p class="muted">Generated {datetime.now().strftime('%Y-%m-%d %H:%M')} | League {league_settings.league_size}-team | Draft position {league_settings.draft_position}</p>
+        <div class="meta" id="status-pills"></div>
       </div>
-      <div class="section">
-        <h3>Source Freshness</h3>
-        <table>
-          <thead><tr><th>Source</th><th>Age (days)</th><th>Rows</th></tr></thead>
-          <tbody>
-            {''.join(
-                f"<tr><td>{row.get('source_name', '')}</td><td>{row.get('freshness_days', '')}</td><td>{row.get('row_count', '')}</td></tr>"
-                for row in freshness_rows
-            )}
-          </tbody>
-        </table>
+      <div class="hero-card">
+        <div class="subtle">Current turn</div>
+        <div class="primary-name" id="current-turn-label">Pick now</div>
+        <div class="primary-meta" id="turn-meta"></div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="stack">
+        <div class="card strong">
+          <h2>Primary Recommendation</h2>
+          <div class="subtle">The single pick we want on this turn.</div>
+          <div class="recommendation-primary" id="primary-card"></div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <h2>Fallback Ladder</h2>
+            <div class="subtle">If the top target is gone, these are the next-best alternatives.</div>
+            <div class="list" id="fallback-list"></div>
+          </div>
+          <div class="card">
+            <h2>Can Wait</h2>
+            <div class="subtle">Players with the strongest chance to survive to the next pick.</div>
+            <div class="list" id="wait-list"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Draft Board</h2>
+          <div class="subtle">Search, mark off taken players, mark your picks, and undo the last action.</div>
+          <div class="search-row">
+            <input id="player-search" type="search" placeholder="Search players by name or position" />
+            <button type="button" id="undo-button">Undo last action</button>
+            <button type="button" id="advance-button">Advance pick</button>
+          </div>
+          <div class="action-bar" id="board-actions"></div>
+          <div class="table-wrap" style="max-height: 460px; margin-top: 12px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Player</th>
+                  <th>Pos</th>
+                  <th>Score</th>
+                  <th>Next pick survival</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="board-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="card">
+          <h2>Roster & Construction</h2>
+          <div class="subtle">Current needs, tier cliffs, and position-run pressure.</div>
+          <div class="metric-grid" id="roster-metrics"></div>
+          <div class="section">
+            <h3>Best roster paths</h3>
+            <div class="list" id="roster-paths"></div>
+          </div>
+          <div class="section">
+            <h3>Tier cliffs</h3>
+            <div class="table-wrap" style="max-height: 240px;">
+              <table>
+                <thead><tr><th>Pos</th><th>Player</th><th>Cliff</th></tr></thead>
+                <tbody id="tier-cliff-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Support Panel</h2>
+          <div class="subtle">Math, freshness, and explanation stats behind the recommendation.</div>
+          <div class="metric-grid" id="support-metrics"></div>
+          <div class="section">
+            <h3>Source freshness</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Source</th><th>Age</th><th>Rows</th></tr></thead>
+                <tbody id="freshness-table"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="section">
+            <h3>Backtest snapshot</h3>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Strategy</th><th>Mean lineup points</th></tr></thead>
+                <tbody id="backtest-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
   <script>
-    window.FFBAYES_DASHBOARD = {json.dumps({'league_settings': league_settings.to_dict(), 'top_targets': top_rows, 'backtest': backtest}, default=str)};
+    window.FFBAYES_DASHBOARD = {payload_json};
+
+    (() => {{
+      const data = window.FFBAYES_DASHBOARD;
+      const state = {{
+        takenPlayers: new Set((data.live_state && data.live_state.taken_players) || []),
+        yourPlayers: new Set((data.live_state && data.live_state.your_players) || []),
+        rosterCounts: Object.assign({{}}, (data.live_state && data.live_state.roster_counts) || {{}}),
+        history: Array.isArray(data.live_state && data.live_state.action_history)
+          ? [...data.live_state.action_history]
+          : [],
+        currentPickNumber: (data.live_state && data.live_state.current_pick_number) || data.current_pick_number || 1,
+        leagueSize: (data.league_settings && data.league_settings.league_size) || 10,
+        draftPosition: (data.league_settings && data.league_settings.draft_position) || 10,
+        search: '',
+      }};
+
+      const rosterTemplate = Object.assign({{}}, (data.league_settings && data.league_settings.roster_spots) || {{}});
+      const flexWeights = Object.assign({{}}, (data.league_settings && data.league_settings.flex_weights) || {{}});
+      const decisionTable = Array.isArray(data.decision_table) ? data.decision_table : [];
+      const tierCliffs = Array.isArray(data.tier_cliffs) ? data.tier_cliffs : [];
+      const rosterScenarios = Array.isArray(data.roster_scenarios) ? data.roster_scenarios : [];
+      const freshness = Array.isArray(data.source_freshness) ? data.source_freshness : [];
+      const backtest = data.backtest && data.backtest.overall && Array.isArray(data.backtest.overall.by_strategy)
+        ? data.backtest.overall.by_strategy
+        : [];
+
+      function safeLower(value) {{
+        return (value || '').toString().trim().toLowerCase();
+      }}
+
+      function nextPickNumber(currentPickNumber, draftPosition, leagueSize) {{
+        const current = Math.max(1, Number(currentPickNumber) || 1);
+        const draft = Math.max(1, Number(draftPosition) || 1);
+        const size = Math.max(1, Number(leagueSize) || 1);
+        const rounds = Math.max(1, Math.ceil(current / size) + 2);
+        for (let roundNum = 1; roundNum <= rounds; roundNum += 1) {{
+          const pick = roundNum % 2 === 1
+            ? (roundNum - 1) * size + draft
+            : roundNum * size - draft + 1;
+          if (pick > current) {{
+            return pick;
+          }}
+        }}
+        return current + size;
+      }}
+
+      function availabilityProbability(adp, targetPick, adpStd, uncertaintyScore) {{
+        const adpValue = Number(adp);
+        if (!Number.isFinite(adpValue)) return 0.5;
+        let spread = Number(adpStd);
+        if (!Number.isFinite(spread) || spread <= 0) spread = 2.5;
+        const uncertainty = Number(uncertaintyScore);
+        if (Number.isFinite(uncertainty)) spread += 2.0 * uncertainty;
+        const z = (adpValue - Number(targetPick)) / Math.max(1, spread);
+        const prob = 1 / (1 + Math.exp(-z));
+        return Math.max(0, Math.min(1, prob));
+      }}
+
+      function rosterNeed() {{
+        const need = {{}};
+        ['QB', 'RB', 'WR', 'TE', 'FLEX', 'DST', 'K'].forEach((pos) => {{
+          need[pos] = Math.max(0, (rosterTemplate[pos] || 0) - (state.rosterCounts[pos] || 0));
+        }});
+        return need;
+      }}
+
+      function positionNeedCore() {{
+        const need = rosterNeed();
+        return ['QB', 'RB', 'WR', 'TE'].reduce((acc, pos) => acc + need[pos], 0) || 1;
+      }}
+
+      function computeRow(row, bestNow, positionCounts) {{
+        const nextTurnPick = nextPickNumber(state.currentPickNumber, state.draftPosition, state.leagueSize);
+        const availToNext = availabilityProbability(row.adp, nextTurnPick, row.adp_std, row.uncertainty_score);
+        const need = rosterNeed();
+        const totalNeed = positionNeedCore();
+        const posNeed = need[row.position] || 0;
+        const remaining = positionCounts[row.position] || 0;
+        const demand = Math.max(1, state.leagueSize * Math.max(1, posNeed));
+        const positionRunRisk = Math.max(0, Math.min(1, 1 - remaining / demand));
+        const rosterFitScore = posNeed / totalNeed;
+        const expectedRegret = Math.max(0, (bestNow - (Number(row.draft_score) || 0))) * (1 - availToNext) + 0.25 * positionRunRisk;
+        const currentPickUtility =
+          (Number(row.draft_score) || 0)
+          + 0.15 * rosterFitScore
+          + 0.10 * positionRunRisk
+          - 0.20 * (1 - availToNext)
+          + 0.04 * (Number(row.upside_score) || 0);
+        const waitUtility =
+          (Number(row.draft_score) || 0) * availToNext
+          + 0.18 * (Number(row.upside_score) || 0)
+          - 0.15 * (Number(row.fragility_score) || 0);
+        return Object.assign({{}}, row, {{
+          availability_to_next_pick: availToNext,
+          position_run_risk: positionRunRisk,
+          roster_fit_score: rosterFitScore,
+          expected_regret: expectedRegret,
+          current_pick_utility: currentPickUtility,
+          wait_utility: waitUtility,
+        }});
+      }}
+
+      function availableRows() {{
+        const query = safeLower(state.search);
+        const rawRows = decisionTable
+          .filter((row) => !state.takenPlayers.has(safeLower(row.player_name)) && !state.yourPlayers.has(safeLower(row.player_name)))
+          .filter((row) => !query || safeLower(row.player_name).includes(query) || safeLower(row.position).includes(query));
+        const positionCounts = rawRows.reduce((counts, row) => {{
+          counts[row.position] = (counts[row.position] || 0) + 1;
+          return counts;
+        }}, {{}});
+        const bestNow = rawRows.reduce((best, row) => Math.max(best, Number(row.draft_score) || 0), 0);
+        return rawRows.map((row) => computeRow(row, bestNow, positionCounts));
+      }}
+
+      function recommendedPanels() {{
+        const rows = availableRows();
+        const sortedNow = [...rows].sort((a, b) => (b.current_pick_utility - a.current_pick_utility) || (b.draft_score - a.draft_score));
+        const sortedWait = [...rows].sort((a, b) => (b.wait_utility - a.wait_utility) || (b.availability_to_next_pick - a.availability_to_next_pick));
+        const pickNow = sortedNow.slice(0, 1);
+        const fallbacks = sortedNow.slice(1, 6);
+        const canWait = sortedWait.filter((row) => !pickNow.some((pick) => safeLower(pick.player_name) === safeLower(row.player_name))).slice(0, 5);
+        return {{ pickNow, fallbacks, canWait, rows }};
+      }}
+
+      function fmtPct(value) {{
+        return `${{Math.round((Number(value) || 0) * 100)}}%`;
+      }}
+
+      function fmtNum(value, digits = 2) {{
+        const num = Number(value);
+        return Number.isFinite(num) ? num.toFixed(digits) : '0.00';
+      }}
+
+      function flagsHtml(row) {{
+        const flags = safeLower(row.why_flags).split('|').filter(Boolean);
+        return flags.map((flag) => `<span class="flag">${{flag}}</span>`).join('');
+      }}
+
+      function recommendationCard(row, leadLabel) {{
+        if (!row) {{
+          return `<div class="muted">No available recommendation.</div>`;
+        }}
+        return `
+          <div class="primary-meta">
+            <span class="pill">${{leadLabel}}</span>
+            <span class="pill">${{row.position}}</span>
+            <span class="pill">score ${{fmtNum(row.draft_score)}}</span>
+          </div>
+          <div class="primary-name">${{row.player_name}}</div>
+          <div class="metric-grid">
+            <div class="metric"><span class="label">Draft score</span><span class="value">${{fmtNum(row.draft_score)}}</span></div>
+            <div class="metric"><span class="label">Availability to next pick</span><span class="value">${{fmtPct(row.availability_to_next_pick)}}</span></div>
+            <div class="metric"><span class="label">Expected regret of waiting</span><span class="value">${{fmtNum(row.expected_regret)}}</span></div>
+            <div class="metric"><span class="label">Roster fit</span><span class="value">${{fmtNum(row.roster_fit_score)}}</span></div>
+            <div class="metric"><span class="label">Position-run risk</span><span class="value">${{fmtNum(row.position_run_risk)}}</span></div>
+            <div class="metric"><span class="label">Why it matters</span><span class="value tiny">${{row.rationale || row.why_flags || 'No rationale'}}</span></div>
+          </div>
+          <div>${{flagsHtml(row)}}</div>
+        `;
+      }}
+
+      function renderTurnMeta(panel) {{
+        const row = panel.pickNow[0];
+        const nextTurnPick = nextPickNumber(state.currentPickNumber, state.draftPosition, state.leagueSize);
+        const lead = row ? `${{row.player_name}} • ${{row.position}}` : 'No current target';
+        document.getElementById('current-turn-label').textContent = lead;
+        document.getElementById('turn-meta').innerHTML = `
+          <span class="pill">Current pick ${{state.currentPickNumber}}</span>
+          <span class="pill">Next pick ${{nextTurnPick}}</span>
+          <span class="pill">Taken ${{state.takenPlayers.size}}</span>
+          <span class="pill">Yours ${{state.yourPlayers.size}}</span>
+        `;
+        document.getElementById('primary-card').innerHTML = recommendationCard(row, 'Pick now');
+      }}
+
+      function renderList(containerId, rows, emptyLabel, accentLabel) {{
+        const container = document.getElementById(containerId);
+        if (!rows.length) {{
+          container.innerHTML = `<div class="muted">${{emptyLabel}}</div>`;
+          return;
+        }}
+        container.innerHTML = rows.map((row) => `
+          <div class="list-item">
+            <div>
+              <div class="item-title">${{row.player_name}} <span class="muted">• ${{row.position}}</span></div>
+              <div class="item-subtitle">
+                score ${{fmtNum(row.draft_score)}} • survival ${{fmtPct(row.availability_to_next_pick)}} • regret ${{fmtNum(row.expected_regret)}}
+              </div>
+            </div>
+            <span class="pill">${{accentLabel}}</span>
+          </div>
+        `).join('');
+      }}
+
+      function renderBoardActions() {{
+        const container = document.getElementById('board-actions');
+        const topPlayers = availableRows().slice(0, 5);
+        container.innerHTML = topPlayers.map((row) => `
+          <button type="button" data-player="${{row.player_name}}" data-action="taken">${{row.player_name}} taken</button>
+          <button type="button" data-player="${{row.player_name}}" data-action="mine">Mine</button>
+        `).join('');
+        container.querySelectorAll('button').forEach((button) => {{
+          button.addEventListener('click', () => {{
+            const player = button.getAttribute('data-player');
+            const action = button.getAttribute('data-action');
+            applyAction(action, player);
+          }});
+        }});
+      }}
+
+      function renderBoardTable(rows) {{
+        const tbody = document.getElementById('board-table');
+        if (!rows.length) {{
+          tbody.innerHTML = '<tr><td colspan="5" class="muted">No players match the current filter.</td></tr>';
+          return;
+        }}
+        tbody.innerHTML = rows.slice(0, 30).map((row) => `
+          <tr>
+            <td>
+              <div><strong>${{row.player_name}}</strong></div>
+              <div class="muted tiny">${{row.position}} • ${{row.pick_mode || ''}} ${{row.recommendation_lane || ''}}</div>
+            </td>
+            <td>${{row.position}}</td>
+            <td>${{fmtNum(row.draft_score)}}</td>
+            <td>${{fmtPct(row.availability_to_next_pick)}}</td>
+            <td>
+              <button type="button" data-player="${{row.player_name}}" data-action="taken">Taken</button>
+              <button type="button" data-player="${{row.player_name}}" data-action="mine">Mine</button>
+            </td>
+          </tr>
+        `).join('');
+        tbody.querySelectorAll('button').forEach((button) => {{
+          button.addEventListener('click', () => {{
+            applyAction(button.getAttribute('data-action'), button.getAttribute('data-player'));
+          }});
+        }});
+      }}
+
+      function renderRosterPanel(panel) {{
+        const need = rosterNeed();
+        const metrics = document.getElementById('roster-metrics');
+        metrics.innerHTML = Object.entries(need).map(([key, value]) => `
+          <div class="metric">
+            <span class="label">${{key}} need</span>
+            <span class="value">${{value}}</span>
+          </div>
+        `).join('');
+
+        document.getElementById('roster-paths').innerHTML = (data.live_state && data.live_state.best_roster_paths || []).map((row) => `
+          <div class="list-item">
+            <div>
+              <div class="item-title">${{row.scenario || 'scenario'}}</div>
+              <div class="item-subtitle">${{row.recommended_build || ''}}</div>
+            </div>
+            <span class="pill">${{fmtNum(row.utility_proxy)}}</span>
+          </div>
+        `).join('') || '<div class="muted">No roster paths available.</div>';
+
+        document.getElementById('tier-cliff-table').innerHTML = tierCliffs.slice(0, 8).map((row) => `
+          <tr>
+            <td>${{row.position}}</td>
+            <td>${{row.player_name}}</td>
+            <td>${{fmtNum(row.tier_cliff_distance)}}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="3" class="muted">No tier cliff data.</td></tr>';
+      }}
+
+      function renderSupport(panel) {{
+        const support = document.getElementById('support-metrics');
+        const supporting = data.supporting_math || {{}};
+        const live = panel.pickNow[0] || {{}};
+        const metrics = [
+          ['Draft score mean', fmtNum(supporting.draft_score_mean)],
+          ['Draft score std', fmtNum(supporting.draft_score_std)],
+          ['Availability mean', fmtPct(supporting.availability_mean)],
+          ['Top score', fmtNum(supporting.top_draft_score)],
+          ['Next pick', String(nextPickNumber(state.currentPickNumber, state.draftPosition, state.leagueSize))],
+          ['Current turn', String(state.currentPickNumber)],
+        ];
+        support.innerHTML = metrics.map(([label, value]) => `
+          <div class="metric">
+            <span class="label">${{label}}</span>
+            <span class="value">${{value}}</span>
+          </div>
+        `).join('');
+
+        document.getElementById('freshness-table').innerHTML = freshness.map((row) => `
+          <tr>
+            <td>${{row.source_name}}</td>
+            <td>${{row.freshness_days}}</td>
+            <td>${{row.row_count}}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="3" class="muted">No freshness data.</td></tr>';
+
+        document.getElementById('backtest-table').innerHTML = backtest.map((row) => `
+          <tr>
+            <td>${{row.strategy}}</td>
+            <td>${{fmtNum(row.mean_lineup_points)}}</td>
+          </tr>
+        `).join('') || '<tr><td colspan="2" class="muted">No backtest data.</td></tr>';
+
+        const status = document.getElementById('status-pills');
+        status.innerHTML = [
+          ['players', decisionTable.length],
+          ['taken', state.takenPlayers.size],
+          ['yours', state.yourPlayers.size],
+          ['current pick', state.currentPickNumber],
+          ['next pick', nextPickNumber(state.currentPickNumber, state.draftPosition, state.leagueSize)],
+        ].map(([label, value]) => `<span class="pill">${{label}} ${{value}}</span>`).join('');
+      }}
+
+      function render() {{
+        const panel = recommendedPanels();
+        renderTurnMeta(panel);
+        renderList('fallback-list', panel.fallbacks, 'No fallback options are available.', 'fallback');
+        renderList('wait-list', panel.canWait, 'No wait candidates are available.', 'wait');
+        renderBoardActions();
+        renderBoardTable(panel.rows);
+        renderRosterPanel(panel);
+        renderSupport(panel);
+      }}
+
+      function applyAction(action, playerName) {{
+        const normalized = safeLower(playerName);
+        const row = decisionTable.find((entry) => safeLower(entry.player_name) === normalized);
+        if (!row) return;
+        if (action === 'taken') {{
+          if (!state.takenPlayers.has(normalized)) {{
+            state.takenPlayers.add(normalized);
+            state.history.push({{ type: 'taken', player_name: row.player_name }});
+          }}
+        }} else if (action === 'mine') {{
+          if (!state.yourPlayers.has(normalized)) {{
+            state.yourPlayers.add(normalized);
+            state.takenPlayers.add(normalized);
+            state.rosterCounts[row.position] = (state.rosterCounts[row.position] || 0) + 1;
+            state.history.push({{ type: 'mine', player_name: row.player_name, position: row.position }});
+          }}
+        }}
+        render();
+      }}
+
+      function undoLast() {{
+        const last = state.history.pop();
+        if (!last) return;
+        const normalized = safeLower(last.player_name);
+        if (last.type === 'taken') {{
+          state.takenPlayers.delete(normalized);
+        }} else if (last.type === 'mine') {{
+          state.yourPlayers.delete(normalized);
+          state.takenPlayers.delete(normalized);
+          if (last.position && state.rosterCounts[last.position]) {{
+            state.rosterCounts[last.position] = Math.max(0, (state.rosterCounts[last.position] || 0) - 1);
+          }}
+        }}
+        render();
+      }}
+
+      function advancePick() {{
+        state.currentPickNumber = Math.max(1, state.currentPickNumber + 1);
+        render();
+      }}
+
+      document.getElementById('player-search').addEventListener('input', (event) => {{
+        state.search = event.target.value;
+        render();
+      }});
+      document.getElementById('undo-button').addEventListener('click', undoLast);
+      document.getElementById('advance-button').addEventListener('click', advancePick);
+
+      render();
+    }})();
   </script>
 </body>
 </html>
@@ -1966,6 +2812,7 @@ def save_draft_decision_artifacts(
     year: int | None = None,
     filename_prefix: str = '',
     dashboard_dir: Path | str | None = None,
+    diagnostics_dir: Path | str | None = None,
 ) -> dict[str, Path]:
     """Write workbook, dashboard payload, and HTML dashboard to disk."""
     year = year or datetime.now().year
@@ -1973,10 +2820,15 @@ def save_draft_decision_artifacts(
     output_dir.mkdir(parents=True, exist_ok=True)
     dashboard_dir = Path(dashboard_dir) if dashboard_dir is not None else output_dir
     dashboard_dir.mkdir(parents=True, exist_ok=True)
+    diagnostics_dir = (
+        Path(diagnostics_dir) if diagnostics_dir is not None else output_dir
+    )
+    diagnostics_dir.mkdir(parents=True, exist_ok=True)
 
     workbook_path = output_dir / f'draft_board_{filename_prefix}{year}.xlsx'
     payload_path = dashboard_dir / f'dashboard_payload_{filename_prefix}{year}.json'
     html_path = dashboard_dir / f'draft_board_{filename_prefix}{year}.html'
+    compat_path = dashboard_dir / f'draft_board_{filename_prefix}{year}.json'
     backtest_years = artifacts.backtest.get('holdout_years', [])
     backtest_suffix = (
         f'{min(backtest_years)}-{max(backtest_years)}' if backtest_years else str(year)
@@ -1984,10 +2836,9 @@ def save_draft_decision_artifacts(
     backtest_path = (
         output_dir / f'draft_decision_backtest_{filename_prefix}{backtest_suffix}.json'
     )
-    historical_backtest_path = (
-        output_dir
-        / f'historical_strategy_backtest_{filename_prefix}{backtest_suffix}.json'
-    )
+    model_output_dir = output_dir / 'model_outputs'
+    model_output_dir.mkdir(parents=True, exist_ok=True)
+    comparison_path = model_output_dir / f'current_year_model_comparison_{year}.json'
 
     export_workbook(
         artifacts.decision_table,
@@ -2009,19 +2860,41 @@ def save_draft_decision_artifacts(
         artifacts.league_settings,
         backtest=artifacts.backtest,
         source_freshness=artifacts.source_freshness,
+        dashboard_payload=artifacts.dashboard_payload,
+    )
+    compat_path.write_text(
+        json.dumps(artifacts.dashboard_payload, default=str, indent=2),
+        encoding='utf-8',
     )
     if artifacts.backtest:
         backtest_path.write_text(
             json.dumps(artifacts.backtest, default=str, indent=2), encoding='utf-8'
         )
-        historical_backtest_path.write_text(
-            json.dumps(artifacts.backtest, default=str, indent=2), encoding='utf-8'
-        )
+
+    comparison_payload = {
+        'model_type': 'current_year_model_comparison',
+        'year': year,
+        'top_players': artifacts.decision_table[
+            [
+                column
+                for column in ['player_name', 'position', 'draft_score', 'draft_tier']
+                if column in artifacts.decision_table.columns
+            ]
+        ]
+        .head(25)
+        .to_dict(orient='records'),
+        'supporting_math': artifacts.dashboard_payload.get('supporting_math', {}),
+        'league_settings': artifacts.league_settings.to_dict(),
+    }
+    comparison_path.write_text(
+        json.dumps(comparison_payload, default=str, indent=2), encoding='utf-8'
+    )
 
     return {
         'workbook_path': workbook_path,
         'payload_path': payload_path,
         'html_path': html_path,
+        'compat_path': compat_path,
         'backtest_path': backtest_path,
-        'historical_backtest_path': historical_backtest_path,
+        'comparison_path': comparison_path,
     }

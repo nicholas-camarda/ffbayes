@@ -29,15 +29,11 @@ from ffbayes.draft_strategy.draft_decision_system import (
 )
 from ffbayes.utils.path_constants import (
     SNAKE_DRAFT_DATASETS_DIR,
-    get_dashboard_payload_path,
-    get_draft_board_path,
-    get_draft_decision_backtest_path,
+    get_pre_draft_diagnostics_dir,
     get_draft_strategy_dir,
-    get_pre_draft_dashboard_dir,
     get_unified_dataset_csv_path,
     get_unified_dataset_path,
 )
-from ffbayes.utils.strategy_path_generator import get_bayesian_strategy_path
 from ffbayes.utils.vor_filename_generator import get_vor_csv_filename
 
 logger = logging.getLogger(__name__)
@@ -511,7 +507,15 @@ def _build_current_year_model_comparison(
 
 
 def _compatibility_payload(artifacts: DraftDecisionArtifacts) -> dict[str, Any]:
-    picks = {}
+    context = DraftContext(current_pick_number=artifacts.league_settings.draft_position)
+    snapshot = build_live_recommendation_snapshot(
+        artifacts.decision_table,
+        artifacts.recommendations,
+        artifacts.roster_scenarios,
+        artifacts.league_settings,
+        context,
+    )
+
     recommendation_window = artifacts.recommendations.copy()
     if recommendation_window.empty:
         recommendation_window = artifacts.decision_table.head(20).copy()
@@ -520,54 +524,38 @@ def _compatibility_payload(artifacts: DraftDecisionArtifacts) -> dict[str, Any]:
             'availability_at_pick'
         ]
 
-    round_count = artifacts.league_settings.round_count()
-    for round_number in range(1, round_count + 1):
-        if round_number <= 5:
-            window = recommendation_window.sort_values(
-                ['draft_score', 'proj_points_mean'], ascending=[False, False]
-            ).head(7)
-        elif round_number <= 10:
-            window = recommendation_window.sort_values(
-                ['starter_delta', 'draft_score'], ascending=[False, False]
-            ).head(7)
-        else:
-            window = recommendation_window.sort_values(
-                ['upside_score', 'draft_score'], ascending=[False, False]
-            ).head(7)
-        picks[f'Pick {round_number}'] = {
-            'primary_targets': window.head(3)['player_name'].tolist(),
-            'backup_options': window.iloc[3:7]['player_name'].tolist(),
-            'position_priority': _position_priority(window),
-            'reasoning': window.iloc[0]['rationale']
-            if not window.empty
-            else 'No recommendations available',
-            'uncertainty_analysis': {
-                'risk_tolerance': artifacts.league_settings.risk_tolerance,
-                'primary_avg_uncertainty': float(
-                    window.head(3)['fragility_score'].mean()
-                )
-                if not window.empty
-                else 0.0,
-                'backup_avg_uncertainty': float(
-                    window.iloc[3:7]['fragility_score'].mean()
-                )
-                if len(window) > 3
-                else 0.0,
-                'overall_uncertainty': float(window['fragility_score'].mean())
-                if not window.empty
-                else 0.0,
-            },
-            'confidence_intervals': {
-                row['player_name']: {
-                    'floor': float(row['proj_points_floor']),
-                    'ceiling': float(row['proj_points_ceiling']),
-                }
-                for _, row in window.iterrows()
-            },
-        }
+    pick_now = snapshot.get('pick_now', {})
+    fallbacks = snapshot.get('fallbacks', [])
+    can_wait = snapshot.get('can_wait', [])
+    best_roster_paths = snapshot.get('best_roster_paths', [])
 
     return {
-        'strategy': picks,
+        'version': 'live_pre_draft_v1',
+        'current_turn': {
+            'current_pick_number': snapshot.get('current_pick_number'),
+            'next_pick_number': snapshot.get('next_pick_number'),
+            'draft_position': artifacts.league_settings.draft_position,
+            'league_size': artifacts.league_settings.league_size,
+        },
+        'pick_now': pick_now,
+        'fallback_ladder': fallbacks,
+        'can_wait': can_wait,
+        'best_roster_paths': best_roster_paths,
+        'best_case_scenario': {
+            'pick_now': pick_now,
+            'fallback_ladder': fallbacks,
+            'can_wait': can_wait,
+            'best_roster_paths': best_roster_paths,
+        },
+        'legacy_strategy_view': {
+            'primary_targets': recommendation_window.head(3)['player_name'].tolist(),
+            'backup_options': recommendation_window.iloc[3:7]['player_name'].tolist(),
+            'position_priority': _position_priority(recommendation_window),
+            'reasoning': recommendation_window.iloc[0]['rationale']
+            if not recommendation_window.empty
+            else 'No recommendations available',
+        },
+        'live_state': snapshot,
         'metadata': {
             **artifacts.metadata,
             'draft_position': artifacts.league_settings.draft_position,
@@ -603,57 +591,22 @@ def _run_single_slot(
     )
 
     results_dir = output_dir or get_draft_strategy_dir(current_year)
-    dashboard_output_dir = dashboard_dir or get_pre_draft_dashboard_dir(current_year)
+    dashboard_output_dir = dashboard_dir or get_draft_strategy_dir(current_year)
     saved = save_draft_decision_artifacts(
         artifacts,
         results_dir,
         year=current_year,
         filename_prefix=filename_prefix,
         dashboard_dir=dashboard_output_dir,
+        diagnostics_dir=get_pre_draft_diagnostics_dir(current_year),
     )
-
-    comparison_path = results_dir / f'current_year_model_comparison_{current_year}.json'
-    comparison_payload = _build_current_year_model_comparison(artifacts, current_year)
-    comparison_path.write_text(
-        json.dumps(comparison_payload, default=str, indent=2), encoding='utf-8'
-    )
-
-    compat_path = Path(get_draft_board_path(current_year)).with_name(
-        f'draft_board_{filename_prefix}{current_year}.json'
-    )
-    compat_payload = _compatibility_payload(artifacts)
-    compat_path.write_text(
-        json.dumps(compat_payload, default=str, indent=2), encoding='utf-8'
-    )
-
-    legacy_path = Path(
-        get_bayesian_strategy_path(current_year, league_settings.draft_position)
-    )
-    if filename_prefix:
-        legacy_path = legacy_path.with_name(
-            f'draft_strategy_pos{league_settings.draft_position}_{current_year}.json'
-        )
-    legacy_path.write_text(
-        json.dumps(compat_payload, default=str, indent=2), encoding='utf-8'
-    )
-
-    backtest_path = Path(get_draft_decision_backtest_path(current_year))
-    if filename_prefix:
-        backtest_path = backtest_path.with_name(
-            f'draft_decision_backtest_{filename_prefix}{current_year}.json'
-        )
-    if artifacts.backtest and not backtest_path.exists():
-        backtest_path.write_text(
-            json.dumps(artifacts.backtest, default=str, indent=2), encoding='utf-8'
-        )
 
     return {
         'artifacts': artifacts,
         'saved': saved,
-        'comparison_path': comparison_path,
-        'compat_path': compat_path,
-        'legacy_path': legacy_path,
-        'backtest_path': backtest_path,
+        'comparison_path': saved['comparison_path'],
+        'compat_path': saved['compat_path'],
+        'backtest_path': saved['backtest_path'],
     }
 
 
@@ -724,8 +677,6 @@ def main() -> int:
         if args.output_dir
         else get_draft_strategy_dir(current_year)
     )
-    dashboard_dir = get_pre_draft_dashboard_dir(current_year)
-
     if args.all_slots:
         slot_summaries: list[dict[str, Any]] = []
         for slot in range(1, league_settings.league_size + 1):
@@ -738,7 +689,6 @@ def main() -> int:
                 current_year,
                 filename_prefix=f'pos{slot:02d}_',
                 output_dir=output_dir,
-                dashboard_dir=dashboard_dir,
             )
             artifacts = result['artifacts']
             slot_summaries.append(
@@ -766,16 +716,8 @@ def main() -> int:
         league_settings,
         current_year,
         output_dir=output_dir,
-        dashboard_dir=dashboard_dir,
     )
     artifacts = result['artifacts']
-
-    payload_path = Path(get_dashboard_payload_path(current_year))
-    if not payload_path.exists():
-        payload_path.write_text(
-            json.dumps(artifacts.dashboard_payload, default=str, indent=2),
-            encoding='utf-8',
-        )
 
     logger.info('Draft decision artifacts created:')
     logger.info('  workbook: %s', result['saved']['workbook_path'])
@@ -783,7 +725,6 @@ def main() -> int:
     logger.info('  dashboard html: %s', result['saved']['html_path'])
     logger.info('  current-year comparison: %s', result['comparison_path'])
     logger.info('  compatibility json: %s', result['compat_path'])
-    logger.info('  legacy strategy json: %s', result['legacy_path'])
     if artifacts.backtest:
         logger.info('  backtest: %s', result['saved']['backtest_path'])
     return 0

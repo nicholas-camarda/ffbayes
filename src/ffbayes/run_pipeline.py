@@ -116,13 +116,20 @@ def create_required_directories():
 
 def cleanup_empty_directories():
     """Clean up empty directories that may cause pipeline issues."""
-    from ffbayes.utils.path_constants import RUNTIME_PLOTS_DIR, RUNTIME_RESULTS_DIR
+    from ffbayes.utils.path_constants import (
+        get_pre_draft_artifacts_dir,
+        get_pre_draft_diagnostics_dir,
+    )
 
     print('🧹 Cleaning up empty directories...')
     print()
 
     # Directories to check for cleanup
-    cleanup_dirs = [RUNTIME_RESULTS_DIR, RUNTIME_PLOTS_DIR]
+    current_year = datetime.now().year
+    cleanup_dirs = [
+        get_pre_draft_artifacts_dir(current_year),
+        get_pre_draft_diagnostics_dir(current_year),
+    ]
 
     cleaned_count = 0
     for base_dir in cleanup_dirs:

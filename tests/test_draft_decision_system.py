@@ -11,6 +11,7 @@ from ffbayes.draft_strategy.draft_decision_system import (
     availability_probability,
     build_decision_table,
     build_draft_decision_artifacts,
+    build_live_recommendation_snapshot,
     build_recommendations,
     export_workbook,
     run_draft_backtest,
@@ -127,6 +128,72 @@ def test_recommendations_update_after_drafted_players():
     )
 
 
+def test_live_recommendation_snapshot_recomputes_with_board_state():
+    settings = LeagueSettings()
+    base_context = DraftContext(current_pick_number=10)
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, base_context
+    )
+    table = artifacts.decision_table
+
+    initial_recs = build_recommendations(table, settings, base_context)
+    initial_snapshot = build_live_recommendation_snapshot(
+        table,
+        initial_recs,
+        artifacts.roster_scenarios,
+        settings,
+        base_context,
+    )
+
+    after_top_taken_context = DraftContext(
+        current_pick_number=10, drafted_players={initial_snapshot['pick_now']['player_name']}
+    )
+    after_top_taken_recs = build_recommendations(table, settings, after_top_taken_context)
+    after_top_taken_snapshot = build_live_recommendation_snapshot(
+        table,
+        after_top_taken_recs,
+        artifacts.roster_scenarios,
+        settings,
+        after_top_taken_context,
+    )
+
+    after_roster_pick_context = DraftContext(
+        current_pick_number=10,
+        drafted_players={initial_snapshot['pick_now']['player_name']},
+        your_players={initial_snapshot['pick_now']['player_name']},
+        roster_counts={initial_snapshot['pick_now']['position']: 1},
+    )
+    after_roster_pick_recs = build_recommendations(
+        table, settings, after_roster_pick_context
+    )
+    after_roster_pick_snapshot = build_live_recommendation_snapshot(
+        table,
+        after_roster_pick_recs,
+        artifacts.roster_scenarios,
+        settings,
+        after_roster_pick_context,
+    )
+
+    later_pick_context = DraftContext(current_pick_number=12)
+    later_pick_recs = build_recommendations(table, settings, later_pick_context)
+    later_pick_snapshot = build_live_recommendation_snapshot(
+        table,
+        later_pick_recs,
+        artifacts.roster_scenarios,
+        settings,
+        later_pick_context,
+    )
+
+    assert initial_snapshot['pick_now']['player_name'] != after_top_taken_snapshot['pick_now']['player_name']
+    assert (
+        after_roster_pick_snapshot['roster_need'][
+            initial_snapshot['pick_now']['position']
+        ]
+        == 0
+    )
+    assert later_pick_snapshot['can_wait'][0]['availability_to_next_pick'] != initial_snapshot['can_wait'][0]['availability_to_next_pick']
+
+
 def test_workbook_contains_core_sheets():
     settings = LeagueSettings()
     artifacts = build_draft_decision_artifacts(
@@ -153,6 +220,10 @@ def test_workbook_contains_core_sheets():
         assert {
             'Big Board',
             'By Position',
+            'Live Context',
+            'Pick Now',
+            'Fallback Ladder',
+            'Can Wait',
             'My Picks',
             'Tier Cliffs',
             'Availability',
@@ -171,19 +242,19 @@ def test_slot_specific_artifacts_use_prefixed_filenames():
     )
 
     with TemporaryDirectory() as tmpdir:
-        output_dir = Path(tmpdir) / 'results'
-        dashboard_dir = Path(tmpdir) / 'dashboard'
+        output_dir = Path(tmpdir) / 'artifacts'
         saved = save_draft_decision_artifacts(
             artifacts,
             output_dir,
             year=2026,
             filename_prefix='pos03_',
-            dashboard_dir=dashboard_dir,
         )
 
         assert saved['workbook_path'].name == 'draft_board_pos03_2026.xlsx'
         assert saved['payload_path'].name == 'dashboard_payload_pos03_2026.json'
         assert saved['html_path'].name == 'draft_board_pos03_2026.html'
+        assert saved['compat_path'].name == 'draft_board_pos03_2026.json'
+        assert saved['comparison_path'].parent.name == 'model_outputs'
         assert saved['backtest_path'].name.startswith('draft_decision_backtest_pos03_')
 
 
