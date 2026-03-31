@@ -9,7 +9,7 @@ The GitHub Pages dashboard is staged into `site/index.html` with `ffbayes publis
 
 ### **🚀 New Users: Start Here**
 - **[Main README](../README.md)** - Complete start-to-finish guide
-- **[Pre/Post Draft Examples](PRE_POST_DRAFT_EXAMPLES.md)** - See exactly what you'll get
+- **[Output Examples](OUTPUT_EXAMPLES.md)** - See exactly what you'll get
 
 ### **🔧 Technical Users: Deep Dive**
 - **[Technical Deep Dive](TECHNICAL_DEEP_DIVE.md)** - How the models work under the hood
@@ -61,7 +61,7 @@ ffbayes publish-pages --year 2026
 ```
 docs/
 ├── README.md                    # This file - documentation index
-├── PRE_POST_DRAFT_EXAMPLES.md  # Real examples of outputs
+├── OUTPUT_EXAMPLES.md          # Real examples of outputs
 ├── TECHNICAL_DEEP_DIVE.md      # How models work under the hood
 ```
 
@@ -70,8 +70,8 @@ docs/
 ## 🎉 **Getting Started**
 
 1. **Read the [Main README](../README.md)** for complete setup instructions
-2. **Check [Pre/Post Draft Examples](PRE_POST_DRAFT_EXAMPLES.md)** to see what you'll get
-3. **Run the pipeline**: `python -m ffbayes.run_pipeline_split pre_draft`
+2. **Check [Output Examples](OUTPUT_EXAMPLES.md)** to see what you'll get
+3. **Run the pipeline**: `ffbayes pre-draft`
 4. **Use the outputs** during your draft and throughout the season
 
 ---
@@ -82,6 +82,6 @@ docs/
 - **Technical Questions**: See the Technical Deep Dive documentation
 - **Development**: Review the Development Setup and Contributing guides
 - **Bugs**: Check the logs in `~/ProjectsRuntime/ffbayes/logs/`
-- **Publishing**: Run `python -m ffbayes.publish_artifacts --year <year> --phase pre_draft` for the cloud mirror, or `python -m ffbayes.publish_pages --year <year>` for GitHub Pages
+- **Publishing**: Run `ffbayes publish --year <year> --phase pre_draft` for the cloud mirror, or `ffbayes publish-pages --year <year>` for GitHub Pages
 
 ---

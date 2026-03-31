@@ -341,7 +341,7 @@ RB	James Cook	7
 For detailed technical information:
 - [Documentation Index](docs/README.md) - Navigation for the docs folder
 - [Technical Deep Dive](docs/TECHNICAL_DEEP_DIVE.md) - How the models work
-- [Pre/Post Draft Examples](docs/PRE_POST_DRAFT_EXAMPLES.md) - Usage examples
+- [Output Examples](docs/OUTPUT_EXAMPLES.md) - Usage examples
 
 ---
 

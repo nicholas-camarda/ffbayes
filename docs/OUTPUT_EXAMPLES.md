@@ -1,8 +1,8 @@
-# Pre/Post Draft Examples: What You Get from FFBayes
+# Output Examples: What You Get from FFBayes
 
-This document shows real examples of the outputs you'll receive from FFBayes, both before and after your draft.
+This document shows real examples of the outputs you'll receive from FFBayes.
 
-Example paths below point at the runtime tree (`~/ProjectsRuntime/ffbayes/...`). Published copies are mirrored into `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/...` only after you run `python -m ffbayes.publish_artifacts`.
+Example paths below point at the runtime tree (`~/ProjectsRuntime/ffbayes/...`). Published copies are mirrored into `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/...` only after you run `ffbayes publish`.
 
 ## 🎯 **Pre-Draft Pipeline Outputs**
 
