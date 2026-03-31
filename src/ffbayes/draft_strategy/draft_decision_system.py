@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import math
+import shutil
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -2806,6 +2807,51 @@ def build_draft_decision_artifacts(
     )
 
 
+def _stage_runtime_dashboard_shortcuts(
+    html_path: Path, payload_path: Path, year: int
+) -> dict[str, Path]:
+    """Copy dashboard artifacts into a shallow runtime location.
+
+    Canonical, versioned artifacts stay under:
+    `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/`.
+
+    For convenience, we also stage a stable path:
+    `~/ProjectsRuntime/ffbayes/dashboard/index.html`.
+    """
+
+    from ffbayes.utils.path_constants import get_runtime_root
+
+    try:
+        runtime_root = get_runtime_root()
+        dashboard_dir = runtime_root / 'dashboard'
+        dashboard_dir.mkdir(parents=True, exist_ok=True)
+
+        index_path = dashboard_dir / 'index.html'
+        if html_path.exists() and html_path.resolve() != index_path.resolve():
+            shutil.copy2(html_path, index_path)
+
+        payload_target = dashboard_dir / 'dashboard_payload.json'
+        if payload_path.exists() and payload_path.resolve() != payload_target.resolve():
+            shutil.copy2(payload_path, payload_target)
+
+        year_html = dashboard_dir / f'draft_board_{year}.html'
+        if html_path.exists() and html_path.resolve() != year_html.resolve():
+            shutil.copy2(html_path, year_html)
+
+        year_payload = dashboard_dir / f'dashboard_payload_{year}.json'
+        if payload_path.exists() and payload_path.resolve() != year_payload.resolve():
+            shutil.copy2(payload_path, year_payload)
+
+        return {
+            'runtime_dashboard_dir': dashboard_dir,
+            'runtime_dashboard_index': index_path,
+            'runtime_dashboard_payload': payload_target,
+        }
+    except OSError:
+        # Convenience-only; do not fail the main artifact export.
+        return {}
+
+
 def save_draft_decision_artifacts(
     artifacts: DraftDecisionArtifacts,
     output_dir: Path | str,
@@ -2890,6 +2936,7 @@ def save_draft_decision_artifacts(
         json.dumps(comparison_payload, default=str, indent=2), encoding='utf-8'
     )
 
+    shortcuts = _stage_runtime_dashboard_shortcuts(html_path, payload_path, year)
     return {
         'workbook_path': workbook_path,
         'payload_path': payload_path,
@@ -2897,4 +2944,5 @@ def save_draft_decision_artifacts(
         'compat_path': compat_path,
         'backtest_path': backtest_path,
         'comparison_path': comparison_path,
+        **shortcuts,
     }

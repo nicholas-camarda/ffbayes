@@ -18,19 +18,30 @@ def get_project_root() -> Path:
 
 
 def _path_is_writable(path: Path) -> bool:
-    """Return True when a directory can be created and written to."""
+    """Return True when the nearest existing parent directory is writable.
+
+    This intentionally avoids creating directories or writing probe files at
+    import time. Callers that need guaranteed writability should rely on
+    `ensure_dir_exists()` and handle filesystem errors there.
+    """
+
     try:
-        path.mkdir(parents=True, exist_ok=True)
-        probe = path / '.write_probe'
-        probe.write_text('', encoding='utf-8')
-        probe.unlink(missing_ok=True)
-        return True
-    except OSError:
-        return False
+        candidate = path.expanduser()
+    except Exception:
+        candidate = path
+
+    parent = candidate
+    while not parent.exists() and parent != parent.parent:
+        parent = parent.parent
+    return os.access(parent, os.W_OK)
 
 
 def get_runtime_root() -> Path:
-    """Return the canonical runtime root for the active project."""
+    """Return the canonical runtime root for the active project.
+
+    Note: the returned path may not exist yet; directory creation happens later
+    when pipeline steps run.
+    """
     env_root = os.getenv('FFBAYES_RUNTIME_ROOT')
     if env_root:
         return Path(env_root).expanduser().resolve()
@@ -39,28 +50,32 @@ def get_runtime_root() -> Path:
     if _path_is_writable(primary_root):
         return primary_root
 
-    # Sandbox and some locked-down environments cannot write to the default
-    # runtime tree. Fall back to a workspace-local runtime directory so the
-    # pipeline can still run without changing the canonical layout on systems
-    # where the default location is writable.
+    # Locked-down environments may not allow writing outside the project tree.
     return Path(__file__).resolve().parents[3] / '.ffbayes_runtime'
 
 
 def get_cloud_root() -> Path:
-    """Return the canonical cloud root for backed-up project artifacts."""
+    """Return the canonical cloud root for backed-up project artifacts.
+
+    Unlike the runtime root, we avoid implicitly "creating" the OneDrive tree
+    unless it already exists. If OneDrive is not configured, we fall back to a
+    repo-local cloud mirror directory.
+    """
     env_root = os.getenv('FFBAYES_CLOUD_ROOT')
     if env_root:
         return Path(env_root).expanduser().resolve()
 
-    primary_root = (
+    side_projects_root = (
         Path.home()
         / 'Library'
         / 'CloudStorage'
         / 'OneDrive-Personal'
         / 'SideProjects'
-        / 'ffbayes'
     )
-    if _path_is_writable(primary_root):
+    primary_root = side_projects_root / 'ffbayes'
+    # If OneDrive is configured, prefer it, but do not create the leaf
+    # directories at import time.
+    if side_projects_root.exists() and _path_is_writable(side_projects_root):
         return primary_root
 
     return Path(__file__).resolve().parents[3] / '.ffbayes_cloud'

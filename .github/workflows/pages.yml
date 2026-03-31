@@ -3,7 +3,7 @@ name: Deploy FFBayes Pages
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - 'site/**'
       - '.github/workflows/pages.yml'

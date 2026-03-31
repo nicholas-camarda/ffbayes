@@ -25,12 +25,13 @@ from ffbayes.draft_strategy.draft_decision_system import (
     LeagueSettings,
     _pick_first_row,
     build_draft_decision_artifacts,
+    build_live_recommendation_snapshot,
     save_draft_decision_artifacts,
 )
 from ffbayes.utils.path_constants import (
     SNAKE_DRAFT_DATASETS_DIR,
-    get_pre_draft_diagnostics_dir,
     get_draft_strategy_dir,
+    get_pre_draft_diagnostics_dir,
     get_unified_dataset_csv_path,
     get_unified_dataset_path,
 )
@@ -723,6 +724,8 @@ def main() -> int:
     logger.info('  workbook: %s', result['saved']['workbook_path'])
     logger.info('  dashboard payload: %s', result['saved']['payload_path'])
     logger.info('  dashboard html: %s', result['saved']['html_path'])
+    if 'runtime_dashboard_index' in result['saved']:
+        logger.info('  runtime dashboard: %s', result['saved']['runtime_dashboard_index'])
     logger.info('  current-year comparison: %s', result['comparison_path'])
     logger.info('  compatibility json: %s', result['compat_path'])
     if artifacts.backtest:

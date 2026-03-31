@@ -67,6 +67,9 @@ ignore = [
   "E501",  # line length handled by formatter
 ]
 
+[tool.ruff]
+extend-exclude = ["archive"]
+
 [tool.ruff.format]
 quote-style = "single"
 indent-style = "space"

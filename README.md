@@ -6,13 +6,16 @@ A sophisticated fantasy football analytics system that combines Monte Carlo simu
 
 ### **Step 1: Setup**
 ```bash
-# Clone and install
+# Clone
 git clone https://github.com/nicholas-camarda/ffbayes.git
 cd ffbayes
-pip install -e .
 
-# Activate conda environment
+# Create/activate conda environment (first time only)
+conda env create -f environment.yml
 conda activate ffbayes
+
+# Install
+pip install -e .
 ```
 
 ### **Step 2: Configure Your League**
@@ -76,11 +79,11 @@ The split pipeline runs collection in summary mode, so it shows the yearly colle
 Maintenance note: if nflverse changes the underlying Python loaders again, keep the adaptation logic inside `src/ffbayes/data_pipeline/nflverse_backend.py` so the rest of the pipeline stays pandas-first.
 
 **What You Get:**
-- 📊 **Draft Board Workbook**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/draft_strategy/draft_board_<year>.xlsx`
-- 🧠 **Dashboard Payload**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/dashboard/dashboard_payload_<year>.json`
-- 🌐 **HTML Fallback**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/dashboard/draft_board_<year>.html`
+- 📊 **Draft Board Workbook**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
+- 🧠 **Dashboard Payload**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
+- 🌐 **HTML Dashboard**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
 - 🌍 **GitHub Pages Dashboard**: `site/index.html`
-- 📋 **Decision Backtest**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/draft_strategy/draft_decision_backtest_<year_range>.json`
+- 📋 **Decision Backtest**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
 If you want the published mirror, run:
 ```bash
 ffbayes publish --year <year> --phase pre_draft
@@ -91,8 +94,27 @@ If you want the dashboard hosted on GitHub Pages, run:
 ffbayes publish-pages --year <year>
 ```
 
+## 🌐 Dashboard: GitHub Viewers vs. Local Users
+
+There are two convenient ways to use the dashboard, depending on whether you
+are just browsing the repo or you have it cloned.
+
+### GitHub Repo Viewers (No Clone)
+
+- The intended experience is the repo's **GitHub Pages** site, which serves the
+  most recently staged `site/index.html`.
+- Pages only updates when someone runs `ffbayes publish-pages` and commits/pushes
+  the updated `site/` directory to `master` (the workflow deploys `./site`).
+
+### Local Users (Repo Cloned)
+
+- Run `ffbayes draft-strategy ...` and then open the shallow, stable runtime dashboard:
+  `~/ProjectsRuntime/ffbayes/dashboard/index.html`
+- If you prefer a repo-local stable path (useful for GitHub Pages or a bookmark inside the repo),
+  run `ffbayes publish-pages --year <year>` and then open `site/index.html`.
+
 ### **Step 4: Use During Draft**
-- Open `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/draft_strategy/draft_board_<year>.xlsx`
+- Open `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
 - Use `site/index.html` once it has been staged for GitHub Pages
 - Follow the pick-by-pick recommendations in the workbook
 - Use backup options if primary targets are gone
@@ -129,16 +151,16 @@ Unlike traditional models that fail with new players, FFBayes can:
 ### **Pre-Draft Outputs** (Use During Draft)
 Runtime working tree: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/`
 
-- `results/vor_strategy/` - VOR rankings and draft guide outputs
-- `results/draft_strategy/` - Canonical draft board workbook, compatibility JSON, and draft decision backtest
-- `dashboard/` - Interactive dashboard payload and HTML fallback
-- `results/hybrid_mc_bayesian/` - Monte Carlo + Bayesian model outputs
-- `site/` - GitHub Pages dashboard root copied from the canonical HTML artifact
+- `artifacts/vor_strategy/` - VOR rankings and draft guide outputs
+- `artifacts/draft_strategy/` - Draft board workbook, dashboard payload, HTML dashboard, and decision backtest
+- `artifacts/hybrid_mc_bayesian/` - Monte Carlo + Bayesian model outputs
+- `diagnostics/` - Rendered plots and diagnostics (strategy comparison, slot sensitivity, etc.)
+- `site/` - GitHub Pages dashboard root copied from the canonical HTML artifact (repo-local)
 
 Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/pre_draft/` after `ffbayes publish`
 
 ### **Visualizations** (Analysis & Strategy)
-Runtime plots: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/plots/`
+Runtime plots: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/diagnostics/`
 
 - `pre_draft/` - Strategy comparison, draft-score diagnostics, freshness views, and slot sensitivity
 

@@ -22,7 +22,9 @@ import pymc as pm
 from sklearn.metrics import mean_absolute_error
 
 # Import our advanced stats calculator
-from ffbayes.analysis.advanced_stats_calculator import calculate_advanced_stats_from_existing_data
+from ffbayes.analysis.advanced_stats_calculator import (
+    calculate_advanced_stats_from_existing_data,
+)
 
 matplotlib.use('Agg')
 
@@ -375,8 +377,8 @@ def unified_bayesian_model(path_to_data_directory, cores=DEFAULT_CORES, draws=DE
     if 'is_home' in train.columns:
         print(f"   🔍 is_home unique values: {train['is_home'].unique()}")
         # Simple conversion: True->1, everything else->0
-        train.loc[:, 'is_home'] = (train['is_home'] == True).astype(int)
-        test.loc[:, 'is_home'] = (test['is_home'] == True).astype(int)
+        train.loc[:, 'is_home'] = (train['is_home'] is True).astype(int)
+        test.loc[:, 'is_home'] = (test['is_home'] is True).astype(int)
         print(f"   ✅ Cleaned is_home: {train['is_home'].dtype}")
     
     # Model parameters
@@ -646,7 +648,7 @@ def unified_bayesian_model(path_to_data_directory, cores=DEFAULT_CORES, draws=DE
             with unified_model:
                 # Enhanced test data preparation with all hierarchical features
                 test_data_dict = {
-                    'player_home': (test['is_home'] == True).astype(int),  # Fix the is_home data type issue
+                    'player_home': (test['is_home'] is True).astype(int),  # Fix the is_home data type issue
                     'player_avg': test['7_game_avg'].values,
                     'player_rank': (test['rank'].values - 1).astype(int) if 'rank' in test.columns else np.zeros(len(test), dtype=int),
                     'qb_indicator': (test['Position'] == 'QB').astype(int),

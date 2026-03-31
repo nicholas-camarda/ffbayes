@@ -11,7 +11,7 @@ Example paths below point at the runtime tree (`~/ProjectsRuntime/ffbayes/...`).
 When you run `python -m ffbayes.run_pipeline_split pre_draft`, you receive:
 
 #### **1. 📊 Draft Cheatsheet (Excel)**
-**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/draft_strategy/draft_board_<year>.xlsx`
+**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
 
 | Pick | Primary Targets | Backup Options | Position Priority | Strategy | Risk Level |
 |------|----------------|----------------|-------------------|----------|------------|
@@ -21,7 +21,7 @@ When you run `python -m ffbayes.run_pipeline_split pre_draft`, you receive:
 | 31 | Travis Kelce, Mark Andrews, Kyle Pitts | Darren Waller, T.J. Hockenson, Dallas Goedert | TE > WR > RB | TE premium, elite option | Medium |
 
 #### **2. 📋 Player Rankings (Excel)**
-**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/vor_strategy/snake-draft_ppr-0.5_vor_top-120_<year>.csv`
+**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/vor_strategy/snake-draft_ppr-0.5_vor_top-120_<year>.csv`
 
 | Rank | Name | Position | Projected Points | Uncertainty | Tier | VOR Rank |
 |------|------|----------|------------------|-------------|------|----------|
@@ -33,10 +33,10 @@ When you run `python -m ffbayes.run_pipeline_split pre_draft`, you receive:
 
 #### **3. 📝 Strategy Summary (Text)**
 **Files**:
-- `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/draft_strategy/draft_board_<year>.json`
-- `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/dashboard/dashboard_payload_<year>.json`
-- `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/dashboard/draft_board_<year>.html`
-- `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/results/draft_strategy/draft_decision_backtest_<year_range>.json`
+- `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.json`
+- `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
+- `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
+- `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
 
 ```
 ============================================================
@@ -65,7 +65,7 @@ Pick 31: Travis Kelce | Mark Andrews
 ```
 
 #### **4. 📈 Strategy Comparison Visualizations**
-**Files**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/plots/`
+**Files**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/diagnostics/`
 
 - **ADP vs Draft Score**: Shows market disagreement versus canonical draft score
 - **Position Distribution Analysis**: Visualizes positional scarcity and cliff points
@@ -79,7 +79,7 @@ Pick 31: Travis Kelce | Mark Andrews
 
 ### **What You Get: Team Analysis & Season Projections**
 
-When you run `python -m ffbayes.run_pipeline_split post_draft`, you receive:
+Post-draft workflow is currently **legacy**: the split runner only supports `pre_draft`. If you still want these outputs, run the relevant module entry points directly (for example `ffbayes agg`, `ffbayes mc`, etc.).
 
 #### **1. 🎯 Team Aggregation Analysis**
 **File**: `~/ProjectsRuntime/ffbayes/runs/<year>/post_draft/results/team_aggregation/team_analysis_results.json`
