@@ -975,7 +975,7 @@ class EnhancedPipelineOrchestrator:
         )
 
         logger.info(
-            'Runtime artifacts remain local until ffbayes-publish is run explicitly'
+            'Runtime artifacts remain local until `ffbayes publish` is run explicitly'
         )
 
     def get_execution_summary(self) -> Dict[str, Any]:

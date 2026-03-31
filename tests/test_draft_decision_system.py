@@ -256,6 +256,10 @@ def test_slot_specific_artifacts_use_prefixed_filenames():
         assert saved['compat_path'].name == 'draft_board_pos03_2026.json'
         assert saved['comparison_path'].parent.name == 'model_outputs'
         assert saved['backtest_path'].name.startswith('draft_decision_backtest_pos03_')
+        assert 'runtime_dashboard_index' in saved
+        assert 'repo_dashboard_index' in saved
+        assert saved['runtime_dashboard_index'].exists()
+        assert saved['repo_dashboard_index'].exists()
 
 
 def test_backtest_payload_has_expected_shape():

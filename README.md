@@ -158,7 +158,7 @@ Runtime working tree: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/`
 - `artifacts/draft_strategy/` - Draft board workbook, dashboard payload, HTML dashboard, and decision backtest
 - `artifacts/hybrid_mc_bayesian/` - Monte Carlo + Bayesian model outputs
 - `diagnostics/` - Rendered plots and diagnostics (strategy comparison, slot sensitivity, etc.)
-- `site/` - GitHub Pages dashboard root copied from the canonical HTML artifact (repo-local)
+- Repo-local `site/` - GitHub Pages dashboard root copied from the canonical HTML artifact
 
 Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/pre_draft/` after `ffbayes publish`
 
@@ -167,7 +167,7 @@ Runtime plots: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/diagnostics/`
 
 - `pre_draft/` - Strategy comparison, draft-score diagnostics, freshness views, and slot sensitivity
 
-Published plots: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/plots/<year>/` after `ffbayes publish`
+Published plots: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/plots/<year>/pre_draft/` after `ffbayes publish`
 Published preview images: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/docs/images/` after `ffbayes publish`
 
 ---

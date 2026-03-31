@@ -284,9 +284,9 @@ class SplitPipelineRunner:
             print('\n🎉 Pipeline completed successfully!')
             self._log('\n🎉 Pipeline completed successfully!')
 
-            print('\nℹ️  Runtime artifacts remain local until you run ffbayes-publish.')
+            print('\nℹ️  Runtime artifacts remain local until you run `ffbayes publish`.')
             self._log(
-                '\nℹ️  Runtime artifacts remain local until you run ffbayes-publish.'
+                '\nℹ️  Runtime artifacts remain local until you run `ffbayes publish`.'
             )
 
         try:

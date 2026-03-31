@@ -92,6 +92,8 @@ def test_manage_visualizations_publishes_selected_phase(tmp_path, monkeypatch):
         runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'artifacts' / 'draft_strategy'
     )
     pre_draft_dashboard_dir.mkdir(parents=True, exist_ok=True)
+    (pre_draft_dashboard_dir / 'notes.txt').write_text('do not publish', encoding='utf-8')
+    (pre_draft_dashboard_dir / f'draft_board_{current_year}.xlsx').write_bytes(b'xlsx')
 
     result = manage_visualizations(current_year, phase='pre_draft')
 
@@ -128,6 +130,20 @@ def test_manage_visualizations_publishes_selected_phase(tmp_path, monkeypatch):
         / str(current_year)
         / 'pre_draft'
         / f'dashboard_payload_{current_year}.json'
+    ).exists()
+    assert not (
+        cloud_root
+        / 'dashboard'
+        / str(current_year)
+        / 'pre_draft'
+        / 'notes.txt'
+    ).exists()
+    assert not (
+        cloud_root
+        / 'dashboard'
+        / str(current_year)
+        / 'pre_draft'
+        / f'draft_board_{current_year}.xlsx'
     ).exists()
     assert (cloud_root / 'docs' / 'images' / 'pre_draft_chart.png').exists()
     assert not (tmp_path / 'workspace' / 'docs' / 'images').exists()

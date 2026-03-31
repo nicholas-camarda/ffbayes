@@ -121,7 +121,7 @@ def update_readme_with_visualizations() -> bool:
     Returns:
         False, because README is no longer mutated automatically
     """
-    print('ℹ️  README publication is disabled; use ffbayes-publish for cloud mirroring')
+    print('ℹ️  README publication is disabled; use `ffbayes publish` for cloud mirroring')
     return False
 
 

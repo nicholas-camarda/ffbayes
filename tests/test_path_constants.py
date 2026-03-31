@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 import ffbayes.utils.path_constants as path_constants
 
 
@@ -52,6 +54,18 @@ def test_pre_draft_paths_live_under_artifacts_and_diagnostics(monkeypatch, tmp_p
     assert pages_dir == tmp_path / 'project' / 'site'
     assert path_constants.get_results_dir(2026) == artifacts_dir
     assert path_constants.get_plots_dir(2026) == diagnostics_dir
+
+
+def test_get_phase_name_rejects_non_pre_draft(monkeypatch):
+    monkeypatch.delenv('FFBAYES_PIPELINE_PHASE', raising=False)
+
+    assert path_constants.get_phase_name('pre_draft') == 'pre_draft'
+    with pytest.raises(ValueError):
+        path_constants.get_phase_name('post_draft')
+
+    monkeypatch.setenv('FFBAYES_PIPELINE_PHASE', 'post_draft')
+    with pytest.raises(ValueError):
+        path_constants.get_phase_name()
 
 
 def test_get_cloud_root_falls_back_when_default_is_unwritable(monkeypatch):

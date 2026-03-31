@@ -726,6 +726,8 @@ def main() -> int:
     logger.info('  dashboard html: %s', result['saved']['html_path'])
     if 'runtime_dashboard_index' in result['saved']:
         logger.info('  runtime dashboard: %s', result['saved']['runtime_dashboard_index'])
+    if 'repo_dashboard_index' in result['saved']:
+        logger.info('  repo dashboard: %s', result['saved']['repo_dashboard_index'])
     logger.info('  current-year comparison: %s', result['comparison_path'])
     logger.info('  compatibility json: %s', result['compat_path'])
     if artifacts.backtest:
