@@ -22,16 +22,11 @@ Option 3: Advanced Contextual Modeling
 """
 
 import json
-import os
-import sys
 from datetime import datetime
 
 import numpy as np
 from scipy import stats
 from sklearn.ensemble import RandomForestRegressor
-
-# Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from ffbayes.data_pipeline.unified_data_loader import load_unified_dataset
 

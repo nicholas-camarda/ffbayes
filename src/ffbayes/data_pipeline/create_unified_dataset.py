@@ -82,29 +82,16 @@ def _resolve_existing_vor_csv(current_year: int) -> Path | None:
     filename = get_vor_csv_filename(current_year)
     from ffbayes.utils.path_constants import get_vor_strategy_dir
 
-    legacy_runtime_root = Path.home() / 'ProjectsRuntime' / 'ffbayes'
-    legacy_processed_dir = legacy_runtime_root / 'data' / 'processed' / 'snake_draft_datasets'
-    legacy_organized_dir = (
-        legacy_runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'results' / 'vor_strategy'
-    )
-
     candidates = [
         SNAKE_DRAFT_DATASETS_DIR / filename,
         get_vor_strategy_dir(current_year) / filename,
-        legacy_processed_dir / filename,
-        legacy_organized_dir / filename,
     ]
     for candidate in candidates:
         if candidate.exists():
             return candidate
 
     wildcard_matches = []
-    for directory in [
-        SNAKE_DRAFT_DATASETS_DIR,
-        get_vor_strategy_dir(current_year),
-        legacy_processed_dir,
-        legacy_organized_dir,
-    ]:
+    for directory in [SNAKE_DRAFT_DATASETS_DIR, get_vor_strategy_dir(current_year)]:
         wildcard_matches.extend(
             sorted(directory.glob(f'snake-draft_ppr-*_{current_year}.csv'))
         )

@@ -101,13 +101,11 @@ def test_collect_nfl_data_raises_when_latest_season_missing(
 ):
     season_dir = tmp_path / 'season_datasets'
     raw_dir = tmp_path / 'raw'
-    legacy_dir = tmp_path / 'legacy'
     season_dir.mkdir(parents=True, exist_ok=True)
     raw_dir.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(collect_data, 'CURRENT_YEAR', 2026)
     monkeypatch.setattr(collect_data, 'SEASON_DATASETS_DIR', season_dir)
-    monkeypatch.setattr(collect_data, 'LEGACY_SEASON_DATASETS_DIR', legacy_dir)
     monkeypatch.setattr(collect_data, 'RAW_DATA_DIR', raw_dir)
     monkeypatch.setattr(collect_data, 'ProgressMonitor', _DummyProgressMonitor)
     monkeypatch.setattr(
@@ -132,13 +130,11 @@ def test_collect_nfl_data_allows_stale_season_and_writes_degraded_manifest(
 ):
     season_dir = tmp_path / 'season_datasets'
     raw_dir = tmp_path / 'raw'
-    legacy_dir = tmp_path / 'legacy'
     season_dir.mkdir(parents=True, exist_ok=True)
     raw_dir.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(collect_data, 'CURRENT_YEAR', 2026)
     monkeypatch.setattr(collect_data, 'SEASON_DATASETS_DIR', season_dir)
-    monkeypatch.setattr(collect_data, 'LEGACY_SEASON_DATASETS_DIR', legacy_dir)
     monkeypatch.setattr(collect_data, 'RAW_DATA_DIR', raw_dir)
     monkeypatch.setattr(collect_data, 'ProgressMonitor', _DummyProgressMonitor)
     monkeypatch.setattr(
@@ -173,7 +169,6 @@ def test_collect_main_combines_only_real_season_files(
     season_dir = tmp_path / 'season_datasets'
     combined_dir = tmp_path / 'combined_datasets'
     raw_dir = tmp_path / 'raw'
-    legacy_dir = tmp_path / 'legacy'
     season_dir.mkdir(parents=True, exist_ok=True)
     combined_dir.mkdir(parents=True, exist_ok=True)
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -233,7 +228,6 @@ def test_collect_main_combines_only_real_season_files(
 
     monkeypatch.setattr(collect_data, 'CURRENT_YEAR', 2026)
     monkeypatch.setattr(collect_data, 'SEASON_DATASETS_DIR', season_dir)
-    monkeypatch.setattr(collect_data, 'LEGACY_SEASON_DATASETS_DIR', legacy_dir)
     monkeypatch.setattr(collect_data, 'COMBINED_DATASETS_DIR', combined_dir)
     monkeypatch.setattr(collect_data, 'RAW_DATA_DIR', raw_dir)
     monkeypatch.setattr(collect_data, 'ProgressMonitor', _DummyProgressMonitor)
@@ -278,7 +272,6 @@ def test_collect_nfl_data_refreshes_existing_files_with_backend_only_monkeypatch
     season_dir = tmp_path / 'season_datasets'
     combined_dir = tmp_path / 'combined_datasets'
     raw_dir = tmp_path / 'raw'
-    legacy_dir = tmp_path / 'legacy'
     season_dir.mkdir(parents=True, exist_ok=True)
     combined_dir.mkdir(parents=True, exist_ok=True)
     raw_dir.mkdir(parents=True, exist_ok=True)
@@ -367,7 +360,6 @@ def test_collect_nfl_data_refreshes_existing_files_with_backend_only_monkeypatch
 
     monkeypatch.setattr(collect_data, 'CURRENT_YEAR', 2026)
     monkeypatch.setattr(collect_data, 'SEASON_DATASETS_DIR', season_dir)
-    monkeypatch.setattr(collect_data, 'LEGACY_SEASON_DATASETS_DIR', legacy_dir)
     monkeypatch.setattr(collect_data, 'COMBINED_DATASETS_DIR', combined_dir)
     monkeypatch.setattr(collect_data, 'RAW_DATA_DIR', raw_dir)
     monkeypatch.setattr(collect_data, 'ProgressMonitor', _DummyProgressMonitor)

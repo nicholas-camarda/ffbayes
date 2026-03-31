@@ -35,23 +35,9 @@ QUICK_TEST = os.getenv('QUICK_TEST', 'false').lower() == 'true'
 def _resolve_existing_vor_csv(current_year: int, config: Dict) -> Path | None:
     """Find an existing VOR CSV before scraping FantasyPros."""
     from ffbayes.utils.vor_filename_generator import get_vor_csv_filename
-
-    legacy_runtime_root = Path.home() / 'ProjectsRuntime' / 'ffbayes'
     candidates = [
         Path(config['output_dir']) / get_vor_csv_filename(current_year),
         Path(config.get('organized_output_dir', '')) / get_vor_csv_filename(current_year),
-        legacy_runtime_root
-        / 'data'
-        / 'processed'
-        / 'snake_draft_datasets'
-        / get_vor_csv_filename(current_year),
-        legacy_runtime_root
-        / 'runs'
-        / str(current_year)
-        / 'pre_draft'
-        / 'results'
-        / 'vor_strategy'
-        / get_vor_csv_filename(current_year),
     ]
 
     for candidate in candidates:

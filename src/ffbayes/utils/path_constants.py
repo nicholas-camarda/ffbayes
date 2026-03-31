@@ -92,6 +92,7 @@ RAW_COMBINED_DATASETS_DIR = RAW_DATA_DIR / 'combined_datasets'
 RUNTIME_RESULTS_DIR = RUNTIME_DIR / 'results'
 RUNTIME_PLOTS_DIR = RUNTIME_DIR / 'plots'
 RUNTIME_DASHBOARD_DIR = RUNTIME_DIR / 'dashboard'
+REPO_DASHBOARD_DIR = BASE_DIR / 'dashboard'
 SIDE_PROJECTS_ROOT_DIR = get_cloud_root()
 CLOUD_RAW_DATA_DIR = get_cloud_root() / 'data' / 'raw'
 CLOUD_PROCESSED_DATA_DIR = get_cloud_root() / 'data' / 'processed'
@@ -115,32 +116,40 @@ UNIFIED_DATASET_DIR = PROCESSED_DATA_DIR / 'unified_dataset'
 
 # Results directories (organized by year and type)
 def get_phase_name(phase: str | None = None) -> str:
-    """Return the active pipeline phase.
+    """Return the supported pipeline phase.
 
-    Pre-draft is the supported default. Post-draft remains for legacy
-    compatibility only.
+    FFBayes now supports a single phase: `pre_draft`.
     """
-    if phase:
-        return phase
-    env_phase = os.getenv('FFBAYES_PIPELINE_PHASE')
-    if env_phase:
-        return env_phase
+
+    resolved = (phase or os.getenv('FFBAYES_PIPELINE_PHASE') or 'pre_draft').lower()
+    if resolved != 'pre_draft':
+        raise ValueError(
+            f'Unsupported pipeline phase: {resolved!r}. Only "pre_draft" is supported.'
+        )
     return 'pre_draft'
 
 
-def get_run_root(year: int = None, phase: str | None = None) -> Path:
-    """Get the root directory for a specific run."""
+def get_run_root(year: int = None) -> Path:
+    """Get the root directory for a specific (pre-draft) run."""
+    if year is None:
+        env_year = os.getenv('FFBAYES_PIPELINE_YEAR')
+        if env_year:
+            try:
+                year = int(env_year)
+            except ValueError:
+                year = None
+
     if year is None:
         from datetime import datetime
 
         year = datetime.now().year
-    resolved_phase = get_phase_name(phase)
-    return RUNTIME_DIR / 'runs' / str(year) / resolved_phase
+
+    return RUNTIME_DIR / 'runs' / str(year) / 'pre_draft'
 
 
 def get_pre_draft_run_root(year: int = None) -> Path:
     """Get the canonical pre-draft run root."""
-    return get_run_root(year, 'pre_draft')
+    return get_run_root(year)
 
 
 def get_pre_draft_artifacts_dir(year: int = None) -> Path:
@@ -157,43 +166,9 @@ def get_pre_draft_diagnostics_dir(year: int = None) -> Path:
     return path
 
 
-def get_results_dir(year: int = None, phase: str | None = None) -> Path:
-    """Get results directory for a specific year and phase.
-
-    Supported pre-draft outputs live under `artifacts/`. Post-draft paths are
-    retained only for legacy callers.
-    """
-    resolved_phase = get_phase_name(phase)
-    if resolved_phase == 'pre_draft':
-        path = get_pre_draft_artifacts_dir(year)
-    else:
-        path = get_run_root(year, resolved_phase) / 'results'
-    ensure_dir_exists(path)
-    return path
-
-
-def get_dashboard_dir(year: int = None, phase: str | None = None) -> Path:
-    """Get dashboard directory for a specific year and phase.
-
-    The supported pre-draft dashboard lives in the artifacts tree.
-    """
-    resolved_phase = get_phase_name(phase)
-    if resolved_phase == 'pre_draft':
-        path = get_pre_draft_artifacts_dir(year)
-    else:
-        path = get_run_root(year, resolved_phase) / 'dashboard'
-    ensure_dir_exists(path)
-    return path
-
-
-def get_pre_draft_dashboard_dir(year: int = None) -> Path:
-    """Get the canonical pre-draft dashboard directory."""
-    return get_pre_draft_artifacts_dir(year)
-
-
-def get_post_draft_dashboard_dir(year: int = None) -> Path:
-    """Get post-draft dashboard directory."""
-    path = get_dashboard_dir(year, 'post_draft')
+def get_results_dir(year: int = None) -> Path:
+    """Get the canonical results root for a given year (pre-draft artifacts)."""
+    path = get_pre_draft_artifacts_dir(year)
     ensure_dir_exists(path)
     return path
 
@@ -216,13 +191,6 @@ def get_cloud_pre_draft_dashboard_dir(year: int = None) -> Path:
     return path
 
 
-def get_cloud_post_draft_dashboard_dir(year: int = None) -> Path:
-    """Get published post-draft dashboard directory."""
-    path = get_cloud_dashboard_dir(year) / 'post_draft'
-    ensure_dir_exists(path)
-    return path
-
-
 def get_pre_draft_dir(year: int = None) -> Path:
     """Get the canonical pre-draft output directory."""
     return get_pre_draft_artifacts_dir(year)
@@ -231,13 +199,6 @@ def get_pre_draft_dir(year: int = None) -> Path:
 def get_pre_draft_analysis_dir(year: int = None) -> Path:
     """Get pre-draft analysis directory (for features CSVs, etc.)."""
     path = get_pre_draft_dir(year) / 'analysis'
-    ensure_dir_exists(path)
-    return path
-
-
-def get_post_draft_dir(year: int = None) -> Path:
-    """Get post-draft results directory."""
-    path = get_results_dir(year, 'post_draft')
     ensure_dir_exists(path)
     return path
 
@@ -256,13 +217,6 @@ def get_cloud_results_dir(year: int = None) -> Path:
 def get_cloud_pre_draft_dir(year: int = None) -> Path:
     """Get published pre-draft results directory."""
     path = get_cloud_results_dir(year) / 'pre_draft'
-    ensure_dir_exists(path)
-    return path
-
-
-def get_cloud_post_draft_dir(year: int = None) -> Path:
-    """Get published post-draft results directory."""
-    path = get_cloud_results_dir(year) / 'post_draft'
     ensure_dir_exists(path)
     return path
 
@@ -340,32 +294,31 @@ def get_draft_strategy_comparison_dir(year: int = None) -> Path:
     return path
 
 
+def get_validation_dir(year: int = None) -> Path:
+    """Get directory for validation logs and diagnostics."""
+    path = get_pre_draft_diagnostics_dir(year) / 'validation'
+    ensure_dir_exists(path)
+    return path
+
+
 def get_team_aggregation_dir(year: int = None) -> Path:
-    """Get team aggregation directory."""
-    path = get_post_draft_dir(year) / 'team_aggregation'
+    """Get team aggregation directory (pre-draft artifacts tree)."""
+    path = get_results_dir(year) / 'team_aggregation'
     ensure_dir_exists(path)
     return path
 
 
 def get_monte_carlo_dir(year: int = None) -> Path:
-    """Get Monte Carlo results directory."""
-    path = get_post_draft_dir(year) / 'montecarlo_results'
+    """Get Monte Carlo results directory (pre-draft artifacts tree)."""
+    path = get_results_dir(year) / 'montecarlo_results'
     ensure_dir_exists(path)
     return path
 
 
 # Plot directories
 def get_plots_dir(year: int = None) -> Path:
-    """Get plots directory for a specific year."""
-    if year is None:
-        from datetime import datetime
-
-        year = datetime.now().year
-    resolved_phase = get_phase_name()
-    if resolved_phase == 'pre_draft':
-        path = get_pre_draft_diagnostics_dir(year)
-    else:
-        path = get_run_root(year, resolved_phase) / 'plots'
+    """Get plots/diagnostics directory for a specific year."""
+    path = get_pre_draft_diagnostics_dir(year)
     ensure_dir_exists(path)
     return path
 
@@ -373,13 +326,6 @@ def get_plots_dir(year: int = None) -> Path:
 def get_pre_draft_plots_dir(year: int = None) -> Path:
     """Get pre-draft plots directory."""
     return get_pre_draft_diagnostics_dir(year)
-
-
-def get_post_draft_plots_dir(year: int = None) -> Path:
-    """Get post-draft plots directory."""
-    path = get_run_root(year, 'post_draft') / 'plots'
-    ensure_dir_exists(path)
-    return path
 
 
 def get_cloud_plots_dir(year: int = None) -> Path:
@@ -396,13 +342,6 @@ def get_cloud_plots_dir(year: int = None) -> Path:
 def get_cloud_pre_draft_plots_dir(year: int = None) -> Path:
     """Get published pre-draft plots directory."""
     path = get_cloud_plots_dir(year) / 'pre_draft'
-    ensure_dir_exists(path)
-    return path
-
-
-def get_cloud_post_draft_plots_dir(year: int = None) -> Path:
-    """Get published post-draft plots directory."""
-    path = get_cloud_plots_dir(year) / 'post_draft'
     ensure_dir_exists(path)
     return path
 
@@ -469,11 +408,6 @@ def get_pipeline_config_file() -> Path:
 def get_pre_draft_config_file() -> Path:
     """Get pre-draft pipeline configuration file path."""
     return CONFIG_DIR / 'pipeline_pre_draft.json'
-
-
-def get_post_draft_config_file() -> Path:
-    """Get post-draft pipeline configuration file path."""
-    return CONFIG_DIR / 'pipeline_post_draft.json'
 
 
 # File patterns
@@ -586,6 +520,7 @@ def create_all_required_directories(year: int = None) -> None:
     ensure_dir_exists(SNAKE_DRAFT_DATASETS_DIR)
     ensure_dir_exists(UNIFIED_DATASET_DIR)
     ensure_dir_exists(RUNTIME_DASHBOARD_DIR)
+    ensure_dir_exists(REPO_DASHBOARD_DIR)
 
     # Year-based pre-draft directories
     ensure_dir_exists(get_pre_draft_run_root(year))
@@ -596,7 +531,7 @@ def create_all_required_directories(year: int = None) -> None:
     ensure_dir_exists(get_draft_strategy_dir(year))
     ensure_dir_exists(get_draft_model_outputs_dir(year))
     ensure_dir_exists(get_draft_strategy_comparison_dir(year))
-    ensure_dir_exists(get_pre_draft_dashboard_dir(year))
+    ensure_dir_exists(get_validation_dir(year))
 
     # Team directory
     ensure_dir_exists(get_teams_dir())

@@ -1202,7 +1202,7 @@ def generate_team_file_for_monte_carlo(draft_strategy: Dict[str, Any], output_di
             "Run the draft first or check team file location."
         )
     
-    # Copy the team file to post_draft/montecarlo_results for validation
+    # Copy the team file into the canonical Monte Carlo results directory for validation
     from ffbayes.utils.path_constants import get_monte_carlo_dir
     monte_carlo_dir = get_monte_carlo_dir(draft_year)
     monte_carlo_dir.mkdir(parents=True, exist_ok=True)

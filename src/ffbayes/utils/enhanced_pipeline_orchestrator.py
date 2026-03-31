@@ -443,12 +443,7 @@ class EnhancedPipelineOrchestrator:
             if hasattr(step, 'env') and step.env:
                 env.update(step.env)
             if 'FFBAYES_PIPELINE_PHASE' not in env:
-                step_text = f'{step.name} {step.description}'.lower()
-                env['FFBAYES_PIPELINE_PHASE'] = (
-                    'post_draft'
-                    if 'post_draft' in step_text or 'post-draft' in step_text
-                    else 'pre_draft'
-                )
+                env['FFBAYES_PIPELINE_PHASE'] = 'pre_draft'
 
             # Ensure conda environment is properly activated
             if 'CONDA_DEFAULT_ENV' in env and env['CONDA_DEFAULT_ENV'] == 'ffbayes':

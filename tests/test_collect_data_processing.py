@@ -197,13 +197,11 @@ def test_collect_nfl_data_reuses_cached_season_files(
     tmp_path, monkeypatch, capsys
 ):
     active_raw = tmp_path / 'active' / 'data' / 'raw' / 'season_datasets'
-    legacy_raw = tmp_path / 'legacy' / 'data' / 'raw' / 'season_datasets'
     active_processed = tmp_path / 'active' / 'data' / 'processed'
     active_raw.mkdir(parents=True, exist_ok=True)
-    legacy_raw.mkdir(parents=True, exist_ok=True)
     active_processed.mkdir(parents=True, exist_ok=True)
 
-    cached_file = legacy_raw / '2025season.csv'
+    cached_file = active_raw / '2025season.csv'
     pd.DataFrame(
         [
             {
@@ -226,9 +224,6 @@ def test_collect_nfl_data_reuses_cached_season_files(
     ).to_csv(cached_file, index=False)
 
     monkeypatch.setattr(collect_data, 'SEASON_DATASETS_DIR', active_raw)
-    monkeypatch.setattr(
-        collect_data, 'LEGACY_SEASON_DATASETS_DIR', legacy_raw
-    )
     monkeypatch.setattr(collect_data, 'RAW_DATA_DIR', tmp_path / 'active' / 'data' / 'raw')
     monkeypatch.setattr(
         collect_data, 'COMBINED_DATASETS_DIR', active_processed / 'combined_datasets'
@@ -284,5 +279,4 @@ def test_collect_nfl_data_reuses_cached_season_files(
 
     assert successful_years == [2025]
     assert (active_raw / '2025season.csv').exists()
-    assert 'Seeded cached season file for 2025' in output
     assert 'cached season file already exists' in output

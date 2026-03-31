@@ -57,10 +57,10 @@ class ConsolidatedHybridVisualizer:
             return False
         
         # Load Monte Carlo results if available
-        from ffbayes.utils.file_naming import find_monte_carlo_file_legacy
+        from ffbayes.utils.file_naming import find_monte_carlo_file
         from ffbayes.utils.training_config import get_monte_carlo_training_years
         training_years = get_monte_carlo_training_years()
-        mc_file = find_monte_carlo_file_legacy(current_year, training_years)
+        mc_file = find_monte_carlo_file(current_year, training_years)
         if mc_file and mc_file.exists():
             self.monte_carlo_data = pd.read_csv(mc_file, sep='\t')
             print(f"✅ Monte Carlo: {len(self.monte_carlo_data)} players")

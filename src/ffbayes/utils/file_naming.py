@@ -259,57 +259,32 @@ def get_team_aggregation_file_path(
     return output_dir / filename
 
 
-# Legacy filename patterns for backward compatibility
-LEGACY_MONTE_CARLO_PATTERNS = [
-    "{year}_projections_from_years{years}.tsv",
-    "monte_carlo_results_{year}.tsv",
-    "mc_results_{year}.tsv"
-]
-
-
-def find_monte_carlo_file_legacy(
+def find_monte_carlo_file(
     current_year: int,
     training_years: List[int]
 ) -> Optional[Path]:
     """
-    Find Monte Carlo results using legacy filename patterns.
-    
-    This function helps with backward compatibility while transitioning
-    to the new naming convention.
-    
+    Find the best available Monte Carlo results file in canonical locations.
+
     Args:
         current_year: The year being projected
         training_years: List of years used for training
-    
+
     Returns:
-        Path to legacy Monte Carlo file if found, None otherwise
+        Path to Monte Carlo file if found, None otherwise
     """
-    # Try the new naming convention first
-    new_path = get_monte_carlo_file_path(current_year, training_years)
-    if new_path.exists():
-        return new_path
-    
-    # Try legacy patterns
+    canonical_path = get_monte_carlo_file_path(current_year, training_years)
+    if canonical_path.exists():
+        return canonical_path
+
     from ffbayes.utils.path_constants import get_monte_carlo_dir
+
     output_dir = get_monte_carlo_dir(current_year)
     if not output_dir.exists():
         return None
-    
-    # Legacy pattern: 2025_projections_from_years[2023, 2024].tsv
-    legacy_pattern = f"{current_year}_projections_from_years{training_years}.tsv"
-    legacy_path = output_dir / legacy_pattern
-    
-    if legacy_path.exists():
-        return legacy_path
-    
-    # Try other legacy patterns
-    for pattern in LEGACY_MONTE_CARLO_PATTERNS:
-        try:
-            legacy_filename = pattern.format(year=current_year, years=training_years)
-            legacy_path = output_dir / legacy_filename
-            if legacy_path.exists():
-                return legacy_path
-        except (KeyError, ValueError):
-            continue
-    
-    return None
+
+    # Fall back to the newest canonical-style file in the montecarlo results dir.
+    matches = sorted(output_dir.glob(f'mc_projections_{current_year}_trained_on_*.tsv'))
+    if not matches:
+        return None
+    return max(matches, key=lambda path: path.stat().st_mtime)

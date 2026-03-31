@@ -119,11 +119,11 @@ def validate_draft_team():
                 print("   This could cause issues in Monte Carlo validation")
                 print("   Consider updating these names to match the database format")
             
-            # Save resolution log for reference (main results directory, no timestamp)
-            from ffbayes.utils.path_constants import get_post_draft_dir
+            # Save resolution log for reference (supported pre-draft diagnostics tree).
+            from ffbayes.utils.path_constants import get_validation_dir
+
             current_year = datetime.now().year
-            post_draft_dir = get_post_draft_dir(current_year)
-            log_path = post_draft_dir / "name_validation_log.csv"
+            log_path = get_validation_dir(current_year) / "name_validation_log.csv"
             resolver.save_resolution_log(resolution_log, str(log_path))
             
             # Don't save duplicate team file - Monte Carlo can use the original my_ff_teams file directly

@@ -752,7 +752,7 @@ def save_team_aggregation_results(
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
     
-    # Generate filename for consistency with post-draft visualizations
+    # Generate filename for consistency with the team-aggregation visualization scripts
     results_file = os.path.join(output_dir, 'team_analysis_results.json')
     
     # Save results as JSON
@@ -765,8 +765,8 @@ def save_team_aggregation_results(
 
 
 # REMOVED: generate_team_aggregation_visualizations function
-# This was creating useless duplicate charts that are much better handled by
-# the comprehensive post-draft visualization script
+# This was creating useless duplicate charts; visualization lives in
+# ffbayes.visualization.create_team_aggregation_visualizations.
 
 
 def main():
@@ -903,8 +903,8 @@ def main():
         
 
         
-        # Note: Visualizations are now handled by the comprehensive post-draft visualization script
-        # to avoid redundancy and provide better, more actionable charts
+        # Note: Visualizations are handled by the dedicated visualization module
+        # to avoid redundancy and keep analysis/reporting concerns separated.
         plot_files = []
         
         # Print summary

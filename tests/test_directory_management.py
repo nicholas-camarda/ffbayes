@@ -120,7 +120,13 @@ def test_manage_visualizations_publishes_selected_phase(tmp_path, monkeypatch):
         / 'dashboard'
         / str(current_year)
         / 'pre_draft'
-        / 'draft_strategy'
+        / 'dashboard_payload.json'
+    ).exists()
+    assert (
+        cloud_root
+        / 'dashboard'
+        / str(current_year)
+        / 'pre_draft'
         / f'dashboard_payload_{current_year}.json'
     ).exists()
     assert (cloud_root / 'docs' / 'images' / 'pre_draft_chart.png').exists()

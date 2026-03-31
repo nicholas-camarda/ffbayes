@@ -36,8 +36,9 @@ def get_output_directory():
         return base_dir, True
     else:
         # Production runs go to the organized year-based team_aggregation directory
-        from ffbayes.utils.path_constants import get_post_draft_plots_dir
-        base_dir = str(get_post_draft_plots_dir(current_year) / "team_aggregation")
+        from ffbayes.utils.path_constants import get_plots_dir
+
+        base_dir = str(get_plots_dir(current_year) / "team_aggregation")
         os.makedirs(base_dir, exist_ok=True)
         return base_dir, False
 
