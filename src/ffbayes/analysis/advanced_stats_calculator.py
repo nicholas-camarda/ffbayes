@@ -123,7 +123,7 @@ def _calculate_floor_ceiling_spread(fantasy_points: pd.Series) -> float:
         p90 = fantasy_points.quantile(0.9)
         p10 = fantasy_points.quantile(0.1)
         return p90 - p10
-    except:
+    except Exception:
         return np.nan
 
 

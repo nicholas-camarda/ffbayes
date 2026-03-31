@@ -4,17 +4,14 @@ Base plot classes for fantasy football visualization with common styling and err
 Provides abstract base classes for different plot types with consistent design and validation.
 """
 
-import os
 import logging
+import os
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict, Any, Optional, Union, List
-import numpy as np
+from typing import Any, Dict, List, Optional, Union
+
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import plotly.colors as colors
-
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

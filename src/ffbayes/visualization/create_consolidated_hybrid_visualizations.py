@@ -13,12 +13,12 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
+# Import centralized position colors
+from ffbayes.visualization.position_colors import POSITION_COLORS, get_legend_elements
+
 # Set style
 plt.style.use('default')
 sns.set_palette("husl")
-
-# Import centralized position colors
-from ffbayes.visualization.position_colors import POSITION_COLORS, get_legend_elements
 
 
 class ConsolidatedHybridVisualizer:

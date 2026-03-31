@@ -53,15 +53,15 @@ class DraftStrategyComparison:
             self.vor_file = os.getenv('VOR_FILE')
             if not self.vor_file:
                 if QUICK_TEST:
-                    from ffbayes.utils.path_constants import \
-                        get_pre_draft_plots_dir
+                    from ffbayes.utils.path_constants import get_pre_draft_plots_dir
                     self.vor_file = str(get_pre_draft_plots_dir(datetime.now().year) / 'vor_strategy' / f'test_vor_{datetime.now().year}.csv')
                     print(f"   QUICK_TEST mode - using test VOR file: {self.vor_file}")
                 else:
                     # Production mode - try to find VOR file in organized pre_draft structure
                     current_year = datetime.now().year
-                    from ffbayes.utils.vor_filename_generator import \
-                        get_vor_strategy_path
+                    from ffbayes.utils.vor_filename_generator import (
+                        get_vor_strategy_path,
+                    )
                     vor_file = get_vor_strategy_path(current_year)
                     if os.path.exists(vor_file):
                         self.vor_file = vor_file

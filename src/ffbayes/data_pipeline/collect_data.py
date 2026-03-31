@@ -8,9 +8,9 @@ Collects raw NFL data from multiple sources with sophisticated processing.
 # Import progress monitoring utilities
 import json
 import os
+import shutil
 import signal
 import time
-import shutil
 from datetime import datetime
 from pathlib import Path
 

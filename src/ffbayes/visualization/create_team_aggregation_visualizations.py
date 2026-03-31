@@ -436,7 +436,7 @@ def create_comparison_insights_chart(results, output_dir, is_test_mode):
         try:
             with open(test_team_file, 'r') as f:
                 team_players = [line.strip().split('\t')[0] for line in f if line.strip() and not line.startswith('Player')]
-        except:
+        except OSError:
             team_players = []
     
     # Create Bayesian team projection using available predictions

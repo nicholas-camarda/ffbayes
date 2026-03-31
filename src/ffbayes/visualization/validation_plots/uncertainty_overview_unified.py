@@ -6,7 +6,6 @@ Panels:
 - Histogram of consistency_score_latest by position (risk proxy)
 - Scatter of consistency_score_latest vs floor_ceiling_spread_latest (validation proxy)
 """
-from typing import Dict
 
 import pandas as pd
 import plotly.graph_objects as go

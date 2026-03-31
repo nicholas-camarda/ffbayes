@@ -13,6 +13,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from ffbayes.utils.path_constants import get_user_config_file
+
 from .base_plots import ValidationPlot
 
 
@@ -376,7 +377,6 @@ class ModelPerformanceDashboard(ValidationPlot):
     def _plot_value_by_round(self, fig: go.Figure, processed_data: Dict, row: int, col: int):
         """Heatmap of mean VOR by round and position (using league size)."""
         import json
-        from pathlib import Path
         vor_df = processed_data.get('vor_raw_data')
         if vor_df is None or vor_df.empty:
             return

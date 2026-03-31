@@ -455,7 +455,9 @@ def main():
             create_hybrid_dataset,
             load_hybrid_data_sources,
         )
-        from ffbayes.draft_strategy.risk_adjusted_rankings import create_risk_adjusted_rankings
+        from ffbayes.draft_strategy.risk_adjusted_rankings import (
+            create_risk_adjusted_rankings,
+        )
 
         # Load and create risk-adjusted data
         vor_data, bayesian_data = load_hybrid_data_sources()

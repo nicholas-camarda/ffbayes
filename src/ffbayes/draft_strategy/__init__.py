@@ -11,9 +11,10 @@ from .draft_decision_strategy import (
     TeamConstructionOptimizer,
     TierBasedStrategy,
     UncertaintyAwareSelector,
+)
+from .draft_decision_strategy import (
     main as draft_decision_main,
 )
-
 from .traditional_vor_draft import main as traditional_vor_main
 
 __all__ = [

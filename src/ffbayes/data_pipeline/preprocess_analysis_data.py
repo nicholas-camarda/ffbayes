@@ -10,7 +10,6 @@ import os
 from pathlib import Path
 
 # Add scripts/utils to path for progress monitoring
-import numpy as np
 import pandas as pd
 
 try:

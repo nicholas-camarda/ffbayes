@@ -12,6 +12,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from ffbayes.utils.path_constants import get_user_config_file
+
 from .base_plots import DraftStrategyPlot
 
 

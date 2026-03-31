@@ -30,7 +30,9 @@ from ffbayes.utils.strategy_path_generator import (
 )
 from ffbayes.visualization.base_plots import ValidationPlot
 from ffbayes.visualization.model_performance_dashboard import ModelPerformanceDashboard
-from ffbayes.visualization.uncertainty_overview_unified import UncertaintyOverviewUnified
+from ffbayes.visualization.uncertainty_overview_unified import (
+    UncertaintyOverviewUnified,
+)
 
 
 def get_output_directory():

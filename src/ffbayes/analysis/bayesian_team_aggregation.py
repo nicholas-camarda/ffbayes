@@ -827,8 +827,9 @@ def main():
         if 'Team' not in team_df.columns:
             print("   🔎 Inferring Team column from unified dataset...")
             try:
-                from ffbayes.data_pipeline.unified_data_loader import \
-                    load_unified_dataset
+                from ffbayes.data_pipeline.unified_data_loader import (
+                    load_unified_dataset,
+                )
                 unified_df = load_unified_dataset()
                 latest_team = (unified_df.sort_values(['Name', 'Season'])
                                         .groupby('Name')

@@ -65,7 +65,7 @@ def create_draft_cheatsheet(strategy_data, output_dir):
                 try:
                     if len(str(cell.value)) > max_length:
                         max_length = len(str(cell.value))
-                except:
+                except Exception:
                     pass
             adjusted_width = min(max_length + 2, 50)
             worksheet.column_dimensions[column_letter].width = adjusted_width
@@ -148,8 +148,7 @@ def main():
     current_year = datetime.now().year
     
     # Input: JSON strategy file (from pre_draft/draft_strategy)
-    from ffbayes.utils.strategy_path_generator import \
-        get_bayesian_strategy_path
+    from ffbayes.utils.strategy_path_generator import get_bayesian_strategy_path
     json_path = get_bayesian_strategy_path()
     
     # Output: Human-readable files in pre_draft folder

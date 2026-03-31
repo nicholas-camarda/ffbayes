@@ -394,7 +394,7 @@ def apply_vor_formatting(worksheet: openpyxl.worksheet.worksheet.Worksheet) -> N
             try:
                 if len(str(cell.value)) > max_length:
                     max_length = len(str(cell.value))
-            except:
+            except Exception:
                 pass
         
         adjusted_width = min(max_length + 2, 50)
@@ -440,7 +440,7 @@ def apply_guide_formatting(worksheet: openpyxl.worksheet.worksheet.Worksheet) ->
             try:
                 if len(str(cell.value)) > max_length:
                     max_length = len(str(cell.value))
-            except:
+            except Exception:
                 pass
         
         adjusted_width = min(max_length + 2, 60)
@@ -555,7 +555,9 @@ def create_hybrid_excel_file(risk_adjusted_data: pd.DataFrame, output_file_path:
         
         # Add pick-by-pick recommendations if provided
         if recommendations is not None:
-            from ffbayes.draft_strategy.pick_by_pick_strategy import create_pick_by_pick_sheet
+            from ffbayes.draft_strategy.pick_by_pick_strategy import (
+                create_pick_by_pick_sheet,
+            )
             create_pick_by_pick_sheet(wb, risk_adjusted_data)
         
         # Save workbook
@@ -579,7 +581,9 @@ def main():
             create_hybrid_dataset,
             load_hybrid_data_sources,
         )
-        from ffbayes.draft_strategy.risk_adjusted_rankings import create_risk_adjusted_rankings
+        from ffbayes.draft_strategy.risk_adjusted_rankings import (
+            create_risk_adjusted_rankings,
+        )
 
         # Load and create risk-adjusted data
         vor_data, bayesian_data = load_hybrid_data_sources()

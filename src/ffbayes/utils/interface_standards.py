@@ -73,7 +73,11 @@ def get_standard_paths(project_root: Optional[Path] = None) -> StandardPaths:
 		results_root = root / "results"
 		datasets_root = root / "datasets"
 	else:
-		from ffbayes.utils.path_constants import get_results_dir, get_plots_dir, DATASETS_DIR
+		from ffbayes.utils.path_constants import (
+			DATASETS_DIR,
+			get_plots_dir,
+			get_results_dir,
+		)
 		current_year = None
 		plots_root = get_plots_dir(current_year)
 		results_root = get_results_dir(current_year)

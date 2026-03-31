@@ -9,7 +9,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Sequence
 
-
 DEFAULT_ANALYSIS_WINDOW_SIZE = 5
 
 

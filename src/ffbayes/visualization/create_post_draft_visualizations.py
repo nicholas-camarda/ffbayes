@@ -12,13 +12,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
+# Import centralized position colors
+from ffbayes.visualization.position_colors import POSITION_COLORS as POS_PALETTE
+
 # Set style for better-looking plots
 plt.style.use('default')
 sns.set_palette("husl")
-
-# Import centralized position colors
-from ffbayes.visualization.position_colors import \
-    POSITION_COLORS as POS_PALETTE
 
 
 def get_output_directory():
@@ -52,8 +51,7 @@ def load_draft_team():
     if 'Team' not in team_df.columns:
         print("🔎 Inferring Team column from unified dataset...")
         try:
-            from ffbayes.data_pipeline.unified_data_loader import \
-                load_unified_dataset
+            from ffbayes.data_pipeline.unified_data_loader import load_unified_dataset
             unified_df = load_unified_dataset()
             # Use the most recent team per player
             latest_team = (unified_df.sort_values(['Name', 'Season'])

@@ -225,7 +225,6 @@ def manage_visualizations(
     from ffbayes.utils.path_constants import (
         get_cloud_pre_draft_dashboard_dir,
         get_pre_draft_artifacts_dir,
-        get_pre_draft_diagnostics_dir,
     )
 
     published_result_files = []
