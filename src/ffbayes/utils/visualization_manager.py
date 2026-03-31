@@ -224,7 +224,8 @@ def manage_visualizations(
 
     from ffbayes.utils.path_constants import (
         get_cloud_pre_draft_dashboard_dir,
-        get_pre_draft_artifacts_dir,
+        get_dashboard_html_path,
+        get_dashboard_payload_path,
     )
 
     published_result_files = []
@@ -241,11 +242,34 @@ def manage_visualizations(
         published_result_files.extend(_copy_tree(runtime_result_dir, cloud_result_dir))
         published_plot_files.extend(_copy_tree(runtime_plot_dir, cloud_plot_dir))
 
-        runtime_dashboard_dir = get_pre_draft_artifacts_dir(current_year)
         cloud_dashboard_dir = get_cloud_pre_draft_dashboard_dir(current_year)
-        published_dashboard_files.extend(
-            _copy_tree(runtime_dashboard_dir, cloud_dashboard_dir)
-        )
+        # Dashboard publication is intentionally narrow: mirror only the HTML and
+        # payload, not the entire artifacts tree.
+        dashboard_html = get_dashboard_html_path(current_year)
+        dashboard_payload = get_dashboard_payload_path(current_year)
+        cloud_dashboard_dir.mkdir(parents=True, exist_ok=True)
+
+        if dashboard_html.exists():
+            index_target = cloud_dashboard_dir / 'index.html'
+            if dashboard_html.resolve() != index_target.resolve():
+                shutil.copy2(dashboard_html, index_target)
+            published_dashboard_files.append(str(index_target))
+
+            year_target = cloud_dashboard_dir / dashboard_html.name
+            if dashboard_html.resolve() != year_target.resolve():
+                shutil.copy2(dashboard_html, year_target)
+            published_dashboard_files.append(str(year_target))
+
+        if dashboard_payload.exists():
+            payload_target = cloud_dashboard_dir / 'dashboard_payload.json'
+            if dashboard_payload.resolve() != payload_target.resolve():
+                shutil.copy2(dashboard_payload, payload_target)
+            published_dashboard_files.append(str(payload_target))
+
+            year_payload_target = cloud_dashboard_dir / dashboard_payload.name
+            if dashboard_payload.resolve() != year_payload_target.resolve():
+                shutil.copy2(dashboard_payload, year_payload_target)
+            published_dashboard_files.append(str(year_payload_target))
 
     # Copy rendered PNGs into the published docs tree.
     docs_image_files = copy_visualizations_to_docs(current_year, phase)

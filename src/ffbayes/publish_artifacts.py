@@ -17,17 +17,11 @@ def main() -> int:
     parser.add_argument(
         '--year', type=int, default=datetime.now().year, help='Season year to publish'
     )
-    parser.add_argument(
-        '--phase',
-        choices=['pre_draft'],
-        default='pre_draft',
-        help='Which supported phase artifacts to publish',
-    )
     args = parser.parse_args()
 
-    results = manage_visualizations(args.year, phase=args.phase)
+    results = manage_visualizations(args.year, phase='pre_draft')
     print(
-        f'✅ Published {len(results["copied_files"])} files for {args.year} ({args.phase})'
+        f'✅ Published {len(results["copied_files"])} files for {args.year} (pre_draft)'
     )
     return 0
 

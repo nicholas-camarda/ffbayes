@@ -8,7 +8,7 @@ Example paths below point at the runtime tree (`~/ProjectsRuntime/ffbayes/...`).
 
 ### **What You Get: Complete Draft Strategy**
 
-When you run `python -m ffbayes.run_pipeline_split pre_draft`, you receive:
+When you run `ffbayes pre-draft`, you receive:
 
 #### **1. 📊 Draft Cheatsheet (Excel)**
 **File**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
@@ -75,14 +75,14 @@ Pick 31: Travis Kelce | Mark Andrews
 
 ---
 
-## 🎯 **Post-Draft Pipeline Outputs**
+## 🎯 **Optional Analyses (After Your Draft)**
 
 ### **What You Get: Team Analysis & Season Projections**
 
-Post-draft workflow is currently **legacy**: the split runner only supports `pre_draft`. If you still want these outputs, run the relevant module entry points directly (for example `ffbayes agg`, `ffbayes mc`, etc.).
+These are not part of the split runner. If you want them, run the module entry points directly (for example `ffbayes agg`, `ffbayes mc`, `ffbayes compare`, `ffbayes viz`).
 
 #### **1. 🎯 Team Aggregation Analysis**
-**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/post_draft/results/team_aggregation/team_analysis_results.json`
+**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/team_aggregation/team_analysis_results.json`
 
 ```json
 {
@@ -120,7 +120,7 @@ Post-draft workflow is currently **legacy**: the split runner only supports `pre
 ```
 
 #### **2. 📊 Monte Carlo Season Projections**
-**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/post_draft/results/montecarlo_results/mc_projections_<year>_trained_on_2021-2025.tsv`
+**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/montecarlo_results/mc_projections_<year>_trained_on_2021-2025.tsv`
 
 | Player | Position | Mean | Std | Min | Max | 10th % | 90th % |
 |--------|----------|------|-----|-----|-----|---------|---------|
@@ -130,7 +130,7 @@ Post-draft workflow is currently **legacy**: the split runner only supports `pre
 | Travis Kelce | TE | 14.8 | 5.2 | 9.6 | 20.0 | 12.2 | 17.4 |
 
 #### **3. 🔍 Model Comparison Results**
-**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/post_draft/results/monte_carlo_validation/mc_validation_results.json`
+**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/model_evaluation/mc_validation_results.json`
 
 ```json
 {
@@ -150,8 +150,8 @@ Post-draft workflow is currently **legacy**: the split runner only supports `pre
 }
 ```
 
-#### **4. 📈 Post-Draft Visualizations**
-**Files**: `~/ProjectsRuntime/ffbayes/runs/<year>/post_draft/plots/`
+#### **4. 📈 Visualizations**
+**Files**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/diagnostics/`
 
 - **Team Score Distribution**: Weekly score expectations
 - **Position Analysis**: How each position contributes
@@ -180,7 +180,7 @@ Post-draft workflow is currently **legacy**: the split runner only supports `pre
 - **When**: Need to compare players at same position
 - **What to do**: Sort by projected points, consider uncertainty
 
-### **Post-Draft: During the Season**
+### **After Your Draft (Optional)**
 
 #### **1. Set Weekly Expectations**
 - **Expected Score**: Your team should score ~207.7 points per week
@@ -223,7 +223,7 @@ Round 10 (Pick 91): Brandin Cooks, WR
 - **Pick 30**: WR depth, target WR1 (Lamb)
 - **Pick 31**: TE premium, elite option (Kelce)
 
-#### **Post-Draft Analysis (What You Learned)**
+#### **After-Draft Analysis (What You Learned)**
 - **Team Projection**: 207.7 ± 29.8 points per week
 - **Strengths**: Elite QB, strong WR corps
 - **Weaknesses**: RB depth, backup TE
@@ -278,7 +278,7 @@ python -m ffbayes.analysis.montecarlo_historical_ff
 python -m ffbayes.visualization.create_pre_draft_visualizations
 
 # Mirror selected runtime outputs into cloud storage
-python -m ffbayes.publish_artifacts --year <year> --phase pre_draft
+python -m ffbayes.publish_artifacts --year <year>
 ```
 
 ---
@@ -287,7 +287,7 @@ python -m ffbayes.publish_artifacts --year <year> --phase pre_draft
 
 ### **What to Expect**
 - **Pre-Draft Pipeline**: ~10 minutes end-to-end
-- **Post-Draft Pipeline**: ~5 minutes for team analysis
+- **After-Draft Analysis**: ~5 minutes for team analysis
 - **File Sizes**: 
   - Excel outputs: 100KB-500KB
   - JSON data: 1-5MB
@@ -304,12 +304,12 @@ python -m ffbayes.publish_artifacts --year <year> --phase pre_draft
 
 1. **Run Pre-Draft Pipeline**: Get your complete draft strategy
 2. **Use During Draft**: Follow the cheatsheet and rankings
-3. **Run Post-Draft Pipeline**: Analyze your drafted team
+3. **Run After-Draft Analysis**: Analyze your drafted team
 4. **Use During Season**: Make informed start/sit and trade decisions
 
 **Ready to get started? Run:**
 ```bash
-python -m ffbayes.run_pipeline_split pre_draft
+ffbayes pre-draft
 ```
 
 ---

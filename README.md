@@ -50,7 +50,7 @@ ffbayes compare-strategies
 ffbayes bayesian-vor
 
 # Publish runtime outputs to the cloud mirror
-ffbayes publish --year 2025 --phase pre_draft
+ffbayes publish --year 2025
 
 # Stage the dashboard for GitHub Pages
 ffbayes publish-pages --year 2025
@@ -67,7 +67,7 @@ ffbayes publish-pages --year 2025
 - `ffbayes bayesian-vor`: compares the Bayesian outputs with traditional VOR rankings.
 - `ffbayes publish`: copies selected runtime artifacts into the cloud mirror for long-term storage.
 - `ffbayes publish-pages`: stages the current dashboard HTML and payload into `site/` for GitHub Pages.
-- `ffbayes split pre_draft`: runs the supported split pipeline directly if you want to bypass the convenience shortcuts.
+- `ffbayes split`: runs the supported split pipeline directly if you want to bypass the convenience shortcuts.
 - `ffbayes pipeline`: runs the full end-to-end pipeline in one command.
 
 The module-level commands still work too, but the top-level CLI is the supported entry point.
@@ -82,11 +82,12 @@ Maintenance note: if nflverse changes the underlying Python loaders again, keep 
 - 📊 **Draft Board Workbook**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
 - 🧠 **Dashboard Payload**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
 - 🌐 **HTML Dashboard**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
+- ⭐ **Convenience Dashboard Shortcut (repo root)**: `dashboard/index.html`
 - 🌍 **GitHub Pages Dashboard**: `site/index.html`
 - 📋 **Decision Backtest**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
 If you want the published mirror, run:
 ```bash
-ffbayes publish --year <year> --phase pre_draft
+ffbayes publish --year <year>
 ```
 
 If you want the dashboard hosted on GitHub Pages, run:
@@ -108,7 +109,9 @@ are just browsing the repo or you have it cloned.
 
 ### Local Users (Repo Cloned)
 
-- Run `ffbayes draft-strategy ...` and then open the shallow, stable runtime dashboard:
+- Run `ffbayes draft-strategy ...` and then open the repo-root shortcut:
+  `dashboard/index.html`
+- (Also available) the shallow, stable runtime dashboard:
   `~/ProjectsRuntime/ffbayes/dashboard/index.html`
 - If you prefer a repo-local stable path (useful for GitHub Pages or a bookmark inside the repo),
   run `ffbayes publish-pages --year <year>` and then open `site/index.html`.
@@ -196,7 +199,6 @@ Published preview images: `~/Library/CloudStorage/OneDrive-Personal/SideProjects
 ### **Pipeline Configuration**
 - `config/pipeline_config.json` defines the full end-to-end pipeline.
 - `config/pipeline_pre_draft.json` drives the split runner.
-- The split runner forwards the active phase through `FFBAYES_PIPELINE_PHASE`.
 
 The current pipeline steps are:
 1. Data collection
@@ -208,9 +210,6 @@ The current pipeline steps are:
 7. Draft decision strategy
 8. Draft strategy comparison
 9. Pre-draft visualizations
-10. Team aggregation
-11. Monte Carlo validation
-12. Post-draft visualizations
 
 ---
 
@@ -254,7 +253,7 @@ Interpretation guide:
 
 ### **Publication**
 - Runtime outputs stay local by default.
-- To mirror selected results into the cloud workspace, run `ffbayes publish --year <year> --phase pre_draft`.
+- To mirror selected results into the cloud workspace, run `ffbayes publish --year <year>`.
 
 ---
 
@@ -272,7 +271,7 @@ ffbayes pre-draft
 ffbayes pre-draft
 ```
 
-### **Post-Draft Analysis**
+### **After-Draft Analysis**
 ```bash
 # The supported CLI surface stops at the pre-draft command center.
 ```
@@ -285,7 +284,7 @@ ffbayes draft-strategy --draft-position 10 --league-size 10 --risk-tolerance med
 ffbayes draft-backtest
 ffbayes compare-strategies
 ffbayes bayesian-vor
-ffbayes publish --year 2025 --phase pre_draft
+ffbayes publish --year 2025
 ffbayes publish-pages --year 2025
 ```
 
@@ -307,10 +306,6 @@ ffbayes publish-pages --year 2025
 - **Problem**: Critical step failed
 - **Solution**: Check logs in `~/ProjectsRuntime/ffbayes/logs/` for detailed error information
 - **Check**: Verify your draft-board inputs and league settings before rerunning the pre-draft command center
-
-#### **"ffbayes split requires a phase argument"**
-- **Problem**: The explicit split runner needs a phase name
-- **Solution**: Run `ffbayes split pre_draft`
 
 #### **"Missing required columns"**
 - **Problem**: Team file has wrong column names

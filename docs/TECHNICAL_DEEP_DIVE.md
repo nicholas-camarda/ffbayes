@@ -337,7 +337,7 @@ create_unified_dataset → hybrid_mc_analysis → draft_decision_strategy
 create_human_readable_strategy → draft_strategy_comparison → pre_draft_visualizations
 ```
 
-Publication is intentionally outside the pipeline graph. Use `python -m ffbayes.publish_artifacts --year <year> --phase pre_draft` or `--phase post_draft` to mirror selected runtime outputs into the cloud workspace.
+Publication is intentionally outside the pipeline graph. Use `python -m ffbayes.publish_artifacts --year <year>` (or `ffbayes publish --year <year>`) to mirror supported runtime outputs into the cloud workspace.
 
 ### **Error Handling Philosophy**
 - **Fail Fast**: Pipeline breaks immediately on critical errors

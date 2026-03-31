@@ -2815,11 +2815,12 @@ def _stage_runtime_dashboard_shortcuts(
     Canonical, versioned artifacts stay under:
     `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/`.
 
-    For convenience, we also stage a stable path:
-    `~/ProjectsRuntime/ffbayes/dashboard/index.html`.
+    For convenience, we also stage stable entrypoints:
+    - runtime root: `~/ProjectsRuntime/ffbayes/dashboard/index.html`
+    - repo root (if writable): `<repo>/dashboard/index.html`
     """
 
-    from ffbayes.utils.path_constants import get_runtime_root
+    from ffbayes.utils.path_constants import get_project_root, get_runtime_root
 
     try:
         runtime_root = get_runtime_root()
@@ -2842,11 +2843,40 @@ def _stage_runtime_dashboard_shortcuts(
         if payload_path.exists() and payload_path.resolve() != year_payload.resolve():
             shutil.copy2(payload_path, year_payload)
 
-        return {
+        shortcuts: dict[str, Path] = {
             'runtime_dashboard_dir': dashboard_dir,
             'runtime_dashboard_index': index_path,
             'runtime_dashboard_payload': payload_target,
         }
+
+        project_root = get_project_root()
+        repo_dashboard_dir = project_root / 'dashboard'
+        repo_dashboard_dir.mkdir(parents=True, exist_ok=True)
+
+        repo_index = repo_dashboard_dir / 'index.html'
+        if html_path.exists() and html_path.resolve() != repo_index.resolve():
+            shutil.copy2(html_path, repo_index)
+
+        repo_payload = repo_dashboard_dir / 'dashboard_payload.json'
+        if payload_path.exists() and payload_path.resolve() != repo_payload.resolve():
+            shutil.copy2(payload_path, repo_payload)
+
+        repo_year_html = repo_dashboard_dir / f'draft_board_{year}.html'
+        if html_path.exists() and html_path.resolve() != repo_year_html.resolve():
+            shutil.copy2(html_path, repo_year_html)
+
+        repo_year_payload = repo_dashboard_dir / f'dashboard_payload_{year}.json'
+        if payload_path.exists() and payload_path.resolve() != repo_year_payload.resolve():
+            shutil.copy2(payload_path, repo_year_payload)
+
+        shortcuts.update(
+            {
+                'repo_dashboard_dir': repo_dashboard_dir,
+                'repo_dashboard_index': repo_index,
+                'repo_dashboard_payload': repo_payload,
+            }
+        )
+        return shortcuts
     except OSError:
         # Convenience-only; do not fail the main artifact export.
         return {}
