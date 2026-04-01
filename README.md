@@ -2,11 +2,12 @@
 
 A sophisticated fantasy football analytics system that combines Monte Carlo simulations, Bayesian uncertainty modeling, and draft-utility decision modeling to generate draft-board recommendations for draft day.
 
-## 🌐 **Live Example Dashboard**
+## 🌐 **Live Dashboard**
 
-- **Open the staged GitHub Pages dashboard**: [nicholas-camarda.github.io/ffbayes](https://nicholas-camarda.github.io/ffbayes/)
-- **Repo source for the Pages build**: `site/index.html`
-- **Runtime fallback note**: if `~/ProjectsRuntime/ffbayes` is not writable, FFBayes automatically writes to repo-local `.ffbayes_runtime/`
+### [Open the live draft dashboard](https://nicholas-camarda.github.io/ffbayes/)
+
+- This is the actual user-facing dashboard deployed from `site/index.html`.
+- Runtime fallback note: if `~/ProjectsRuntime/ffbayes` is not writable, FFBayes automatically writes to repo-local `.ffbayes_runtime/`.
 
 ## 🚀 **Quick Start**
 
@@ -58,7 +59,7 @@ ffbayes bayesian-vor
 # Publish runtime outputs to the cloud mirror
 ffbayes publish --year 2025
 
-# Stage the dashboard for GitHub Pages
+# Deploy the dashboard to GitHub Pages
 ffbayes publish-pages --year 2025
 
 # After committing/pushing `site/`, open the live dashboard
@@ -92,7 +93,7 @@ Maintenance note: if nflverse changes the underlying Python loaders again, keep 
 - 🧠 **Dashboard Payload**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
 - 🌐 **HTML Dashboard**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
 - ⭐ **Convenience Dashboard Shortcut (repo root)**: `dashboard/index.html`
-- 🌍 **GitHub Pages Dashboard**: [nicholas-camarda.github.io/ffbayes](https://nicholas-camarda.github.io/ffbayes/) backed by `site/index.html`
+- 🌍 **Live Dashboard**: [nicholas-camarda.github.io/ffbayes](https://nicholas-camarda.github.io/ffbayes/) deployed from `site/index.html`
 - 📋 **Decision Backtest**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
 If you want the published mirror, run:
 ```bash
