@@ -4,6 +4,7 @@ Welcome to the FFBayes documentation! This guide helps you find the right inform
 
 Generated outputs are written to `~/ProjectsRuntime/ffbayes` during execution. Published copies are mirrored to `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes` only when you run `ffbayes publish` (or `ffbayes-publish`).
 The GitHub Pages dashboard is staged into `site/index.html` with `ffbayes publish-pages` (or `ffbayes-publish-pages`).
+If you need a non-default runtime location, set `FFBAYES_RUNTIME_ROOT` explicitly.
 
 ## 📚 **Documentation Guide**
 

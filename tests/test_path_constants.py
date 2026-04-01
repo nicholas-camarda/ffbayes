@@ -12,21 +12,8 @@ def test_get_runtime_root_honors_explicit_env_override(monkeypatch, tmp_path):
     assert path_constants.get_runtime_root() == override.resolve()
 
 
-def test_get_runtime_root_falls_back_when_default_is_unwritable(
-    monkeypatch, tmp_path
-):
+def test_get_runtime_root_defaults_to_projects_runtime(monkeypatch):
     monkeypatch.delenv('FFBAYES_RUNTIME_ROOT', raising=False)
-    monkeypatch.setattr(path_constants, '_path_is_writable', lambda _: False)
-
-    fallback = path_constants.get_runtime_root()
-    expected = Path(path_constants.__file__).resolve().parents[3] / '.ffbayes_runtime'
-
-    assert fallback == expected
-
-
-def test_get_runtime_root_prefers_default_when_writable(monkeypatch, tmp_path):
-    monkeypatch.delenv('FFBAYES_RUNTIME_ROOT', raising=False)
-    monkeypatch.setattr(path_constants, '_path_is_writable', lambda _: True)
 
     expected = Path.home() / 'ProjectsRuntime' / 'ffbayes'
 
@@ -35,7 +22,6 @@ def test_get_runtime_root_prefers_default_when_writable(monkeypatch, tmp_path):
 
 def test_pre_draft_paths_live_under_artifacts_and_diagnostics(monkeypatch, tmp_path):
     monkeypatch.delenv('FFBAYES_RUNTIME_ROOT', raising=False)
-    monkeypatch.setattr(path_constants, '_path_is_writable', lambda _: True)
     monkeypatch.setattr(path_constants, 'RUNTIME_DIR', tmp_path / 'runtime', raising=False)
     monkeypatch.setattr(path_constants, 'BASE_DIR', tmp_path / 'project', raising=False)
 
@@ -68,11 +54,16 @@ def test_get_phase_name_rejects_non_pre_draft(monkeypatch):
         path_constants.get_phase_name()
 
 
-def test_get_cloud_root_falls_back_when_default_is_unwritable(monkeypatch):
+def test_get_cloud_root_defaults_to_side_projects(monkeypatch):
     monkeypatch.delenv('FFBAYES_CLOUD_ROOT', raising=False)
-    monkeypatch.setattr(path_constants, '_path_is_writable', lambda _: False)
 
-    fallback = path_constants.get_cloud_root()
-    expected = Path(path_constants.__file__).resolve().parents[3] / '.ffbayes_cloud'
+    expected = (
+        Path.home()
+        / 'Library'
+        / 'CloudStorage'
+        / 'OneDrive-Personal'
+        / 'SideProjects'
+        / 'ffbayes'
+    )
 
-    assert fallback == expected
+    assert path_constants.get_cloud_root() == expected

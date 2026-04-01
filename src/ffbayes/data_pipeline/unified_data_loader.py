@@ -10,7 +10,6 @@ Usage:
 """
 
 
-from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -19,54 +18,22 @@ import pandas as pd
 def load_unified_dataset(data_directory=None):
     """Load the unified dataset created by create_unified_dataset.py."""
     from ffbayes.utils.path_constants import (
-        get_pre_draft_dir,
         get_unified_dataset_path,
     )
-    workspace_runtime_root = Path(__file__).resolve().parents[3] / '.ffbayes_runtime'
 
     if data_directory in (None, '', 'datasets'):
         json_path = get_unified_dataset_path()
         csv_path = json_path.with_suffix('.csv')
-        fallback_json_path = (
-            get_pre_draft_dir(datetime.now().year) / 'unified_dataset' / 'unified_dataset.json'
-        )
-        fallback_csv_path = fallback_json_path.with_suffix('.csv')
-        workspace_json_path = (
-            workspace_runtime_root
-            / 'data'
-            / 'processed'
-            / 'unified_dataset'
-            / 'unified_dataset.json'
-        )
-        workspace_csv_path = workspace_json_path.with_suffix('.csv')
     else:
         candidate = Path(data_directory).expanduser()
         if candidate.is_dir():
             json_path = candidate / 'unified_dataset' / 'unified_dataset.json'
             csv_path = candidate / 'unified_dataset' / 'unified_dataset.csv'
-            fallback_json_path = json_path
-            fallback_csv_path = csv_path
-            workspace_json_path = json_path
-            workspace_csv_path = csv_path
         else:
             json_path = candidate
             csv_path = candidate.with_suffix('.csv')
-            fallback_json_path = json_path
-            fallback_csv_path = csv_path
-            workspace_json_path = json_path
-            workspace_csv_path = csv_path
 
     dataset_path = csv_path if csv_path.exists() else json_path
-    if not dataset_path.exists():
-        dataset_path = (
-            fallback_csv_path if fallback_csv_path.exists() else fallback_json_path
-        )
-    if not dataset_path.exists():
-        dataset_path = (
-            workspace_csv_path
-            if workspace_csv_path.exists()
-            else workspace_json_path
-        )
 
     if not dataset_path.exists():
         raise FileNotFoundError(

@@ -1203,31 +1203,13 @@ def create_unified_dataset(data_directory=None):
 
         output_path = get_unified_dataset_path()
         csv_path = get_unified_dataset_csv_path()
-        workspace_runtime_root = Path(__file__).resolve().parents[3] / '.ffbayes_runtime'
-        fallback_dir = workspace_runtime_root / 'data' / 'processed' / 'unified_dataset'
-        fallback_csv_path = fallback_dir / 'unified_dataset.csv'
-        fallback_json_path = fallback_dir / 'unified_dataset.json'
-
-        write_target_csv = csv_path
-        write_target_json = output_path
-        try:
-            data.to_csv(write_target_csv, index=False)
-            data.to_json(write_target_json, orient='records')
-        except PermissionError as exc:
-            logger.warning(
-                'Primary unified dataset paths are not writable; falling back to %s',
-                fallback_dir,
-            )
-            fallback_dir.mkdir(parents=True, exist_ok=True)
-            data.to_csv(fallback_csv_path, index=False)
-            data.to_json(fallback_json_path, orient='records')
-            write_target_csv = fallback_csv_path
-            write_target_json = fallback_json_path
+        data.to_csv(csv_path, index=False)
+        data.to_json(output_path, orient='records')
         logger.info(
             'Phase write_outputs completed in %.1fs: csv=%s json=%s',
             time.perf_counter() - phase_start,
-            write_target_csv,
-            write_target_json,
+            csv_path,
+            output_path,
         )
         logger.info('✅ Unified dataset saved in compact machine-readable formats')
         logger.info('✅ Current-year VOR source: %s', vor_file_path)

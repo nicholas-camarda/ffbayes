@@ -17,68 +17,37 @@ def get_project_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
-def _path_is_writable(path: Path) -> bool:
-    """Return True when the nearest existing parent directory is writable.
-
-    This intentionally avoids creating directories or writing probe files at
-    import time. Callers that need guaranteed writability should rely on
-    `ensure_dir_exists()` and handle filesystem errors there.
-    """
-
-    try:
-        candidate = path.expanduser()
-    except Exception:
-        candidate = path
-
-    parent = candidate
-    while not parent.exists() and parent != parent.parent:
-        parent = parent.parent
-    return os.access(parent, os.W_OK)
-
-
 def get_runtime_root() -> Path:
     """Return the canonical runtime root for the active project.
 
-    Note: the returned path may not exist yet; directory creation happens later
-    when pipeline steps run.
+    `~/ProjectsRuntime/ffbayes` is the canonical local runtime tree for this
+    repository. Use `FFBAYES_RUNTIME_ROOT` to opt into a different location
+    explicitly; we do not silently redirect writes to a repo-local fallback.
     """
     env_root = os.getenv('FFBAYES_RUNTIME_ROOT')
     if env_root:
         return Path(env_root).expanduser().resolve()
-
-    primary_root = Path.home() / 'ProjectsRuntime' / 'ffbayes'
-    if _path_is_writable(primary_root):
-        return primary_root
-
-    # Locked-down environments may not allow writing outside the project tree.
-    return Path(__file__).resolve().parents[3] / '.ffbayes_runtime'
+    return (Path.home() / 'ProjectsRuntime' / 'ffbayes').expanduser().resolve()
 
 
 def get_cloud_root() -> Path:
     """Return the canonical cloud root for backed-up project artifacts.
 
-    Unlike the runtime root, we avoid implicitly "creating" the OneDrive tree
-    unless it already exists. If OneDrive is not configured, we fall back to a
-    repo-local cloud mirror directory.
+    `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes` is the
+    canonical cloud mirror location for this repository. Use
+    `FFBAYES_CLOUD_ROOT` to opt into a different location explicitly.
     """
     env_root = os.getenv('FFBAYES_CLOUD_ROOT')
     if env_root:
         return Path(env_root).expanduser().resolve()
-
-    side_projects_root = (
+    return (
         Path.home()
         / 'Library'
         / 'CloudStorage'
         / 'OneDrive-Personal'
         / 'SideProjects'
-    )
-    primary_root = side_projects_root / 'ffbayes'
-    # If OneDrive is configured, prefer it, but do not create the leaf
-    # directories at import time.
-    if side_projects_root.exists() and _path_is_writable(side_projects_root):
-        return primary_root
-
-    return Path(__file__).resolve().parents[3] / '.ffbayes_cloud'
+        / 'ffbayes'
+    ).expanduser().resolve()
 
 
 BASE_DIR = get_project_root()

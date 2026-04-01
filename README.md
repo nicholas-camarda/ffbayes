@@ -6,8 +6,9 @@ A sophisticated fantasy football analytics system that combines Monte Carlo simu
 
 ### [Open the live draft dashboard](https://nicholas-camarda.github.io/ffbayes/)
 
-- This is the actual user-facing dashboard deployed from `site/index.html`.
-- Runtime fallback note: if `~/ProjectsRuntime/ffbayes` is not writable, FFBayes automatically writes to repo-local `.ffbayes_runtime/`.
+- This is the actual user-facing draft helper.
+- Local runtime outputs live under `~/ProjectsRuntime/ffbayes/` by default.
+- If you need a different runtime root, set `FFBAYES_RUNTIME_ROOT` explicitly before running the CLI.
 
 ## 🚀 **Quick Start**
 
@@ -93,7 +94,7 @@ Maintenance note: if nflverse changes the underlying Python loaders again, keep 
 - 🧠 **Dashboard Payload**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
 - 🌐 **HTML Dashboard**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
 - ⭐ **Convenience Dashboard Shortcut (repo root)**: `dashboard/index.html`
-- 🌍 **Live Dashboard**: [nicholas-camarda.github.io/ffbayes](https://nicholas-camarda.github.io/ffbayes/) deployed from `site/index.html`
+- 🌍 **Live Dashboard**: [nicholas-camarda.github.io/ffbayes](https://nicholas-camarda.github.io/ffbayes/) serving the staged dashboard from `site/index.html`
 - 📋 **Decision Backtest**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
 If you want the published mirror, run:
 ```bash

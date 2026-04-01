@@ -2813,10 +2813,11 @@ def _stage_runtime_dashboard_shortcuts(
     """Copy dashboard artifacts into a shallow runtime location.
 
     Canonical, versioned artifacts stay under:
-    `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/`.
+    `<runtime_root>/runs/<year>/pre_draft/artifacts/draft_strategy/`, where
+    `<runtime_root>` defaults to `~/ProjectsRuntime/ffbayes`.
 
     For convenience, we also stage stable entrypoints:
-    - runtime root: `~/ProjectsRuntime/ffbayes/dashboard/index.html`
+    - runtime root: `<runtime_root>/dashboard/index.html`
     - repo root (if writable): `<repo>/dashboard/index.html`
     """
 
