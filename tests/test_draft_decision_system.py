@@ -370,6 +370,9 @@ def test_exported_dashboard_html_contains_live_controls_and_full_board_renderer(
         assert 'Draft Controls' in html
         assert 'Bayesian vs simple VOR' in html
         assert 'ffbayes-dashboard-state-v2' in html
+        assert 'advance-button' not in html
+        assert 'data-status-filter' not in html
+        assert 'Marking Taken or Mine advances the draft automatically.' in html
         assert 'slice(0, 30)' not in html
 
 

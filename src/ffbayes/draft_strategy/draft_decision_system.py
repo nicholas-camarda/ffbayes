@@ -2799,7 +2799,6 @@ def export_dashboard_html(
         </div>
         <div class="toolbar-row">
           <button type="button" id="undo-button">Undo</button>
-          <button type="button" id="advance-button">Advance pick</button>
           <button type="button" id="reset-button">Reset draft state</button>
         </div>
       </div>
@@ -2860,16 +2859,11 @@ def export_dashboard_html(
           <div class="board-controls">
             <div class="search-wrap">
               <input id="player-search" type="search" placeholder="Search name, team, or position" />
-              <button type="button" class="is-active" data-status-filter="all">All</button>
-              <button type="button" data-status-filter="available">Available</button>
-              <button type="button" data-status-filter="queue">Queue</button>
-              <button type="button" data-status-filter="mine">Mine</button>
-              <button type="button" data-status-filter="taken">Taken</button>
             </div>
-            <div class="filter-row" id="position-filters"></div>
             <div class="board-summary">
               <span id="board-summary-text">Showing players</span>
               <span id="preset-summary-text"></span>
+              <span>Marking Taken or Mine advances the draft automatically.</span>
             </div>
           </div>
           <div class="board-table-wrap">
@@ -3026,8 +3020,6 @@ def export_dashboard_html(
         queuePlayers: [],
         history: [],
         search: '',
-        positionFilter: 'ALL',
-        statusFilter: 'all',
         selectedPlayer: data.selected_player || '',
       };
 
@@ -3416,21 +3408,6 @@ def export_dashboard_html(
               return false;
             }
           }
-          if (state.positionFilter && state.positionFilter !== 'ALL' && row.position !== state.positionFilter) {
-            return false;
-          }
-          if (state.statusFilter === 'available' && row.status !== 'available' && row.status !== 'queued') {
-            return false;
-          }
-          if (state.statusFilter === 'queue' && row.status !== 'queued') {
-            return false;
-          }
-          if (state.statusFilter === 'mine' && row.status !== 'mine') {
-            return false;
-          }
-          if (state.statusFilter === 'taken' && row.status !== 'taken') {
-            return false;
-          }
           return true;
         });
       }
@@ -3608,19 +3585,6 @@ def export_dashboard_html(
         document.getElementById('preset-notice').textContent = currentPreset.available
           ? `Using ${currentPreset.label}. This board can recompute live draft context in-browser.`
           : (currentPreset.reason_unavailable || 'This preset is unavailable for the exported payload.');
-        const positions = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DST', 'K'];
-        document.getElementById('position-filters').innerHTML = positions.map((position) => `
-          <button type="button" data-position-filter="${position}" class="${state.positionFilter === position ? 'is-active' : ''}">${position}</button>
-        `).join('');
-        document.querySelectorAll('[data-position-filter]').forEach((button) => {
-          button.addEventListener('click', () => {
-            state.positionFilter = button.getAttribute('data-position-filter');
-            render();
-          });
-        });
-        document.querySelectorAll('[data-status-filter]').forEach((button) => {
-          button.classList.toggle('is-active', state.statusFilter === button.getAttribute('data-status-filter'));
-        });
       }
 
       function renderInspector(boardState) {
@@ -3834,21 +3798,10 @@ def export_dashboard_html(
           render();
         });
         document.getElementById('undo-button').addEventListener('click', undoLast);
-        document.getElementById('advance-button').addEventListener('click', () => {
-          pushHistory();
-          state.currentPickNumber = Math.max(1, Number(state.currentPickNumber || 1) + 1);
-          render();
-        });
         document.getElementById('reset-button').addEventListener('click', () => {
           window.localStorage.removeItem(STORAGE_KEY);
           Object.assign(state, clone(defaultState));
           render();
-        });
-        document.querySelectorAll('[data-status-filter]').forEach((button) => {
-          button.addEventListener('click', () => {
-            state.statusFilter = button.getAttribute('data-status-filter');
-            render();
-          });
         });
         [
           ['scoring-preset', (value) => { state.scoringPreset = value; }],
@@ -3877,6 +3830,7 @@ def export_dashboard_html(
       function applyAction(action, playerName) {
         const normalized = safeLower(playerName);
         pushHistory();
+        let shouldAdvancePick = false;
         if (action === 'queue') {
           state.queuePlayers = state.queuePlayers.some((item) => safeLower(item) === normalized)
             ? state.queuePlayers.filter((item) => safeLower(item) !== normalized)
@@ -3888,6 +3842,9 @@ def export_dashboard_html(
             : [...state.takenPlayers, playerName];
           if (alreadyTaken) {
             state.yourPlayers = state.yourPlayers.filter((item) => safeLower(item) !== normalized);
+          } else {
+            state.queuePlayers = state.queuePlayers.filter((item) => safeLower(item) !== normalized);
+            shouldAdvancePick = true;
           }
         } else if (action === 'mine') {
           const alreadyMine = state.yourPlayers.some((item) => safeLower(item) === normalized);
@@ -3897,6 +3854,15 @@ def export_dashboard_html(
           state.takenPlayers = alreadyMine
             ? state.takenPlayers.filter((item) => safeLower(item) !== normalized)
             : Array.from(new Set([...state.takenPlayers, playerName]));
+          if (alreadyMine) {
+            state.queuePlayers = state.queuePlayers.filter((item) => safeLower(item) !== normalized);
+          } else {
+            state.queuePlayers = state.queuePlayers.filter((item) => safeLower(item) !== normalized);
+            shouldAdvancePick = true;
+          }
+        }
+        if (shouldAdvancePick) {
+          state.currentPickNumber = Math.max(1, Number(state.currentPickNumber || 1) + 1);
         }
         state.selectedPlayer = playerName;
         render();
