@@ -8,6 +8,7 @@ import pandas as pd
 from ffbayes.draft_strategy.draft_decision_system import (
     DraftContext,
     LeagueSettings,
+    _starter_points_from_roster,
     availability_probability,
     build_decision_table,
     build_draft_decision_artifacts,
@@ -94,6 +95,24 @@ def test_decision_table_collapses_duplicate_player_rows():
     assert table[table['player_name'] == 'Alpha QB'].iloc[0]['proj_points_mean'] == 999
 
 
+def test_decision_table_filters_non_fantasy_positions_and_blank_names():
+    players = pd.DataFrame(
+        {
+            'player_name': ['Alpha QB', '  ', 'Mystery DL', 'Unknown Guy', 'Beta RB'],
+            'position': ['QB', 'RB', 'DL', 'UNKNOWN', 'RB'],
+            'proj_points_mean': [300, 200, 150, 180, 220],
+            'adp': [3, 40, 120, 80, 12],
+        }
+    )
+
+    table = build_decision_table(
+        players, LeagueSettings(), DraftContext(current_pick_number=10)
+    )
+
+    assert table['player_name'].tolist() == ['Alpha QB', 'Beta RB']
+    assert set(table['position']).issubset({'QB', 'RB'})
+
+
 def test_availability_probability_is_monotonic():
     early = availability_probability(
         adp=10, target_pick=8, adp_std=2.0, uncertainty_score=0.1
@@ -130,6 +149,81 @@ def test_recommendations_update_after_drafted_players():
         initial.iloc[0]['player_name'] != after_qb_drafted.iloc[0]['player_name']
         or initial.iloc[0]['position'] != after_qb_drafted.iloc[0]['position']
     )
+
+
+def test_recommendations_use_starter_first_policy_and_wait_gate():
+    players = pd.DataFrame(
+        {
+            'player_name': ['Starter RB', 'Backup QB', 'Safe WR', 'Early DST'],
+            'position': ['RB', 'QB', 'WR', 'DST'],
+            'proj_points_mean': [225, 240, 185, 170],
+            'posterior_prob_beats_replacement': [0.82, 0.68, 0.60, 0.45],
+            'posterior_floor': [190, 210, 160, 150],
+            'posterior_ceiling': [255, 262, 210, 182],
+            'posterior_std': [14, 12, 10, 8],
+            'adp': [9, 14, 40, 30],
+            'adp_std': [2.0, 2.2, 4.5, 3.0],
+        }
+    )
+    settings = LeagueSettings()
+    table = build_decision_table(players, settings, DraftContext(current_pick_number=10))
+    recommendations = build_recommendations(
+        table,
+        settings,
+        DraftContext(current_pick_number=10, roster_counts={'QB': 1}),
+    )
+
+    pick_now = recommendations[recommendations['recommendation_lane'] == 'pick_now'].iloc[0]
+    can_wait = recommendations[recommendations['recommendation_lane'] == 'can_wait']
+
+    assert pick_now['position'] == 'RB'
+    assert 'Early DST' not in recommendations[recommendations['recommendation_lane'] != 'can_wait']['player_name'].tolist()
+    assert set(can_wait['wait_signal']).issubset({'safe_to_wait', 'late_round_stash_ok'})
+
+
+def test_starter_points_include_dst_and_k_slots():
+    roster = pd.DataFrame(
+        {
+            'player_name': ['Alpha QB', 'Alpha RB', 'Beta RB', 'Alpha WR', 'Beta WR', 'Alpha TE', 'Alpha DST', 'Alpha K'],
+            'position': ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'DST', 'K'],
+            'actual_points': [20, 15, 12, 14, 11, 9, 8, 7],
+        }
+    )
+
+    total = _starter_points_from_roster(roster, LeagueSettings())
+
+    assert total == 96.0
+
+
+def test_recommendations_fill_specialists_in_late_rounds():
+    settings = LeagueSettings()
+    late_pick = settings.league_size * (settings.round_count() - 1)
+    players = pd.DataFrame(
+        {
+            'player_name': ['Alpha DST', 'Alpha K', 'Bench WR'],
+            'position': ['DST', 'K', 'WR'],
+            'proj_points_mean': [10, 9, 8],
+            'posterior_prob_beats_replacement': [0.55, 0.52, 0.40],
+            'posterior_floor': [8, 7, 6],
+            'posterior_ceiling': [12, 11, 9],
+            'posterior_std': [1.0, 1.0, 1.0],
+            'adp': [140, 145, 110],
+            'adp_std': [4.0, 4.0, 6.0],
+        }
+    )
+
+    table = build_decision_table(
+        players,
+        settings,
+        DraftContext(current_pick_number=late_pick),
+    )
+    recommendations = build_recommendations(
+        table,
+        settings,
+        DraftContext(current_pick_number=late_pick),
+    )
+
+    assert recommendations.iloc[0]['position'] in {'DST', 'K'}
 
 
 def test_live_recommendation_snapshot_recomputes_with_board_state():
@@ -238,6 +332,31 @@ def test_decision_table_respects_scoring_preset_projection_inputs():
     assert alpha_standard == 180.0
     assert alpha_half == 200.0
     assert alpha_ppr == 220.0
+
+
+def test_decision_table_uses_posterior_projection_inputs_when_present():
+    players = pd.DataFrame(
+        {
+            'player_name': ['Alpha RB', 'Beta WR'],
+            'position': ['RB', 'WR'],
+            'posterior_mean': [212.0, 198.0],
+            'posterior_floor': [180.0, 170.0],
+            'posterior_ceiling': [245.0, 228.0],
+            'posterior_std': [18.0, 16.0],
+            'posterior_prob_beats_replacement': [0.82, 0.74],
+            'adp': [11, 17],
+        }
+    )
+
+    table = build_decision_table(
+        players, LeagueSettings(), DraftContext(current_pick_number=10)
+    )
+
+    alpha = table.set_index('player_name').loc['Alpha RB']
+    assert alpha['proj_points_mean'] == 212.0
+    assert alpha['proj_points_floor'] == 180.0
+    assert alpha['proj_points_ceiling'] == 245.0
+    assert alpha['posterior_prob_beats_replacement'] == 0.82
 
 
 def test_dashboard_payload_includes_preset_bundle_and_model_notes():
@@ -397,8 +516,14 @@ def test_backtest_payload_has_expected_shape():
 
     backtest = run_draft_backtest(season_history, LeagueSettings())
     assert backtest['model_type'] == 'draft_decision_backtest'
+    assert backtest['evaluation_scope']['draft_score_label'] == 'posterior_contextual_policy'
+    assert backtest['evaluation_scope']['primary_objective'] == 'starter_lineup_points'
+    assert backtest['evaluation_scope']['wait_policy'] == 'conservative'
     assert 'overall' in backtest
     assert 'by_strategy' in backtest['overall']
+    assert 'draft_score_vs_historical_vor_proxy' in backtest['overall']
+    assert 'draft_score_vs_consensus' in backtest['overall']
+    assert 'policy_diagnostics' in backtest['overall']
     assert len(backtest['overall']['by_strategy']) >= 1
 
 
@@ -426,3 +551,37 @@ def test_backtest_labels_historical_vor_proxy_explicitly():
 
     assert 'historical_vor_proxy' in strategies
     assert 'vor' not in strategies
+
+
+def test_backtest_filters_non_fantasy_positions_from_rosters_and_reports_scope():
+    season_history = pd.DataFrame(
+        {
+            'Season': [2021, 2021, 2021, 2022, 2022, 2022, 2023, 2023, 2023, 2024, 2024, 2024],
+            'Name': [
+                'Alpha QB',
+                'Alpha RB',
+                'Mystery DL',
+                'Alpha QB',
+                'Alpha RB',
+                '',
+                'Alpha QB',
+                'Alpha RB',
+                'Unknown Guy',
+                'Alpha QB',
+                'Alpha RB',
+                'Fullback',
+            ],
+            'Position': ['QB', 'RB', 'DL', 'QB', 'RB', 'WR', 'QB', 'RB', 'FB', 'QB', 'RB', 'FB'],
+            'FantPt': [250, 180, 90, 260, 190, 40, 270, 200, 35, 280, 210, 20],
+        }
+    )
+
+    backtest = run_draft_backtest(season_history, LeagueSettings())
+
+    assert backtest['evaluation_scope']['eligible_positions'] == ['QB', 'RB', 'WR', 'TE', 'DST', 'K']
+    assert backtest['evaluation_scope']['eligible_player_universe']['removed_non_fantasy_position_count'] >= 2
+    for season in backtest['by_season']:
+        drafted = season['by_strategy']['draft_score']['drafted_players']
+        counts = season['by_strategy']['draft_score']['position_counts']
+        assert '' not in drafted
+        assert set(counts).issubset({'QB', 'RB', 'WR', 'TE', 'DST', 'K'})

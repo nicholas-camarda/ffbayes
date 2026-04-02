@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """
-Bayesian vs VOR comparison
+Bayesian vs VOR comparison.
 
-Backtests a simple Bayesian shrinkage forecaster against a simple VOR-style
-ranking baseline using historical season data. The goal is to answer the
-project question directly: does the Bayesian approach order players better
-than a naive VOR ranking when we evaluate against held-out fantasy points?
+Backtests a posterior player model against frozen simple baselines using
+historical season data. The research goal is explicit:
+
+* forecast target: held-out season fantasy points
+* decision target: which players surface as the strongest draft candidates
+
+The Bayesian model combines player-level partial pooling with a population
+regression trained on lagged, draft-time-safe features assembled from local
+historical data.
 """
 
 from __future__ import annotations
@@ -13,19 +18,23 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.stats import spearmanr
 
+from ffbayes.analysis.bayesian_player_model import (
+    aggregate_season_player_table,
+    build_posterior_projection_table,
+)
 from ffbayes.utils.path_constants import SEASON_DATASETS_DIR, get_results_dir
 from ffbayes.utils.validation_metrics import calculate_model_accuracy_metrics
 
 
 def load_season_history(data_directory: Path | str | None = None) -> pd.DataFrame:
-    """Load per-game season history and combine into a single frame."""
+    """Load historical season CSVs into one frame."""
     season_dir = Path(data_directory) if data_directory is not None else SEASON_DATASETS_DIR
     files = sorted(season_dir.glob('*season.csv'))
     if not files:
@@ -34,74 +43,148 @@ def load_season_history(data_directory: Path | str | None = None) -> pd.DataFram
 
 
 def build_season_player_table(history: pd.DataFrame) -> pd.DataFrame:
-    """Collapse per-game data into a per-player-season table."""
-    required_columns = {'Season', 'Name', 'Position', 'FantPt'}
-    missing = required_columns.difference(history.columns)
-    if missing:
-        raise ValueError(f'Missing required columns: {sorted(missing)}')
-
-    return (
-        history.groupby(['Season', 'Name', 'Position'], as_index=False)['FantPt']
-        .mean()
-        .rename(columns={'FantPt': 'fantasy_points'})
-    )
+    """Collapse per-game data into a season-level modeling table."""
+    return aggregate_season_player_table(history)
 
 
-def _position_replacement_level(train_season: pd.DataFrame, position: str, quantile: float) -> float:
-    """Approximate a replacement-level baseline for a position."""
-    pos_values = train_season.loc[train_season['Position'] == position, 'fantasy_points'].dropna()
-    if pos_values.empty:
-        overall = train_season['fantasy_points'].dropna()
-        return float(overall.mean()) if not overall.empty else 0.0
-    return float(pos_values.quantile(quantile))
+def _position_metrics(
+    frame: pd.DataFrame, score_column: str, point_column: str
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for position, sub in frame.groupby('Position'):
+        truth = pd.to_numeric(sub['fantasy_points'], errors='coerce')
+        pred = pd.to_numeric(sub[point_column], errors='coerce')
+        score = pd.to_numeric(sub[score_column], errors='coerce')
+        valid = truth.notna() & pred.notna() & score.notna()
+        if valid.sum() < 2:
+            continue
+        truth_valid = truth[valid]
+        pred_valid = pred[valid]
+        score_valid = score[valid]
+        metrics = calculate_model_accuracy_metrics(
+            pred_valid.to_numpy(), truth_valid.to_numpy()
+        )
+        rank_corr = float(
+            np.nan_to_num(spearmanr(score_valid, truth_valid).correlation, nan=0.0)
+        )
+        rmse = float(
+            np.sqrt(np.mean(np.square(truth_valid.to_numpy() - pred_valid.to_numpy())))
+        )
+        rows.append(
+            {
+                'position': str(position),
+                'player_count': int(valid.sum()),
+                'mae': float(metrics['mae']),
+                'rmse': rmse,
+                'spearman_rank_correlation': rank_corr,
+            }
+        )
+    return rows
 
 
-def _predict_bayesian_score(
-    train_history: pd.DataFrame,
-    player_name: str,
-    position: str,
-    shrinkage_strength: float,
-    trend_weight: float,
+def _coverage_rate(
+    truth: pd.Series, mean: pd.Series, std: pd.Series, z_value: float
 ) -> float:
-    """Empirical Bayes-style shrinkage forecast for one player."""
-    player_hist = train_history[train_history['Name'] == player_name].sort_values('Season')
-    position_mean = float(
-        train_history.loc[train_history['Position'] == position, 'fantasy_points'].mean()
-        if not train_history.empty
-        else 0.0
+    lower = mean - z_value * std
+    upper = mean + z_value * std
+    return float(((truth >= lower) & (truth <= upper)).mean())
+
+
+def _evaluate_method(
+    frame: pd.DataFrame,
+    *,
+    score_column: str,
+    point_column: str,
+    label: str,
+    top_k: int,
+    std_column: str | None = None,
+) -> dict[str, Any]:
+    truth = pd.to_numeric(frame['fantasy_points'], errors='coerce')
+    point_pred = pd.to_numeric(frame[point_column], errors='coerce')
+    score_pred = pd.to_numeric(frame[score_column], errors='coerce')
+    valid = truth.notna() & point_pred.notna() & score_pred.notna()
+    if valid.sum() == 0:
+        raise ValueError(f'No valid rows available to score method {label}')
+
+    truth_valid = truth[valid]
+    point_valid = point_pred[valid]
+    score_valid = score_pred[valid]
+    metrics = calculate_model_accuracy_metrics(
+        point_valid.to_numpy(), truth_valid.to_numpy()
     )
+    rank_corr = float(np.nan_to_num(spearmanr(score_valid, truth_valid).correlation, nan=0.0))
 
-    if player_hist.empty:
-        return position_mean
+    ranked = frame.loc[valid].copy()
+    ranked['_score'] = score_valid.to_numpy()
+    top_actual = float(ranked.nlargest(top_k, '_score')['fantasy_points'].mean())
 
-    player_mean = float(player_hist['fantasy_points'].mean())
-    n_seasons = len(player_hist)
-    bayes_score = (n_seasons / (n_seasons + shrinkage_strength)) * player_mean
-    bayes_score += (shrinkage_strength / (n_seasons + shrinkage_strength)) * position_mean
+    payload = {
+        **metrics,
+        'spearman_rank_correlation': rank_corr,
+        'top_k_mean_actual': top_actual,
+        'by_position': _position_metrics(
+            frame.loc[valid].copy(),
+            score_column=score_column,
+            point_column=point_column,
+        ),
+    }
 
-    if n_seasons >= 2:
-        trend = float(player_hist.iloc[-1]['fantasy_points'] - player_hist.iloc[0]['fantasy_points'])
-        bayes_score += trend_weight * trend / max(n_seasons - 1, 1)
+    if std_column is not None and std_column in frame.columns:
+        std_pred = pd.to_numeric(frame.loc[valid, std_column], errors='coerce').fillna(0.0)
+        payload['calibration'] = {
+            'interval_50_coverage': _coverage_rate(
+                truth_valid, point_valid, std_pred, 0.6745
+            ),
+            'interval_80_coverage': _coverage_rate(
+                truth_valid, point_valid, std_pred, 1.2816
+            ),
+            'mean_predictive_std': float(std_pred.mean()),
+        }
+    return payload
 
-    return bayes_score
 
-
-def _predict_vor_scores(
-    train_history: pd.DataFrame,
-    player_name: str,
-    position: str,
-    replacement_quantile: float,
-) -> tuple[float, float]:
-    """Return a VOR-style point forecast and rank score."""
-    player_hist = train_history[train_history['Name'] == player_name].sort_values('Season')
-    position_replacement = _position_replacement_level(train_history, position, replacement_quantile)
-
-    if player_hist.empty:
-        return position_replacement, 0.0
-
-    last_season_mean = float(player_hist.iloc[-1]['fantasy_points'])
-    rank_score = last_season_mean - position_replacement
-    return last_season_mean, rank_score
+def _top_disagreements(frame: pd.DataFrame, top_n: int = 15) -> list[dict[str, Any]]:
+    disagreements = frame.copy()
+    disagreements['bayesian_rank'] = disagreements['posterior_mean'].rank(
+        method='first', ascending=False
+    )
+    disagreements['vor_rank'] = disagreements['historical_vor_proxy_score'].rank(
+        method='first', ascending=False
+    )
+    disagreements['market_rank'] = disagreements['market_proxy_score'].rank(
+        method='first', ascending=False
+    )
+    disagreements['abs_rank_gap_vs_vor'] = (
+        disagreements['bayesian_rank'] - disagreements['vor_rank']
+    ).abs()
+    disagreements['abs_rank_gap_vs_market'] = (
+        disagreements['bayesian_rank'] - disagreements['market_rank']
+    ).abs()
+    return (
+        disagreements.sort_values(
+            ['abs_rank_gap_vs_vor', 'posterior_mean'], ascending=[False, False]
+        )
+        .head(top_n)[
+            [
+                'player_name',
+                'Position',
+                'fantasy_points',
+                'posterior_mean',
+                'posterior_std',
+                'historical_vor_proxy_point',
+                'historical_vor_proxy_score',
+                'market_proxy_score',
+                'bayesian_rank',
+                'vor_rank',
+                'market_rank',
+                'abs_rank_gap_vs_vor',
+                'abs_rank_gap_vs_market',
+                'posterior_prob_beats_replacement',
+            ]
+        ]
+        .rename(columns={'Position': 'position'})
+        .to_dict(orient='records')
+    )
 
 
 def evaluate_holdout_season(
@@ -112,121 +195,97 @@ def evaluate_holdout_season(
     replacement_quantile: float = 0.2,
     top_k: int = 24,
     min_history_seasons: int = 0,
-) -> dict:
+) -> dict[str, Any]:
     """Evaluate Bayesian vs VOR on one holdout season."""
+    del shrinkage_strength, trend_weight
+
     train = season_table[season_table['Season'] < holdout_year].copy()
     test = season_table[season_table['Season'] == holdout_year].copy()
-
     if train.empty:
         raise ValueError(f'No training data available before {holdout_year}')
     if test.empty:
         raise ValueError(f'No holdout data available for {holdout_year}')
 
-    test = test.copy()
-    test['player_key'] = test.apply(
-        lambda row: f"{row['Name']}||{row['Position']}",
-        axis=1,
+    prediction_table = build_posterior_projection_table(
+        train_history=train,
+        target_frame=test,
+        holdout_year=holdout_year,
+        replacement_quantile=replacement_quantile,
+        min_history_seasons=min_history_seasons,
+    )
+    prediction_table = prediction_table.rename(
+        columns={'position': 'Position', 'actual_points': 'fantasy_points'}
     )
 
-    if min_history_seasons > 0:
-        train_history_counts = train.groupby(['Name', 'Position'])['Season'].nunique()
-        eligible_keys = {
-            f"{name}||{position}"
-            for (name, position), count in train_history_counts.items()
-            if count >= min_history_seasons
-        }
-        test = test[test['player_key'].isin(eligible_keys)].copy()
-
-    truth = test.set_index('player_key')['fantasy_points']
-
-    bayesian_point = {}
-    vor_point = {}
-    bayesian_rank = {}
-    vor_rank = {}
-
-    for _, row in test.iterrows():
-        name = str(row['Name'])
-        position = str(row['Position'])
-        player_key = str(row['player_key'])
-
-        bayes_score = _predict_bayesian_score(
-            train_history=train,
-            player_name=name,
-            position=position,
-            shrinkage_strength=shrinkage_strength,
-            trend_weight=trend_weight,
-        )
-        vor_point_score, vor_rank_score = _predict_vor_scores(
-            train_history=train,
-            player_name=name,
-            position=position,
-            replacement_quantile=replacement_quantile,
-        )
-
-        bayesian_point[player_key] = bayes_score
-        vor_point[player_key] = vor_point_score
-        bayesian_rank[player_key] = bayes_score
-        vor_rank[player_key] = vor_rank_score
-
-    common = truth.index.intersection(pd.Index(bayesian_point.keys()))
-    if common.empty:
-        raise ValueError(f'No overlapping players to evaluate in {holdout_year}')
-
-    truth = truth.loc[common]
-    bayesian_point_series = pd.Series(bayesian_point).loc[common]
-    vor_point_series = pd.Series(vor_point).loc[common]
-    bayesian_rank_series = pd.Series(bayesian_rank).loc[common]
-    vor_rank_series = pd.Series(vor_rank).loc[common]
-
-    bayesian_point_metrics = calculate_model_accuracy_metrics(
-        bayesian_point_series.to_numpy(),
-        truth.to_numpy(),
+    bayesian_metrics = _evaluate_method(
+        prediction_table,
+        score_column='posterior_mean',
+        point_column='posterior_mean',
+        std_column='posterior_std',
+        label='bayesian',
+        top_k=top_k,
     )
-    vor_point_metrics = calculate_model_accuracy_metrics(
-        vor_point_series.to_numpy(),
-        truth.to_numpy(),
+    vor_metrics = _evaluate_method(
+        prediction_table,
+        score_column='historical_vor_proxy_score',
+        point_column='historical_vor_proxy_point',
+        label='vor',
+        top_k=top_k,
     )
-
-    bayesian_spearman = float(spearmanr(bayesian_rank_series, truth).correlation)
-    vor_spearman = float(spearmanr(vor_rank_series, truth).correlation)
-    bayesian_spearman = float(np.nan_to_num(bayesian_spearman, nan=0.0))
-    vor_spearman = float(np.nan_to_num(vor_spearman, nan=0.0))
-
-    ranked_truth = test.set_index('player_key').loc[common].copy()
-    ranked_truth['bayesian_score'] = bayesian_rank_series
-    ranked_truth['vor_score'] = vor_rank_series
-    top_bayesian = ranked_truth.nlargest(top_k, 'bayesian_score')['fantasy_points'].mean()
-    top_vor = ranked_truth.nlargest(top_k, 'vor_score')['fantasy_points'].mean()
+    market_metrics = _evaluate_method(
+        prediction_table,
+        score_column='market_proxy_score',
+        point_column='historical_vor_proxy_point',
+        label='market_proxy',
+        top_k=top_k,
+    )
 
     return {
         'holdout_year': holdout_year,
-        'num_players_evaluated': int(len(common)),
-        'bayesian': {
-            **bayesian_point_metrics,
-            'spearman_rank_correlation': bayesian_spearman,
-            'top_k_mean_actual': float(top_bayesian),
+        'num_players_evaluated': int(len(prediction_table)),
+        'artifact_schema_version': 2,
+        'comparison_targets': {
+            'forecast_target': 'held_out_season_fantasy_points',
+            'decision_target': f'top_{top_k}_draft_candidates_mean_actual_points',
         },
-        'vor': {
-            **vor_point_metrics,
-            'spearman_rank_correlation': vor_spearman,
-            'top_k_mean_actual': float(top_vor),
+        'ablation': {
+            'step': 'hierarchical_empirical_bayes',
+            'label': 'posterior_mean_with_lagged_features',
         },
+        'bayesian': bayesian_metrics,
+        'vor': vor_metrics,
+        'market': market_metrics,
         'winner': {
-            'mae': 'bayesian' if bayesian_point_metrics['mae'] <= vor_point_metrics['mae'] else 'vor',
-            'rank_correlation': 'bayesian' if bayesian_spearman >= vor_spearman else 'vor',
-            'top_k_mean_actual': 'bayesian' if top_bayesian >= top_vor else 'vor',
+            'mae': 'bayesian'
+            if bayesian_metrics['mae'] <= vor_metrics['mae']
+            else 'vor',
+            'rank_correlation': 'bayesian'
+            if bayesian_metrics['spearman_rank_correlation']
+            >= vor_metrics['spearman_rank_correlation']
+            else 'vor',
+            'top_k_mean_actual': 'bayesian'
+            if bayesian_metrics['top_k_mean_actual'] >= vor_metrics['top_k_mean_actual']
+            else 'vor',
         },
         'improvement': {
-            'mae_delta': float(vor_point_metrics['mae'] - bayesian_point_metrics['mae']),
-            'spearman_delta': float(bayesian_spearman - vor_spearman),
-            'top_k_mean_actual_delta': float(top_bayesian - top_vor),
+            'mae_delta': float(vor_metrics['mae'] - bayesian_metrics['mae']),
+            'spearman_delta': float(
+                bayesian_metrics['spearman_rank_correlation']
+                - vor_metrics['spearman_rank_correlation']
+            ),
+            'top_k_mean_actual_delta': float(
+                bayesian_metrics['top_k_mean_actual'] - vor_metrics['top_k_mean_actual']
+            ),
+            'market_mae_delta': float(
+                market_metrics['mae'] - bayesian_metrics['mae']
+            ),
+            'market_spearman_delta': float(
+                bayesian_metrics['spearman_rank_correlation']
+                - market_metrics['spearman_rank_correlation']
+            ),
         },
+        'top_disagreements': _top_disagreements(prediction_table),
     }
-
-
-def _season_backtest_years(season_table: pd.DataFrame, min_train_seasons: int = 3) -> list[int]:
-    seasons = sorted(int(season) for season in season_table['Season'].unique())
-    return seasons[min_train_seasons:]
 
 
 def run_backtest(
@@ -238,38 +297,47 @@ def run_backtest(
     replacement_quantile: float = 0.2,
     top_k: int = 24,
     min_history_seasons: int = 0,
-) -> dict:
-    """Run the Bayesian vs VOR backtest across all eligible holdout seasons."""
+) -> dict[str, Any]:
+    """Run the Bayes-vs-VOR backtest across all eligible holdout seasons."""
     history = load_season_history(data_directory)
     season_table = build_season_player_table(history)
 
+    seasons = sorted(int(season) for season in season_table['Season'].dropna().unique())
     if holdout_years is None:
-        holdout_years = _season_backtest_years(season_table)
-
-    holdout_years = list(holdout_years)
+        holdout_years = seasons[3:] if len(seasons) > 3 else seasons[1:]
+    holdout_years = list(int(year) for year in holdout_years)
     if not holdout_years:
         raise ValueError('No holdout seasons available for backtest')
 
-    by_season = []
-    for holdout_year in holdout_years:
-        by_season.append(
-            evaluate_holdout_season(
-                season_table=season_table,
-                holdout_year=holdout_year,
-                shrinkage_strength=shrinkage_strength,
-                trend_weight=trend_weight,
-                replacement_quantile=replacement_quantile,
-                top_k=top_k,
-                min_history_seasons=min_history_seasons,
-            )
+    by_season = [
+        evaluate_holdout_season(
+            season_table=season_table,
+            holdout_year=holdout_year,
+            shrinkage_strength=shrinkage_strength,
+            trend_weight=trend_weight,
+            replacement_quantile=replacement_quantile,
+            top_k=top_k,
+            min_history_seasons=min_history_seasons,
         )
+        for holdout_year in holdout_years
+    ]
 
     bayesian_mae = float(np.mean([item['bayesian']['mae'] for item in by_season]))
     vor_mae = float(np.mean([item['vor']['mae'] for item in by_season]))
-    bayesian_rho = float(np.nanmean([item['bayesian']['spearman_rank_correlation'] for item in by_season]))
-    vor_rho = float(np.nanmean([item['vor']['spearman_rank_correlation'] for item in by_season]))
+    market_mae = float(np.mean([item['market']['mae'] for item in by_season]))
+    bayesian_rho = float(
+        np.nanmean([item['bayesian']['spearman_rank_correlation'] for item in by_season])
+    )
+    vor_rho = float(
+        np.nanmean([item['vor']['spearman_rank_correlation'] for item in by_season])
+    )
+    market_rho = float(
+        np.nanmean([item['market']['spearman_rank_correlation'] for item in by_season])
+    )
     bayesian_top_k = float(np.mean([item['bayesian']['top_k_mean_actual'] for item in by_season]))
     vor_top_k = float(np.mean([item['vor']['top_k_mean_actual'] for item in by_season]))
+    market_top_k = float(np.mean([item['market']['top_k_mean_actual'] for item in by_season]))
+
     season_win_counts = {
         metric: sum(item['winner'][metric] == 'bayesian' for item in by_season)
         for metric in ['mae', 'rank_correlation', 'top_k_mean_actual']
@@ -278,6 +346,12 @@ def run_backtest(
     summary = {
         'timestamp': datetime.now().isoformat(),
         'model_type': 'bayesian_vs_vor_backtest',
+        'artifact_schema_version': 2,
+        'baselines': ['historical_vor_proxy', 'market_proxy'],
+        'comparison_targets': {
+            'forecast_target': 'held_out_season_fantasy_points',
+            'decision_target': f'top_{top_k}_draft_candidates_mean_actual_points',
+        },
         'parameters': {
             'shrinkage_strength': shrinkage_strength,
             'trend_weight': trend_weight,
@@ -297,15 +371,24 @@ def run_backtest(
                 'spearman_rank_correlation': vor_rho,
                 'top_k_mean_actual': vor_top_k,
             },
+            'market': {
+                'mae': market_mae,
+                'spearman_rank_correlation': market_rho,
+                'top_k_mean_actual': market_top_k,
+            },
             'winner': {
                 'mae': 'bayesian' if bayesian_mae <= vor_mae else 'vor',
                 'rank_correlation': 'bayesian' if bayesian_rho >= vor_rho else 'vor',
-                'top_k_mean_actual': 'bayesian' if bayesian_top_k >= vor_top_k else 'vor',
+                'top_k_mean_actual': 'bayesian'
+                if bayesian_top_k >= vor_top_k
+                else 'vor',
             },
             'improvement': {
                 'mae_delta': float(vor_mae - bayesian_mae),
                 'spearman_delta': float(bayesian_rho - vor_rho),
                 'top_k_mean_actual_delta': float(bayesian_top_k - vor_top_k),
+                'market_mae_delta': float(market_mae - bayesian_mae),
+                'market_spearman_delta': float(bayesian_rho - market_rho),
             },
             'season_win_counts': season_win_counts,
         },
@@ -321,18 +404,17 @@ def run_backtest(
     if len(holdout_years) == 1:
         run_label = str(holdout_years[0])
     else:
-        run_label = f"{min(holdout_years)}_to_{max(holdout_years)}"
+        run_label = f'{min(holdout_years)}_to_{max(holdout_years)}'
 
     output_path = output_dir / f'bayesian_vs_vor_backtest_{run_label}.json'
     output_path.write_text(json.dumps(summary, indent=2), encoding='utf-8')
     summary['output_path'] = str(output_path)
-
     summary['plot_path'] = str(_write_summary_plot(summary, output_dir, run_label))
     return summary
 
 
-def _write_summary_plot(summary: dict, output_dir: Path, run_label: str) -> Path:
-    """Write a simple scorecard plot for quick inspection."""
+def _write_summary_plot(summary: dict[str, Any], output_dir: Path, run_label: str) -> Path:
+    """Write a compact scorecard plot for quick review."""
     plot_dir = output_dir.parent / 'plots'
     plot_dir.mkdir(parents=True, exist_ok=True)
     plot_path = plot_dir / f'bayesian_vs_vor_backtest_{run_label}.png'
@@ -348,12 +430,22 @@ def _write_summary_plot(summary: dict, output_dir: Path, run_label: str) -> Path
         summary['overall']['vor']['spearman_rank_correlation'],
         summary['overall']['vor']['top_k_mean_actual'],
     ]
+    market_values = [
+        summary['overall']['market']['mae'],
+        summary['overall']['market']['spearman_rank_correlation'],
+        summary['overall']['market']['top_k_mean_actual'],
+    ]
 
-    fig, axes = plt.subplots(1, 3, figsize=(11, 3.5))
-    fig.suptitle('Bayesian vs VOR Backtest')
-
-    for ax, label, bayes_value, vor_value in zip(axes, labels, bayesian_values, vor_values):
-        ax.bar(['Bayesian', 'VOR'], [bayes_value, vor_value], color=['#1f77b4', '#ff7f0e'])
+    fig, axes = plt.subplots(1, 3, figsize=(12, 3.5))
+    fig.suptitle('Bayesian vs VOR vs Market Backtest')
+    for ax, label, bayes_value, vor_value, market_value in zip(
+        axes, labels, bayesian_values, vor_values, market_values
+    ):
+        ax.bar(
+            ['Bayesian', 'VOR', 'Market'],
+            [bayes_value, vor_value, market_value],
+            color=['#1f77b4', '#ff7f0e', '#2ca02c'],
+        )
         ax.set_title(label)
         ax.grid(axis='y', alpha=0.2)
 
@@ -366,8 +458,8 @@ def _write_summary_plot(summary: dict, output_dir: Path, run_label: str) -> Path
 def main() -> int:
     """CLI entrypoint for the Bayesian vs VOR comparison."""
     print('Running Bayesian vs VOR backtest...')
-    print('Scope: players with at least 2 prior seasons, top 12 draft targets')
-    summary = run_backtest(top_k=12, min_history_seasons=2)
+    print('Scope: rolling holdout seasons with lagged, posterior player projections')
+    summary = run_backtest(top_k=12, min_history_seasons=0)
 
     print(f"Evaluated seasons: {summary['seasons_evaluated']}")
     print(
@@ -377,6 +469,10 @@ def main() -> int:
     print(
         'VOR rank correlation:',
         f"{summary['overall']['vor']['spearman_rank_correlation']:.3f}",
+    )
+    print(
+        'Market rank correlation:',
+        f"{summary['overall']['market']['spearman_rank_correlation']:.3f}",
     )
     print(f"Scorecard written to: {summary['output_path']}")
     return 0

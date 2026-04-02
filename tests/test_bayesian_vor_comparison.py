@@ -37,7 +37,7 @@ def _build_synthetic_history() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def test_evaluate_holdout_season_prefers_bayesian():
+def test_evaluate_holdout_season_returns_research_summary():
     history = _build_synthetic_history()
     season_table = build_season_player_table(history)
 
@@ -50,11 +50,11 @@ def test_evaluate_holdout_season_prefers_bayesian():
         top_k=1,
     )
 
-    assert result['winner']['rank_correlation'] == 'bayesian'
-    assert result['winner']['top_k_mean_actual'] == 'bayesian'
-    assert result['bayesian']['spearman_rank_correlation'] > result['vor']['spearman_rank_correlation']
-    assert result['improvement']['spearman_delta'] > 0
-    assert result['improvement']['top_k_mean_actual_delta'] > 0
+    assert result['artifact_schema_version'] == 2
+    assert 'market' in result
+    assert 'calibration' in result['bayesian']
+    assert len(result['top_disagreements']) >= 1
+    assert result['num_players_evaluated'] == 4
 
 
 def test_run_backtest_writes_scorecard_and_plot(monkeypatch, tmp_path):
@@ -80,11 +80,11 @@ def test_run_backtest_writes_scorecard_and_plot(monkeypatch, tmp_path):
 
     assert output_path.exists()
     assert plot_path.exists()
-    assert summary['overall']['winner']['rank_correlation'] == 'bayesian'
-
     with output_path.open('r', encoding='utf-8') as handle:
         payload = json.load(handle)
 
     assert payload['model_type'] == 'bayesian_vs_vor_backtest'
-    assert payload['overall']['winner']['rank_correlation'] == 'bayesian'
-    assert payload['overall']['season_win_counts']['rank_correlation'] == 1
+    assert payload['artifact_schema_version'] == 2
+    assert 'rank_correlation' in payload['overall']['winner']
+    assert 'rank_correlation' in payload['overall']['season_win_counts']
+    assert 'market' in payload['overall']

@@ -33,7 +33,14 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from scipy.stats import spearmanr
 
+from ffbayes.analysis.bayesian_player_model import (
+    aggregate_season_player_table,
+    build_posterior_projection_table,
+)
+
 POSITION_ORDER = ['QB', 'RB', 'WR', 'TE', 'DST', 'K']
+FANTASY_DRAFT_POSITIONS = tuple(POSITION_ORDER)
+OFFENSIVE_POSITIONS = ('QB', 'RB', 'WR', 'TE')
 DEFAULT_FLEX_WEIGHTS = {'RB': 0.45, 'WR': 0.45, 'TE': 0.10}
 DEFAULT_ROSTER_TEMPLATE = {
     'QB': 1,
@@ -49,16 +56,25 @@ SCORING_PRESETS = {
     'half_ppr': {'label': 'Half PPR', 'scoring_type': 'Half-PPR', 'ppr_value': 0.5},
     'ppr': {'label': 'Full PPR', 'scoring_type': 'PPR', 'ppr_value': 1.0},
 }
+LATE_SPECIALIST_BUFFER_ROUNDS = 2
+CONSERVATIVE_WAIT_SURVIVAL_THRESHOLD = 0.74
+CONSERVATIVE_WAIT_LINEUP_LOSS_THRESHOLD = 0.28
+SECONDARY_QB_TE_VALUE_EDGE = 0.45
 METRIC_GLOSSARY = {
     'draft_score': {
-        'label': 'Draft score',
-        'summary': 'Overall recommendation score for this draft slot.',
-        'detail': 'Blends player projection, replacement value, roster need, market timing, upside, and fragility into one contextual rank.',
+        'label': 'Board value score',
+        'summary': 'Base player value before draft-slot action rules are applied.',
+        'detail': 'Combines posterior projection, starter edge, replacement edge, and a light market-gap term into a cleaner board ranking.',
+    },
+    'board_value_score': {
+        'label': 'Board value score',
+        'summary': 'Base player value before draft-slot action rules are applied.',
+        'detail': 'Used as the policy foundation. The live recommendation then layers roster urgency and wait risk on top of this score.',
     },
     'availability_to_next_pick': {
         'label': 'Availability to next pick',
         'summary': 'Estimated chance the player survives until your next turn.',
-        'detail': 'Uses ADP, ADP spread, and uncertainty as a simple availability model. Higher means waiting is safer.',
+        'detail': 'Uses fantasy-only ADP dispersion within the player pool plus uncertainty. Higher means waiting is safer.',
     },
     'expected_regret': {
         'label': 'Expected regret',
@@ -80,6 +96,11 @@ METRIC_GLOSSARY = {
         'summary': 'Projected edge over a typical starter at the same position.',
         'detail': 'Positive values mean the player is clearly starter-worthy in your league shape.',
     },
+    'wait_signal': {
+        'label': 'Wait signal',
+        'summary': 'Plain-English explanation for whether waiting is acceptable.',
+        'detail': 'Shows whether the player is safe to wait on, too costly to pass, too unlikely to survive, or only acceptable as a late specialist stash.',
+    },
     'market_gap': {
         'label': 'Market gap',
         'summary': 'Difference between where the model and the market rank the player.',
@@ -89,6 +110,11 @@ METRIC_GLOSSARY = {
         'label': 'Simple VOR proxy',
         'summary': 'Projected edge over replacement level at the position.',
         'detail': 'This is the dashboard’s baseline VOR-style comparison point when we contrast the contextual score against a simpler value-over-replacement view.',
+    },
+    'posterior_prob_beats_replacement': {
+        'label': 'Posterior beat-replacement probability',
+        'summary': 'Chance the model thinks this player beats replacement-level value.',
+        'detail': 'Derived from the posterior mean and uncertainty width. Higher values mean the player clears the replacement bar more reliably.',
     },
 }
 
@@ -150,7 +176,7 @@ def _normalize_position(value: Any) -> str:
         return 'DST'
     if pos.startswith('K'):
         return 'K'
-    return pos[:3]
+    return 'UNKNOWN'
 
 
 def _pick_first_row(series: pd.Series, fallback: Any = None) -> Any:
@@ -508,6 +534,11 @@ def _build_bayesian_vor_summary(
     }
     draft_score_row = by_strategy.get('draft_score')
     vor_row = by_strategy.get('historical_vor_proxy')
+    bootstrap = (
+        backtest.get('overall', {}).get('draft_score_vs_historical_vor_proxy', {})
+        if backtest
+        else {}
+    )
     if draft_score_row and vor_row:
         delta = float(draft_score_row['mean_lineup_points']) - float(
             vor_row['mean_lineup_points']
@@ -538,6 +569,7 @@ def _build_bayesian_vor_summary(
             )
         return {
             'available': True,
+            'comparison_scope': 'draft_level_internal_holdout_backtest',
             'headline': (
                 'Contextual draft score outperforms the simple VOR proxy in backtests.'
                 if delta > 0
@@ -556,16 +588,18 @@ def _build_bayesian_vor_summary(
                 int(vor_row.get('season_count', 0)),
             ),
             'holdout_years': backtest.get('holdout_years', []),
+            'bootstrap': bootstrap,
             'by_season': season_rows,
             'top_disagreements': disagreements,
             'limitations': [
                 'This comparison is based on internal historical holdout seasons, not a live external validation set.',
-                'The dashboard baseline uses replacement delta as its simple VOR proxy for the current board.',
+                'The dashboard keeps the contextual draft score as a decision policy layered on posterior projections, not a pure posterior rank list.',
             ],
         }
 
     return {
         'available': False,
+        'comparison_scope': 'board_only',
         'headline': 'No direct contextual-vs-VOR backtest summary is available for this export.',
         'top_disagreements': disagreements,
         'limitations': [
@@ -647,6 +681,7 @@ def normalize_player_frame(player_frame: pd.DataFrame) -> pd.DataFrame:
             'projected_fpts',
             'proj_points',
             'projection',
+            'posterior_mean',
         }:
             if 'proj_points_mean' in canonical_columns:
                 continue
@@ -667,11 +702,31 @@ def normalize_player_frame(player_frame: pd.DataFrame) -> pd.DataFrame:
                 continue
             rename_map[column] = 'std_projection'
             canonical_columns.add('std_projection')
+        elif normalized in {'posterior_std', 'predictive_std'}:
+            if 'std_projection' in canonical_columns:
+                continue
+            rename_map[column] = 'std_projection'
+            canonical_columns.add('std_projection')
         elif normalized in {'uncertainty_score', 'risk_score', 'volatility_score'}:
             if 'uncertainty_score' in canonical_columns:
                 continue
             rename_map[column] = 'uncertainty_score'
             canonical_columns.add('uncertainty_score')
+        elif normalized in {'posterior_floor', 'projection_floor'}:
+            if 'proj_points_floor' in canonical_columns:
+                continue
+            rename_map[column] = 'proj_points_floor'
+            canonical_columns.add('proj_points_floor')
+        elif normalized in {'posterior_ceiling', 'projection_ceiling'}:
+            if 'proj_points_ceiling' in canonical_columns:
+                continue
+            rename_map[column] = 'proj_points_ceiling'
+            canonical_columns.add('proj_points_ceiling')
+        elif normalized in {'posterior_prob_beats_replacement', 'beat_replacement_prob'}:
+            if 'posterior_prob_beats_replacement' in canonical_columns:
+                continue
+            rename_map[column] = 'posterior_prob_beats_replacement'
+            canonical_columns.add('posterior_prob_beats_replacement')
         elif normalized in {'vor', 'value_over_replacement'}:
             if 'vor_value' in canonical_columns:
                 continue
@@ -726,6 +781,25 @@ def normalize_player_frame(player_frame: pd.DataFrame) -> pd.DataFrame:
         )
     else:
         df['uncertainty_score'] = np.nan
+
+    if 'proj_points_floor' in df.columns:
+        df['proj_points_floor'] = pd.to_numeric(df['proj_points_floor'], errors='coerce')
+    else:
+        df['proj_points_floor'] = np.nan
+
+    if 'proj_points_ceiling' in df.columns:
+        df['proj_points_ceiling'] = pd.to_numeric(
+            df['proj_points_ceiling'], errors='coerce'
+        )
+    else:
+        df['proj_points_ceiling'] = np.nan
+
+    if 'posterior_prob_beats_replacement' in df.columns:
+        df['posterior_prob_beats_replacement'] = pd.to_numeric(
+            df['posterior_prob_beats_replacement'], errors='coerce'
+        )
+    else:
+        df['posterior_prob_beats_replacement'] = np.nan
 
     if 'vor_value' in df.columns:
         df['vor_value'] = pd.to_numeric(df['vor_value'], errors='coerce')
@@ -838,6 +912,245 @@ def availability_probability(
     return float(np.clip(prob, 0.0, 1.0))
 
 
+def _filter_fantasy_player_pool(
+    frame: pd.DataFrame,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    if frame is None:
+        return (
+            pd.DataFrame(),
+            {
+                'raw_player_count': 0,
+                'eligible_player_count': 0,
+                'removed_blank_name_count': 0,
+                'removed_unknown_name_count': 0,
+                'removed_non_fantasy_position_count': 0,
+                'eligible_positions': list(FANTASY_DRAFT_POSITIONS),
+            },
+        )
+
+    filtered = frame.copy()
+    raw_player_count = int(len(filtered))
+    names = filtered['player_name'].map(_safe_string).str.strip()
+    positions = filtered['position'].map(_normalize_position)
+
+    blank_name_mask = names.eq('')
+    unknown_name_mask = names.str.upper().eq('UNKNOWN')
+    invalid_position_mask = ~positions.isin(FANTASY_DRAFT_POSITIONS)
+    keep_mask = ~(blank_name_mask | unknown_name_mask | invalid_position_mask)
+
+    filtered = filtered.loc[keep_mask].copy()
+    filtered['player_name'] = names.loc[keep_mask]
+    filtered['position'] = positions.loc[keep_mask]
+
+    return filtered.reset_index(drop=True), {
+        'raw_player_count': raw_player_count,
+        'eligible_player_count': int(len(filtered)),
+        'removed_blank_name_count': int(blank_name_mask.sum()),
+        'removed_unknown_name_count': int(unknown_name_mask.sum()),
+        'removed_non_fantasy_position_count': int(invalid_position_mask.sum()),
+        'eligible_positions': list(FANTASY_DRAFT_POSITIONS),
+    }
+
+
+def _current_round_number(pick_number: int, league_size: int) -> int:
+    return max(1, math.ceil(max(1, int(pick_number)) / max(1, int(league_size))))
+
+
+def _specialist_round_open(settings: LeagueSettings, round_number: int) -> bool:
+    return round_number >= max(1, settings.round_count() - LATE_SPECIALIST_BUFFER_ROUNDS)
+
+
+def _starter_position_needs(
+    settings: LeagueSettings, roster_counts: dict[str, int]
+) -> dict[str, int]:
+    return {
+        pos: max(0, settings.roster_spots.get(pos, 0) - roster_counts.get(pos, 0))
+        for pos in POSITION_ORDER
+    }
+
+
+def _score_policy_rows(
+    available: pd.DataFrame,
+    league_settings: LeagueSettings,
+    context: DraftContext,
+) -> pd.DataFrame:
+    if available.empty:
+        return available.copy()
+
+    rows = available.copy()
+    next_turn_pick = next_pick_number(
+        context.current_pick_number,
+        league_settings.draft_position,
+        league_settings.league_size,
+    )
+    current_round = _current_round_number(
+        context.current_pick_number, league_settings.league_size
+    )
+    specialist_window_open = _specialist_round_open(league_settings, current_round)
+
+    position_spread = (
+        rows.groupby('position')['adp']
+        .transform(lambda series: pd.to_numeric(series, errors='coerce').std(ddof=0))
+        .fillna(rows['adp_std'])
+        .fillna(2.5)
+    )
+    rows['availability_to_next_pick'] = [
+        availability_probability(
+            adp=row.adp,
+            target_pick=next_turn_pick,
+            adp_std=row.position_adp_spread,
+            uncertainty_score=row.uncertainty_score,
+        )
+        for row in rows.assign(position_adp_spread=position_spread).itertuples(index=False)
+    ]
+
+    roster_counts = {pos: int(context.roster_counts.get(pos, 0)) for pos in POSITION_ORDER}
+    starter_needs = _starter_position_needs(league_settings, roster_counts)
+    offensive_needs = {pos: starter_needs.get(pos, 0) for pos in OFFENSIVE_POSITIONS}
+    open_offensive_slots = sum(offensive_needs.values())
+    total_need = sum(offensive_needs.values()) or 1
+    position_counts_remaining = rows['position'].value_counts().to_dict()
+
+    rows['starter_slot_urgency'] = rows['position'].map(
+        lambda pos: (
+            offensive_needs.get(pos, 0) / total_need
+            if pos in OFFENSIVE_POSITIONS and open_offensive_slots > 0
+            else 0.0
+        )
+    )
+    rows['specialist_need_bonus'] = rows['position'].map(
+        lambda pos: (
+            2.5
+            if pos in {'DST', 'K'}
+            and specialist_window_open
+            and starter_needs.get(pos, 0) > 0
+            else 0.0
+        )
+    )
+    rows['specialist_urgency'] = rows.apply(
+        lambda row: float(
+            rows.loc[rows['position'] == row['position'], 'player_name'].count()
+        ),
+        axis=1,
+    )
+    rows['specialist_urgency'] = rows.apply(
+        lambda row: (
+            (
+                1.25 * (1.0 - float(row['availability_to_next_pick']))
+                + 0.75
+                * np.clip(
+                    1.0 / max(1.0, float(row['specialist_urgency'])),
+                    0.0,
+                    1.0,
+                )
+            )
+            if row['position'] in {'DST', 'K'}
+            and specialist_window_open
+            and starter_needs.get(row['position'], 0) > 0
+            else 0.0
+        ),
+        axis=1,
+    )
+    rows['roster_fit_score'] = rows['starter_slot_urgency']
+    rows['lineup_gain_now'] = rows.apply(
+        lambda row: float(
+            max(
+                0.0,
+                row['starter_delta']
+                if row['position'] in OFFENSIVE_POSITIONS
+                else row['replacement_delta'] * 0.35,
+                row['replacement_delta'] * 0.70
+                if row['position'] in OFFENSIVE_POSITIONS
+                else row['replacement_delta'] * 0.20,
+            )
+        ),
+        axis=1,
+    )
+    lineup_gain_rank = rows['lineup_gain_now'].rank(pct=True, method='average').fillna(0.0)
+
+    def _position_run_risk(position: str) -> float:
+        remaining = position_counts_remaining.get(position, 0)
+        if position in OFFENSIVE_POSITIONS:
+            demand = max(1, league_settings.league_size * max(1, offensive_needs.get(position, 0)))
+        else:
+            demand = max(1, league_settings.league_size)
+        return float(np.clip(1.0 - remaining / demand, 0.0, 1.0))
+
+    rows['position_run_risk'] = rows['position'].map(_position_run_risk)
+
+    best_offensive_value = (
+        float(
+            rows.loc[rows['position'].isin(OFFENSIVE_POSITIONS), 'draft_score'].max()
+        )
+        if rows['position'].isin(OFFENSIVE_POSITIONS).any()
+        else float(rows['draft_score'].max())
+    )
+
+    eligibility_reasons: list[str] = []
+    policy_eligible: list[bool] = []
+    for row in rows.itertuples(index=False):
+        position = row.position
+        current_count = roster_counts.get(position, 0)
+        starter_requirement = league_settings.roster_spots.get(position, 0)
+        reason = 'eligible'
+        eligible = True
+        if position in {'DST', 'K'} and not specialist_window_open:
+            eligible = False
+            reason = 'late_round_only'
+        elif (
+            position in {'QB', 'TE'}
+            and open_offensive_slots > 0
+            and current_count >= starter_requirement
+            and float(row.draft_score) < (best_offensive_value + SECONDARY_QB_TE_VALUE_EDGE)
+        ):
+            eligible = False
+            reason = 'starter_priority'
+        policy_eligible.append(eligible)
+        eligibility_reasons.append(reason)
+    rows['policy_eligible'] = policy_eligible
+    rows['policy_eligibility_reason'] = eligibility_reasons
+
+    rows['expected_regret'] = (
+        (0.55 * lineup_gain_rank)
+        + (0.25 * rows['starter_slot_urgency'])
+        + (0.20 * rows['position_run_risk'])
+    ) * (1.0 - rows['availability_to_next_pick'])
+
+    wait_signal: list[str] = []
+    for row in rows.itertuples(index=False):
+        if row.position in {'DST', 'K'} and specialist_window_open:
+            wait_signal.append('late_round_stash_ok')
+        elif float(row.availability_to_next_pick) < CONSERVATIVE_WAIT_SURVIVAL_THRESHOLD:
+            wait_signal.append('low_survival')
+        elif float(row.expected_regret) > CONSERVATIVE_WAIT_LINEUP_LOSS_THRESHOLD:
+            wait_signal.append('too_much_lineup_loss')
+        else:
+            wait_signal.append('safe_to_wait')
+    rows['wait_signal'] = wait_signal
+
+    risk_bias = {'low': -0.03, 'medium': 0.0, 'high': 0.03}.get(
+        league_settings.risk_tolerance.lower(), 0.0
+    )
+    rows['current_pick_utility'] = (
+        rows['draft_score']
+        + 0.32 * rows['starter_slot_urgency']
+        + rows['specialist_need_bonus']
+        + rows['specialist_urgency']
+        + 0.22 * lineup_gain_rank
+        + 0.08 * rows['posterior_prob_beats_replacement'].fillna(0.5)
+        + 0.06 * rows['position_run_risk']
+        + risk_bias * rows['upside_score']
+    )
+    rows.loc[~rows['policy_eligible'], 'current_pick_utility'] -= 2.5
+
+    rows['wait_utility'] = (
+        rows['draft_score'] * rows['availability_to_next_pick']
+        + 0.06 * rows['upside_score']
+        - 0.85 * rows['expected_regret']
+    )
+    return rows
+
+
 def build_decision_table(
     player_frame: pd.DataFrame,
     league_settings: LeagueSettings | None = None,
@@ -848,6 +1161,10 @@ def build_decision_table(
     context = context or DraftContext(current_pick_number=settings.draft_position)
 
     df = normalize_player_frame(player_frame)
+    df, fantasy_pool_metadata = _filter_fantasy_player_pool(df)
+    df.attrs['fantasy_pool_metadata'] = fantasy_pool_metadata
+    if df.empty:
+        raise ValueError('player_frame does not contain eligible fantasy draft players')
     projection_series = _projection_series_for_settings(df, settings)
     if projection_series is not None:
         df['proj_points_mean'] = projection_series
@@ -878,12 +1195,14 @@ def build_decision_table(
     fallback_spread = (
         df['proj_points_mean'].abs() * (0.08 + 0.35 * df['uncertainty_score'])
     ).fillna(0.0)
-    df['proj_points_floor'] = df['proj_points_mean'] - spread_from_std.fillna(
-        fallback_spread
-    )
-    df['proj_points_ceiling'] = (
-        df['proj_points_mean'] + spread_from_std.fillna(fallback_spread) * 1.25
-    )
+    computed_floor = df['proj_points_mean'] - spread_from_std.fillna(fallback_spread)
+    computed_ceiling = df['proj_points_mean'] + spread_from_std.fillna(fallback_spread) * 1.25
+    df['proj_points_floor'] = pd.to_numeric(
+        df.get('proj_points_floor'), errors='coerce'
+    ).combine_first(computed_floor)
+    df['proj_points_ceiling'] = pd.to_numeric(
+        df.get('proj_points_ceiling'), errors='coerce'
+    ).combine_first(computed_ceiling)
 
     # Replacement and starter baselines depend on league structure.
     starter_slots = settings.starters_by_position()
@@ -906,6 +1225,23 @@ def build_decision_table(
 
     df['starter_delta'] = df['proj_points_mean'] - df['starter_baseline']
     df['replacement_delta'] = df['proj_points_mean'] - df['replacement_baseline']
+    df['posterior_prob_beats_replacement'] = pd.to_numeric(
+        df.get('posterior_prob_beats_replacement'), errors='coerce'
+    ).fillna(
+        _clamp(
+            pd.Series(
+                1.0
+                / (
+                    1.0
+                    + np.exp(
+                        -(df['replacement_delta'] / np.maximum(spread_from_std.fillna(fallback_spread), 1.0))
+                    )
+                )
+            ),
+            0.0,
+            1.0,
+        )
+    )
 
     # Market rank and relative market gap.
     if df['adp'].notna().any():
@@ -967,6 +1303,7 @@ def build_decision_table(
         spread = (df['proj_points_ceiling'] - df['proj_points_floor']) / 2.0
     upside_gap = (df['proj_points_ceiling'] - df['proj_points_mean']).fillna(0.0)
 
+    posterior_reliability_penalty = 1.0 - df['posterior_prob_beats_replacement']
     df['fragility_score'] = _clamp(
         0.22 * history_penalty
         + 0.25 * injury_penalty
@@ -977,9 +1314,15 @@ def build_decision_table(
         0.0,
         1.0,
     )
+    df['fragility_score'] = _clamp(
+        0.65 * df['fragility_score'] + 0.35 * posterior_reliability_penalty,
+        0.0,
+        1.0,
+    )
 
     df['upside_score'] = _clamp(
         _zscore(upside_gap).rank(pct=True)
+        + 0.45 * df['posterior_prob_beats_replacement']
         + 0.35 * _zscore(df['availability_at_pick']).rank(pct=True)
         + 0.15 * _zscore(df['proj_points_mean']).rank(pct=True),
         0.0,
@@ -1017,19 +1360,16 @@ def build_decision_table(
     risk_multiplier = {'low': 0.80, 'medium': 1.00, 'high': 1.18}.get(
         settings.risk_tolerance.lower(), 1.00
     )
-    df['draft_score'] = (
-        0.34 * _zscore(df['starter_delta']).fillna(0.0)
-        + 0.20 * _zscore(df['replacement_delta']).fillna(0.0)
-        + 0.16 * _zscore(df['proj_points_mean']).fillna(0.0)
-        + 0.12 * _zscore(df['availability_at_pick']).fillna(0.0)
-        + 0.10 * _zscore(df['upside_score']).fillna(0.0)
-        + 0.08 * _zscore(df['starter_need']).fillna(0.0)
-        + 0.08 * _zscore(df['position_scarcity']).fillna(0.0)
-        - (0.25 * risk_multiplier) * _zscore(df['fragility_score']).fillna(0.0)
-        + 0.06 * _zscore(df['market_gap']).fillna(0.0)
+    df['board_value_score'] = (
+        0.40 * _zscore(df['proj_points_mean']).fillna(0.0)
+        + 0.24 * _zscore(df['starter_delta']).fillna(0.0)
+        + 0.18 * _zscore(df['replacement_delta']).fillna(0.0)
+        + 0.10 * _zscore(df['posterior_prob_beats_replacement']).fillna(0.0)
+        + 0.05 * _zscore(df['market_gap']).fillna(0.0)
+        + 0.03 * _zscore(df['starter_need']).fillna(0.0)
+        - (0.06 * risk_multiplier) * _zscore(df['fragility_score']).fillna(0.0)
     )
-
-    df['draft_score'] = df['draft_score'].fillna(0.0)
+    df['draft_score'] = df['board_value_score'].fillna(0.0)
     df['draft_rank'] = (
         df['draft_score'].rank(method='first', ascending=False).astype(int)
     )
@@ -1076,6 +1416,11 @@ def _build_why_flags(row: pd.Series) -> str:
         flags.append('fragile')
     if pd.notna(row.get('starter_delta')) and row['starter_delta'] > 0:
         flags.append('starter_gain')
+    if (
+        pd.notna(row.get('posterior_prob_beats_replacement'))
+        and row['posterior_prob_beats_replacement'] > 0.70
+    ):
+        flags.append('posterior_confidence')
     if (
         row.get('position') in {'RB', 'WR'}
         and pd.notna(row.get('position_scarcity'))
@@ -1141,6 +1486,7 @@ def build_recommendations(
                 'expected_regret',
                 'position_run_risk',
                 'roster_fit_score',
+                'wait_signal',
                 'pick_mode',
                 'recommendation_lane',
                 'lane_rank',
@@ -1148,92 +1494,56 @@ def build_recommendations(
             ]
         )
 
-    next_turn_pick = next_pick_number(
-        context.current_pick_number,
-        league_settings.draft_position,
-        league_settings.league_size,
-    )
-    available = available.copy()
-    available['availability_to_next_pick'] = [
-        availability_probability(
-            adp=row.adp,
-            target_pick=next_turn_pick,
-            adp_std=row.adp_std,
-            uncertainty_score=row.uncertainty_score,
-        )
-        for row in available.itertuples(index=False)
-    ]
-
-    position_counts_remaining = available['position'].value_counts().to_dict()
-    position_need = {
-        pos: max(
-            0,
-            league_settings.roster_spots.get(pos, 0)
-            - context.roster_counts.get(pos, 0),
-        )
-        for pos in ['QB', 'RB', 'WR', 'TE']
-    }
-    total_need = sum(position_need.values()) or 1
-
-    def _pos_run_risk(position: str) -> float:
-        remaining = position_counts_remaining.get(position, 0)
-        need = position_need.get(position, 0)
-        demand = max(1, league_settings.league_size * max(1, need))
-        return float(np.clip(1.0 - remaining / demand, 0.0, 1.0))
-
-    available['position_run_risk'] = available['position'].map(_pos_run_risk)
-    available['roster_fit_score'] = available['position'].map(
-        lambda pos: position_need.get(pos, 0) / total_need
-    )
-
-    # Regret proxy: how much value we lose if we wait until next turn.
-    best_now = available['draft_score'].max()
-    available['expected_regret'] = np.maximum(
-        0.0, best_now - available['draft_score']
-    ) * (1.0 - available['availability_to_next_pick'])
-    available['expected_regret'] += 0.25 * available['position_run_risk']
-
-    # Combine current pick utility with wait-survival utility.
-    risk_bias = {'low': -0.08, 'medium': 0.0, 'high': 0.08}.get(
-        league_settings.risk_tolerance.lower(), 0.0
-    )
-    available['current_pick_utility'] = (
-        available['draft_score']
-        + 0.15 * available['roster_fit_score']
-        + 0.10 * available['position_run_risk']
-        - 0.20 * (1.0 - available['availability_to_next_pick'])
-        + risk_bias * available['upside_score']
-    )
-    available['wait_utility'] = (
-        available['draft_score'] * available['availability_to_next_pick']
-        + 0.18 * available['upside_score']
-        - 0.15 * available['fragility_score']
-    )
+    available = _score_policy_rows(available, league_settings, context)
 
     now = (
-        available.sort_values(
+        available[available['policy_eligible']].sort_values(
             ['current_pick_utility', 'draft_score'], ascending=[False, False]
         )
         .head(top_n)
         .copy()
     )
+    if now.empty:
+        now = (
+            available.sort_values(
+                ['current_pick_utility', 'draft_score'], ascending=[False, False]
+            )
+            .head(top_n)
+            .copy()
+        )
     now['pick_mode'] = 'now'
     now['recommendation_lane'] = ['pick_now'] + ['fallback'] * max(0, len(now) - 1)
     now['lane_rank'] = list(range(1, len(now) + 1))
     now['rationale'] = now.apply(_rationale_now, axis=1)
 
+    wait_candidates = available[
+        available['wait_signal'].isin(['safe_to_wait', 'late_round_stash_ok'])
+    ].copy()
     wait = (
-        available.sort_values(
+        wait_candidates.sort_values(
             ['wait_utility', 'availability_to_next_pick'], ascending=[False, False]
         )
         .head(top_n)
         .copy()
     )
     wait = wait[~wait['player_name'].isin(now['player_name'])].copy()
+    if wait.empty:
+        wait = (
+            available[~available['player_name'].isin(now['player_name'])]
+            .sort_values(
+                ['availability_to_next_pick', 'draft_score'],
+                ascending=[False, False],
+            )
+            .head(top_n)
+            .copy()
+        )
     wait['pick_mode'] = 'wait'
     wait['recommendation_lane'] = 'can_wait'
     wait['lane_rank'] = list(range(1, len(wait) + 1))
-    wait['rationale'] = wait.apply(_rationale_wait, axis=1)
+    if wait.empty:
+        wait['rationale'] = pd.Series(dtype='object')
+    else:
+        wait['rationale'] = wait.apply(_rationale_wait, axis=1)
 
     cols = [
         'player_name',
@@ -1248,12 +1558,16 @@ def build_recommendations(
         'starter_delta',
         'upside_score',
         'fragility_score',
+        'posterior_prob_beats_replacement',
+        'board_value_score',
         'draft_score',
         'draft_tier',
         'why_flags',
         'position_run_risk',
         'roster_fit_score',
         'expected_regret',
+        'wait_signal',
+        'policy_eligible',
         'current_pick_utility',
         'wait_utility',
         'pick_mode',
@@ -1277,6 +1591,8 @@ def _rationale_now(row: pd.Series) -> str:
         parts.append(row['why_flags'].replace('|', ', '))
     if pd.notna(row.get('availability_to_next_pick')):
         parts.append(f'survival={row["availability_to_next_pick"]:.0%}')
+    if row.get('policy_eligibility_reason') and row['policy_eligibility_reason'] != 'eligible':
+        parts.append(row['policy_eligibility_reason'].replace('_', ' '))
     return '; '.join(parts)
 
 
@@ -1286,6 +1602,8 @@ def _rationale_wait(row: pd.Series) -> str:
         parts.append(f'survival={row["availability_to_next_pick"]:.0%}')
     if pd.notna(row.get('expected_regret')):
         parts.append(f'regret={row["expected_regret"]:.2f}')
+    if row.get('wait_signal'):
+        parts.append(row['wait_signal'].replace('_', ' '))
     return '; '.join(parts)
 
 
@@ -1320,6 +1638,7 @@ def build_live_recommendation_snapshot(
                 'roster_fit_score',
                 'position_run_risk',
                 'why_flags',
+                'wait_signal',
                 'recommendation_lane',
                 'lane_rank',
             ]
@@ -1450,34 +1769,26 @@ def _starter_points_from_roster(
 ) -> float:
     if team_roster.empty:
         return 0.0
-
-    def _take_best(
-        pos: str, count: int, pool: pd.DataFrame
-    ) -> tuple[pd.DataFrame, float]:
-        if count <= 0 or pool.empty:
-            return pool, 0.0
-        chosen = pool.nlargest(count, 'actual_points')
-        remaining = pool.drop(chosen.index)
-        return remaining, float(chosen['actual_points'].sum())
-
-    pool = team_roster.copy()
     total = 0.0
-    for pos in ['QB', 'RB', 'WR', 'TE']:
+    chosen = pd.Series(False, index=team_roster.index)
+    for pos in ['QB', 'RB', 'WR', 'TE', 'DST', 'K']:
         need = league_settings.roster_spots.get(pos, 0)
-        pos_pool = pool[pool['position'] == pos]
-        pool, subtotal = _take_best(pos, need, pos_pool)
-        total += subtotal
+        pos_pool = team_roster[(team_roster['position'] == pos) & (~chosen)]
+        if pos_pool.empty or need <= 0:
+            continue
+        take = pos_pool.nlargest(need, 'actual_points')
+        chosen.loc[take.index] = True
+        total += float(take['actual_points'].sum())
 
     flex_slots = league_settings.roster_spots.get('FLEX', 0)
     if flex_slots > 0:
-        flex_pool = team_roster[team_roster['position'].isin(['RB', 'WR', 'TE'])]
-        flex_pool = flex_pool.loc[
-            ~flex_pool.index.isin(team_roster.index.difference(flex_pool.index))
+        flex_pool = team_roster[
+            (team_roster['position'].isin(['RB', 'WR', 'TE'])) & (~chosen)
         ]
         if not flex_pool.empty:
-            total += float(
-                flex_pool.nlargest(flex_slots, 'actual_points')['actual_points'].sum()
-            )
+            take = flex_pool.nlargest(flex_slots, 'actual_points')
+            chosen.loc[take.index] = True
+            total += float(take['actual_points'].sum())
     return float(total)
 
 
@@ -1486,30 +1797,8 @@ def _team_actual_points(
 ) -> float:
     if team_players.empty:
         return 0.0
-    total = 0.0
-    chosen = pd.Series(False, index=team_players.index)
-    for pos, count in [
-        ('QB', league_settings.roster_spots.get('QB', 0)),
-        ('RB', league_settings.roster_spots.get('RB', 0)),
-        ('WR', league_settings.roster_spots.get('WR', 0)),
-        ('TE', league_settings.roster_spots.get('TE', 0)),
-    ]:
-        pos_pool = team_players[(team_players['position'] == pos) & (~chosen)]
-        if pos_pool.empty or count <= 0:
-            continue
-        take = pos_pool.nlargest(count, 'actual_points')
-        chosen.loc[take.index] = True
-        total += float(take['actual_points'].sum())
-    flex_slots = league_settings.roster_spots.get('FLEX', 0)
-    if flex_slots > 0:
-        flex_pool = team_players[
-            (team_players['position'].isin(['RB', 'WR', 'TE'])) & (~chosen)
-        ]
-        if not flex_pool.empty:
-            take = flex_pool.nlargest(flex_slots, 'actual_points')
-            chosen.loc[take.index] = True
-            total += float(take['actual_points'].sum())
-    return float(total)
+    del league_settings
+    return float(pd.to_numeric(team_players['actual_points'], errors='coerce').fillna(0.0).sum())
 
 
 def _build_strategy_ranker(strategy_name: str):
@@ -1521,10 +1810,13 @@ def _build_strategy_ranker(strategy_name: str):
             )
             frame['strategy_score'] = -frame['market_rank']
         elif strategy_name in {'vor', 'historical_vor_proxy'}:
-            frame['strategy_rank'] = frame['replacement_delta'].rank(
+            strategy_series = pd.to_numeric(
+                frame.get('historical_vor_proxy'), errors='coerce'
+            ).fillna(frame['replacement_delta'])
+            frame['strategy_rank'] = strategy_series.rank(
                 method='first', ascending=False
             )
-            frame['strategy_score'] = frame['replacement_delta']
+            frame['strategy_score'] = strategy_series
         elif strategy_name == 'consensus':
             frame['strategy_rank'] = (
                 0.65 * frame['proj_points_mean'] + 0.35 * frame['availability_at_pick']
@@ -1583,47 +1875,187 @@ def build_historical_vor_proxy_table(
     return proxy
 
 
+def _roster_counts_from_team(team_roster: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {pos: 0 for pos in POSITION_ORDER}
+    for row in team_roster:
+        position = _normalize_position(row.get('position'))
+        if position in counts:
+            counts[position] += 1
+    return counts
+
+
+def _starter_fill_timing(
+    pick_log: list[dict[str, Any]], league_settings: LeagueSettings
+) -> dict[str, int | None]:
+    counts = {pos: 0 for pos in POSITION_ORDER}
+    fill_timing: dict[str, int | None] = {
+        pos: None for pos in POSITION_ORDER if league_settings.roster_spots.get(pos, 0) > 0
+    }
+    for event in pick_log:
+        position = _normalize_position(event.get('position'))
+        if position not in counts:
+            continue
+        counts[position] += 1
+        needed = league_settings.roster_spots.get(position, 0)
+        if needed > 0 and counts[position] >= needed and fill_timing.get(position) is None:
+            fill_timing[position] = int(event.get('pick_number', 0))
+    return fill_timing
+
+
+def _secondary_qb_te_before_starters_filled(
+    pick_log: list[dict[str, Any]], league_settings: LeagueSettings
+) -> int:
+    counts = {pos: 0 for pos in POSITION_ORDER}
+    total = 0
+    for event in pick_log:
+        position = _normalize_position(event.get('position'))
+        open_offensive_slots = sum(
+            max(0, league_settings.roster_spots.get(pos, 0) - counts.get(pos, 0))
+            for pos in OFFENSIVE_POSITIONS
+        )
+        if (
+            position in {'QB', 'TE'}
+            and counts.get(position, 0) >= league_settings.roster_spots.get(position, 0)
+            and open_offensive_slots > 0
+        ):
+            total += 1
+        if position in counts:
+            counts[position] += 1
+    return total
+
+
 def _draft_team_from_pool(
     available: pd.DataFrame,
     team_roster: list[dict[str, Any]],
     strategy_name: str,
     round_number: int,
+    current_pick_number: int,
     league_settings: LeagueSettings,
-) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
+) -> tuple[pd.DataFrame, list[dict[str, Any]], dict[str, Any]]:
     if available.empty:
-        return available, team_roster
+        return available, team_roster, {}
 
     frame = available.copy()
-    ranker = _build_strategy_ranker(strategy_name)
-    ranked = ranker(frame)
+    pick_event: dict[str, Any] = {
+        'strategy': strategy_name,
+        'pick_number': int(current_pick_number),
+        'round_number': int(round_number),
+    }
 
-    # Prefer roster gaps first, then best available.
-    roster_counts = (
-        pd.Series([row['position'] for row in team_roster]).value_counts().to_dict()
-    )
-    for pos in ['QB', 'RB', 'WR', 'TE']:
-        need = league_settings.roster_spots.get(pos, 0) - roster_counts.get(pos, 0)
-        if need > 0:
-            positional = ranked[ranked['position'] == pos]
-            if not positional.empty:
-                choice = positional.iloc[0]
-                team_roster.append(choice.to_dict())
-                return ranked[
-                    ranked['player_name'] != choice['player_name']
-                ].reset_index(drop=True), team_roster
-
-    if round_number > league_settings.round_count() - 3:
-        # Late rounds: lean into upside if the build is already stable.
-        ranked = ranked.sort_values(
-            ['upside_score', 'draft_score'], ascending=[False, False]
+    if strategy_name == 'draft_score':
+        roster_counts = _roster_counts_from_team(team_roster)
+        starter_needs = _starter_position_needs(league_settings, roster_counts)
+        context = DraftContext(
+            current_pick_number=current_pick_number,
+            your_players={_safe_string(row.get('player_name')) for row in team_roster},
+            roster_counts=roster_counts,
         )
+        scored = _score_policy_rows(frame, league_settings, context)
+        eligible = scored[scored['policy_eligible']].copy()
+        if eligible.empty:
+            eligible = scored.copy()
+        ranked = eligible.sort_values(
+            ['current_pick_utility', 'draft_score'], ascending=[False, False]
+        ).reset_index(drop=True)
+        remaining_rounds = max(1, league_settings.round_count() - round_number + 1)
+        open_specialists = [
+            pos for pos in ['DST', 'K'] if starter_needs.get(pos, 0) > 0
+        ]
+        forced_specialists = ranked[ranked['position'].isin(open_specialists)]
+        if (
+            open_specialists
+            and remaining_rounds <= (len(open_specialists) + 1)
+            and not forced_specialists.empty
+        ):
+            choice = forced_specialists.sort_values(
+                ['current_pick_utility', 'draft_score'],
+                ascending=[False, False],
+            ).iloc[0]
+        else:
+            choice = ranked.iloc[0]
 
-    choice = ranked.iloc[0]
-    team_roster.append(choice.to_dict())
-    available = ranked[ranked['player_name'] != choice['player_name']].reset_index(
+        wait_candidates = scored[
+            scored['wait_signal'].isin(['safe_to_wait', 'late_round_stash_ok'])
+        ]
+        wait_candidates = wait_candidates[
+            wait_candidates['player_name'] != choice['player_name']
+        ].sort_values(
+            ['wait_utility', 'availability_to_next_pick'], ascending=[False, False]
+        )
+        if not wait_candidates.empty:
+            top_wait = wait_candidates.iloc[0]
+            pick_event['top_wait_candidate'] = {
+                'player_name': top_wait['player_name'],
+                'position': top_wait['position'],
+                'actual_points': float(top_wait.get('actual_points', 0.0) or 0.0),
+                'availability_to_next_pick': float(
+                    top_wait.get('availability_to_next_pick', 0.0) or 0.0
+                ),
+                'expected_regret': float(top_wait.get('expected_regret', 0.0) or 0.0),
+                'wait_signal': _safe_string(top_wait.get('wait_signal')),
+            }
+            pick_event['wait_candidate_survival'] = float(
+                top_wait.get('availability_to_next_pick', 0.0) or 0.0
+            )
+            pick_event['wait_candidate_regret'] = float(
+                top_wait.get('expected_regret', 0.0) or 0.0
+            )
+    else:
+        ranker = _build_strategy_ranker(strategy_name)
+        ranked = ranker(frame)
+        choice = ranked.iloc[0]
+
+    choice_record = choice.to_dict()
+    team_roster.append(choice_record)
+    pick_event.update(
+        {
+            'player_name': _safe_string(choice_record.get('player_name')),
+            'position': _normalize_position(choice_record.get('position')),
+            'actual_points': float(_coerce_float(choice_record.get('actual_points'), 0.0)),
+            'availability_to_next_pick': float(
+                _coerce_float(choice_record.get('availability_to_next_pick'), np.nan)
+            )
+            if pd.notna(choice_record.get('availability_to_next_pick'))
+            else None,
+            'expected_regret': float(
+                _coerce_float(choice_record.get('expected_regret'), np.nan)
+            )
+            if pd.notna(choice_record.get('expected_regret'))
+            else None,
+            'wait_signal': _safe_string(choice_record.get('wait_signal')),
+        }
+    )
+    available = frame[frame['player_name'] != choice['player_name']].reset_index(
         drop=True
     )
-    return available, team_roster
+    return available, team_roster, pick_event
+
+
+def _bootstrap_delta_summary(
+    strategy_values: list[float],
+    baseline_values: list[float],
+    *,
+    iterations: int = 2000,
+    seed: int = 7,
+) -> dict[str, Any]:
+    if not strategy_values or not baseline_values:
+        return {}
+    deltas = np.asarray(strategy_values, dtype=float) - np.asarray(
+        baseline_values, dtype=float
+    )
+    if deltas.size == 0:
+        return {}
+    rng = np.random.default_rng(seed)
+    sample_indices = rng.integers(0, deltas.size, size=(iterations, deltas.size))
+    sample_means = deltas[sample_indices].mean(axis=1)
+    return {
+        'mean_delta': float(deltas.mean()),
+        'median_delta': float(np.median(deltas)),
+        'ci_low': float(np.quantile(sample_means, 0.025)),
+        'ci_high': float(np.quantile(sample_means, 0.975)),
+        'season_win_rate': float((deltas > 0).mean()),
+        'supports_positive_delta': bool(np.quantile(sample_means, 0.025) > 0),
+    }
 
 
 def run_draft_backtest(
@@ -1649,11 +2081,18 @@ def run_draft_backtest(
     df['Position'] = df['Position'].map(_normalize_position)
     df['FantPt'] = pd.to_numeric(df['FantPt'], errors='coerce')
     df = df.dropna(subset=['Season', 'Name', 'Position', 'FantPt']).copy()
+    raw_pool_metadata = {
+        'raw_player_count': int(len(df)),
+    }
+    df = df.rename(columns={'Name': 'player_name', 'Position': 'position'})
+    df, fantasy_pool_metadata = _filter_fantasy_player_pool(df)
+    df = df.rename(columns={'player_name': 'Name', 'position': 'Position'})
+    raw_pool_metadata.update(fantasy_pool_metadata)
+    if df.empty:
+        raise ValueError('No eligible fantasy players available after pool filtering')
 
-    season_table = (
-        df.groupby(['Season', 'Name', 'Position'], as_index=False)['FantPt']
-        .mean()
-        .rename(columns={'FantPt': 'actual_points'})
+    season_table = aggregate_season_player_table(df).rename(
+        columns={'fantasy_points': 'actual_points'}
     )
 
     seasons = sorted(int(s) for s in season_table['Season'].unique())
@@ -1670,87 +2109,73 @@ def run_draft_backtest(
         if train.empty or test.empty:
             continue
 
-        train_means = train.groupby(['Name', 'Position'], as_index=False).agg(
-            train_mean=('actual_points', 'mean'),
-            train_std=('actual_points', 'std'),
-            season_count=('actual_points', 'count'),
+        posterior_inputs = build_posterior_projection_table(
+            train_history=train.rename(columns={'actual_points': 'fantasy_points'}),
+            target_frame=test.rename(columns={'actual_points': 'fantasy_points'}),
+            holdout_year=holdout_year,
+            replacement_quantile=0.2,
+            min_history_seasons=0,
         )
-        latest = (
-            train.sort_values('Season')
-            .groupby(['Name', 'Position'], as_index=False)
-            .tail(1)
+        posterior_inputs['Name'] = posterior_inputs['player_name']
+        posterior_inputs['Position'] = posterior_inputs['position']
+        posterior_inputs['FantPt'] = posterior_inputs['actual_points']
+        posterior_inputs['season_count'] = posterior_inputs['season_count'].fillna(0.0)
+        posterior_inputs['years_in_league'] = posterior_inputs[
+            'years_in_league'
+        ].fillna(posterior_inputs['season_count'])
+        posterior_inputs['games_missed'] = posterior_inputs['games_missed'].fillna(
+            posterior_inputs['games_missed_mean']
         )
-        latest = latest[['Name', 'Position', 'actual_points']].rename(
-            columns={'actual_points': 'latest_points'}
+        posterior_inputs['site_disagreement'] = posterior_inputs[
+            'site_disagreement'
+        ].fillna(0.0)
+        posterior_inputs['role_label'] = 'posterior'
+        posterior_inputs['adp'] = posterior_inputs['adp'].fillna(
+            posterior_inputs['market_proxy_score'].rank(
+                method='first', ascending=False
+            )
         )
-        test = test.merge(train_means, on=['Name', 'Position'], how='left')
-        test = test.merge(latest, on=['Name', 'Position'], how='left')
-
-        # Build a simple market proxy from the latest prior season plus uncertainty.
-        test['proj_points_mean'] = (
-            test['train_mean']
-            .fillna(test['latest_points'])
-            .fillna(train['actual_points'].mean())
+        posterior_inputs['adp_std'] = posterior_inputs['adp_std'].fillna(
+            np.maximum(2.0, posterior_inputs['posterior_std'] * 0.18)
         )
-        test['std_projection'] = (
-            test['train_std'].fillna(test['proj_points_mean'].std(ddof=0)).fillna(0.0)
-        )
-        test['adp'] = test.groupby('Position')['latest_points'].rank(
-            method='first', ascending=False
-        )
-        test['adp'] = (
-            test['adp'] + test['std_projection'].fillna(0.0).rank(method='first') * 0.15
-        )
-        test['uncertainty_score'] = _clamp(
-            (
-                test['std_projection'] / test['proj_points_mean'].replace(0, np.nan)
-            ).fillna(0.15),
-            0.0,
-            1.0,
-        )
-        test['site_disagreement'] = _clamp(
-            _zscore(test['std_projection']).rank(pct=True), 0.0, 1.0
-        )
-        test['adp_std'] = test['std_projection'].fillna(0.0)
-        test['role_volatility'] = test['uncertainty_score']
-        test['games_missed'] = 0.0
-        test['age'] = 27.0
-        test['years_in_league'] = test['season_count'].fillna(0.0)
-        test['team_change'] = 0.0
-        test['role_label'] = 'historical'
-        test['source_name'] = f'historical_holdout_{holdout_year}'
-        test['source_updated_at'] = pd.Timestamp(holdout_year, 1, 1)
 
         context = DraftContext(
             current_pick_number=settings.draft_position, drafted_players=set()
         )
-        decision_table = build_decision_table(test, settings, context)
-        historical_vor_proxy_table = build_historical_vor_proxy_table(test, train)
-        if not historical_vor_proxy_table.empty:
-            historical_vor_proxy_table = historical_vor_proxy_table.rename(
-                columns={'Name': 'player_name', 'Position': 'position'}
-            )
-            decision_table = decision_table.merge(
-                historical_vor_proxy_table[
-                    [
-                        'player_name',
-                        'position',
-                        'historical_vor_proxy',
-                        'historical_vor_proxy_rank',
-                    ]
-                ],
-                on=['player_name', 'position'],
-                how='left',
-            )
-            decision_table['historical_vor_proxy'] = decision_table[
-                'historical_vor_proxy'
-            ].fillna(decision_table['replacement_delta'])
-        else:
-            decision_table['historical_vor_proxy'] = decision_table['replacement_delta']
+        decision_table = build_decision_table(posterior_inputs, settings, context)
+        proxy_table = posterior_inputs[
+            [
+                'player_name',
+                'position',
+                'historical_vor_proxy_score',
+                'historical_vor_proxy_point',
+                'market_proxy_score',
+            ]
+        ].rename(
+            columns={
+                'historical_vor_proxy_score': 'historical_vor_proxy',
+                'historical_vor_proxy_point': 'historical_vor_proxy_point',
+            }
+        )
+        decision_table = decision_table.merge(
+            proxy_table,
+            on=['player_name', 'position'],
+            how='left',
+        )
+        decision_table['historical_vor_proxy'] = decision_table[
+            'historical_vor_proxy'
+        ].fillna(decision_table['replacement_delta'])
+        if 'actual_points' not in decision_table.columns:
+            decision_table['actual_points'] = np.nan
+        decision_table['actual_points'] = decision_table['actual_points'].fillna(
+            pd.to_numeric(decision_table.get('FantPt'), errors='coerce')
+        )
         by_strategy = {}
         for strategy in ['market', 'historical_vor_proxy', 'consensus', 'draft_score']:
             available = decision_table.copy()
             team_rosters = [[] for _ in range(settings.league_size)]
+            our_pick_log: list[dict[str, Any]] = []
+            pending_wait_candidate: dict[str, Any] | None = None
             picks_per_team = settings.round_count()
             draft_order = []
             for round_number in range(1, picks_per_team + 1):
@@ -1766,19 +2191,41 @@ def run_draft_backtest(
             ):
                 round_number = math.ceil(pick_index / settings.league_size)
                 if team_idx == settings.draft_position - 1:
-                    available_pool, team_rosters[team_idx] = _draft_team_from_pool(
+                    pending_candidate_was_available = (
+                        pending_wait_candidate is not None
+                        and pending_wait_candidate.get('player_name')
+                        in set(available_pool['player_name'])
+                    )
+                    available_pool, team_rosters[team_idx], pick_event = _draft_team_from_pool(
                         available_pool,
                         team_rosters[team_idx],
                         strategy,
                         round_number,
+                        pick_index,
                         settings,
                     )
+                    if strategy == 'draft_score':
+                        if pending_wait_candidate and not pending_candidate_was_available:
+                            pick_event['realized_pass_regret'] = float(
+                                max(
+                                    0.0,
+                                    float(
+                                        pending_wait_candidate.get('actual_points', 0.0)
+                                    )
+                                    - float(pick_event.get('actual_points', 0.0)),
+                                )
+                            )
+                        else:
+                            pick_event['realized_pass_regret'] = 0.0
+                        pending_wait_candidate = pick_event.get('top_wait_candidate')
+                    our_pick_log.append(pick_event)
                 else:
-                    available_pool, team_rosters[team_idx] = _draft_team_from_pool(
+                    available_pool, team_rosters[team_idx], _ = _draft_team_from_pool(
                         available_pool,
                         team_rosters[team_idx],
                         'market',
                         round_number,
+                        pick_index,
                         settings,
                     )
                 if available_pool.empty:
@@ -1796,16 +2243,29 @@ def run_draft_backtest(
                         pd.MultiIndex.from_frame(our_roster[['Name', 'Position']])
                     )['actual_points']
                     .to_numpy()
-                )
+            )
             roster_points = _team_actual_points(our_roster, settings)
             lineup_points = _starter_points_from_roster(our_roster, settings)
-            market_truth = test.copy()
-            market_truth['baseline_rank'] = market_truth['proj_points_mean'].rank(
-                method='first', ascending=False
+            fill_timing = _starter_fill_timing(our_pick_log, settings)
+            early_specialist_cutoff = max(
+                1, settings.round_count() - LATE_SPECIALIST_BUFFER_ROUNDS
             )
-            market_truth['draft_score_rank'] = decision_table['draft_score'].rank(
-                method='first', ascending=False
+            early_specialist_picks = sum(
+                1
+                for event in our_pick_log
+                if event.get('position') in {'DST', 'K'}
+                and int(event.get('round_number', 0)) < early_specialist_cutoff
             )
+            wait_survivals = [
+                float(event.get('wait_candidate_survival'))
+                for event in our_pick_log
+                if pd.notna(event.get('wait_candidate_survival'))
+            ]
+            realized_regrets = [
+                float(event.get('realized_pass_regret'))
+                for event in our_pick_log
+                if pd.notna(event.get('realized_pass_regret'))
+            ]
 
             metric_rank = {}
             for metric_name, score_col in [
@@ -1826,7 +2286,11 @@ def run_draft_backtest(
                     columns={score_col: 'predicted_score'}
                 )
                 merged = test_eval.merge(pred_scores, on='player_key', how='left')
-                if merged['predicted_score'].notna().sum() > 1:
+                if (
+                    merged['predicted_score'].notna().sum() > 1
+                    and merged['predicted_score'].nunique(dropna=True) > 1
+                    and merged['actual_points'].nunique(dropna=True) > 1
+                ):
                     if metric_name == 'market':
                         corr_input = -merged['predicted_score']
                     else:
@@ -1857,6 +2321,21 @@ def run_draft_backtest(
                 .value_counts()
                 .to_dict(),
                 'strategy_label': strategy,
+                'policy_diagnostics': {
+                    'starter_lineup_points': float(lineup_points),
+                    'full_roster_points': float(roster_points),
+                    'starter_fill_timing': fill_timing,
+                    'early_specialist_picks': int(early_specialist_picks),
+                    'secondary_qb_te_before_starters_filled': int(
+                        _secondary_qb_te_before_starters_filled(our_pick_log, settings)
+                    ),
+                    'mean_wait_recommendation_survival': float(np.mean(wait_survivals))
+                    if wait_survivals
+                    else None,
+                    'mean_realized_pass_regret': float(np.mean(realized_regrets))
+                    if realized_regrets
+                    else 0.0,
+                },
             }
 
         best_strategy = max(
@@ -1898,12 +2377,87 @@ def run_draft_backtest(
         _pick_first_row(overall['strategy']) if not overall.empty else 'draft_score'
     )
 
+    draft_score_values = [
+        season['by_strategy']['draft_score']['our_team_lineup_points']
+        for season in by_season
+        if 'draft_score' in season['by_strategy']
+    ]
+    vor_values = [
+        season['by_strategy']['historical_vor_proxy']['our_team_lineup_points']
+        for season in by_season
+        if 'historical_vor_proxy' in season['by_strategy']
+    ]
+    bootstrap = _bootstrap_delta_summary(draft_score_values, vor_values)
+    consensus_values = [
+        season['by_strategy']['consensus']['our_team_lineup_points']
+        for season in by_season
+        if 'consensus' in season['by_strategy']
+    ]
+    consensus_bootstrap = _bootstrap_delta_summary(draft_score_values, consensus_values)
+
+    diagnostics_rollup = {}
+    for strategy in ['market', 'historical_vor_proxy', 'consensus', 'draft_score']:
+        strategy_diags = [
+            season['by_strategy'][strategy].get('policy_diagnostics', {})
+            for season in by_season
+            if strategy in season['by_strategy']
+        ]
+        if not strategy_diags:
+            continue
+        diagnostics_rollup[strategy] = {
+            'mean_early_specialist_picks': float(
+                np.mean(
+                    [diag.get('early_specialist_picks', 0) for diag in strategy_diags]
+                )
+            ),
+            'mean_secondary_qb_te_before_starters_filled': float(
+                np.mean(
+                    [
+                        diag.get('secondary_qb_te_before_starters_filled', 0)
+                        for diag in strategy_diags
+                    ]
+                )
+            ),
+            'mean_wait_recommendation_survival': float(
+                np.mean(
+                    [
+                        diag.get('mean_wait_recommendation_survival')
+                        for diag in strategy_diags
+                        if diag.get('mean_wait_recommendation_survival') is not None
+                    ]
+                )
+            )
+            if any(
+                diag.get('mean_wait_recommendation_survival') is not None
+                for diag in strategy_diags
+            )
+            else None,
+            'mean_realized_pass_regret': float(
+                np.mean([diag.get('mean_realized_pass_regret', 0.0) for diag in strategy_diags])
+            ),
+        }
+
     return {
         'model_type': 'draft_decision_backtest',
+        'evaluation_scope': {
+            'forecast_target': 'held_out_season_fantasy_points',
+            'decision_target': 'snake_draft_lineup_points',
+            'primary_objective': 'starter_lineup_points',
+            'wait_policy': 'conservative',
+            'draft_score_label': 'posterior_contextual_policy',
+            'eligible_positions': list(FANTASY_DRAFT_POSITIONS),
+            'eligible_player_universe': raw_pool_metadata,
+        },
         'league_settings': settings.to_dict(),
         'holdout_years': holdout_years,
         'by_season': by_season,
-        'overall': {'by_strategy': overall.to_dict(orient='records'), 'winner': winner},
+        'overall': {
+            'by_strategy': overall.to_dict(orient='records'),
+            'winner': winner,
+            'draft_score_vs_historical_vor_proxy': bootstrap,
+            'draft_score_vs_consensus': consensus_bootstrap,
+            'policy_diagnostics': diagnostics_rollup,
+        },
     }
 
 
@@ -1943,6 +2497,8 @@ def build_dashboard_payload(
         'availability_to_next_pick',
         'starter_delta',
         'replacement_delta',
+        'posterior_prob_beats_replacement',
+        'board_value_score',
         'upside_score',
         'fragility_score',
         'draft_score',
@@ -1953,6 +2509,7 @@ def build_dashboard_payload(
         'position_run_risk',
         'roster_fit_score',
         'expected_regret',
+        'wait_signal',
         'recommendation_lane',
         'lane_rank',
         'pick_mode',
@@ -2009,14 +2566,14 @@ def build_dashboard_payload(
         'supporting_math': _dashboard_supporting_math(decision_table),
         'metric_glossary': METRIC_GLOSSARY,
         'model_overview': {
-            'headline': 'The draft board is driven by a contextual score, not a pure rank list.',
+            'headline': 'The draft board uses posterior player projections plus a starter-first decision policy.',
             'plain_english': [
-                'The model starts from projection and replacement-level value, then adjusts for upside, fragility, roster need, and draft-timing risk.',
-                'Availability is estimated from ADP plus uncertainty, so the board can distinguish “take now” from “safe to wait.”',
-                'The simple VOR view is still available as a comparison baseline through replacement delta and rank-gap summaries.',
+                'Each player starts with a posterior mean, floor, ceiling, and uncertainty estimate built from historical player performance plus local feature signals.',
+                'The board value score is a clean posterior-based ranking, and the live recommendation layer separately decides whether to pick now or wait based on starter urgency and survival risk.',
+                'The simple VOR view is still available as a frozen baseline through replacement delta and rank-gap summaries.',
             ],
             'limitations': [
-                'This is still a heuristic draft model, not a fully identified posterior draft simulator.',
+                'This is still a decision policy layered on posterior player estimates, not a full structural model of the entire draft room.',
                 'Backtests here are internal holdout seasons and should be treated as directional evidence, not definitive proof.',
             ],
         },
@@ -3000,7 +3557,13 @@ def export_dashboard_html(
       const data = window.FFBAYES_DASHBOARD || {};
       const STORAGE_KEY = 'ffbayes-dashboard-state-v2';
       const POSITION_KEYS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'DST', 'K'];
+      const FANTASY_DRAFT_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'DST', 'K'];
+      const OFFENSIVE_POSITIONS = ['QB', 'RB', 'WR', 'TE'];
       const FLEX_WEIGHTS = Object.assign({ RB: 0.45, WR: 0.45, TE: 0.10 }, (data.league_settings && data.league_settings.flex_weights) || {});
+      const LATE_SPECIALIST_BUFFER_ROUNDS = 2;
+      const CONSERVATIVE_WAIT_SURVIVAL_THRESHOLD = 0.74;
+      const CONSERVATIVE_WAIT_LINEUP_LOSS_THRESHOLD = 0.28;
+      const SECONDARY_QB_TE_VALUE_EDGE = 0.45;
       const scoringPresets = data.scoring_presets || {};
       const presetEntries = Object.values(scoringPresets);
       const availablePreset = presetEntries.find((entry) => entry && entry.available);
@@ -3084,6 +3647,16 @@ def export_dashboard_html(
           }
         }
         return current + size;
+      }
+
+      function currentRoundNumber(currentPickNumber, leagueSize) {
+        return Math.max(1, Math.ceil(Math.max(1, Number(currentPickNumber) || 1) / Math.max(1, Number(leagueSize) || 1)));
+      }
+
+      function specialistWindowOpen() {
+        const round = currentRoundNumber(state.currentPickNumber, state.leagueSize);
+        const totalRounds = Object.values(state.rosterSpots || {}).reduce((sum, value) => sum + (Number(value) || 0), 0) + (Number(state.benchSlots) || 0);
+        return round >= Math.max(1, totalRounds - LATE_SPECIALIST_BUFFER_ROUNDS);
       }
 
       function availabilityProbability(adp, targetPick, adpStd, uncertaintyScore) {
@@ -3226,13 +3799,21 @@ def export_dashboard_html(
       }
 
       function buildBoardState() {
-        const rows = activeRows();
+        const rows = activeRows().filter((row) => {
+          const name = (row.player_name || '').toString().trim();
+          return name && name.toUpperCase() !== 'UNKNOWN' && FANTASY_DRAFT_POSITIONS.includes(row.position);
+        });
         const takenSet = new Set((state.takenPlayers || []).map(safeLower));
         const yoursSet = new Set((state.yourPlayers || []).map(safeLower));
         const queueSet = new Set((state.queuePlayers || []).map(safeLower));
         const nextPick = nextPickNumber(state.currentPickNumber, state.draftPosition, state.leagueSize);
+        const roundNumber = currentRoundNumber(state.currentPickNumber, state.leagueSize);
+        const lateSpecialistsOk = specialistWindowOpen();
         const counts = rosterCounts(rows);
         const need = rosterNeed(counts);
+        const totalRounds = Object.values(state.rosterSpots || {}).reduce((sum, value) => sum + (Number(value) || 0), 0) + (Number(state.benchSlots) || 0);
+        const remainingRounds = Math.max(1, totalRounds - roundNumber + 1);
+        const openSpecialists = ['DST', 'K'].filter((position) => Number(need[position] || 0) > 0);
         const starterCounts = startersByPosition();
         const replacementCounts = replacementSlots();
         const overallMeanProjection = rows
@@ -3249,15 +3830,15 @@ def export_dashboard_html(
           };
         });
 
-        const totalNeed = ['QB', 'RB', 'WR', 'TE'].reduce((sum, position) => sum + (need[position] || 0), 0) || 1;
+        const totalNeed = OFFENSIVE_POSITIONS.reduce((sum, position) => sum + (need[position] || 0), 0) || 1;
+        const openOffensiveSlots = OFFENSIVE_POSITIONS.reduce((sum, position) => sum + (need[position] || 0), 0);
         const projectionValues = [];
         const starterValues = [];
         const replacementValues = [];
-        const availabilityValues = [];
+        const posteriorConfidenceValues = [];
         const fragilityValues = [];
         const upsideValues = [];
         const starterNeedValues = [];
-        const scarcityValues = [];
         const marketGapValues = [];
         const availableCounts = {};
 
@@ -3271,7 +3852,7 @@ def export_dashboard_html(
           row.replacement_delta = Number(row.proj_points_mean || 0) - baseline.replacement;
           row.simple_vor_proxy = row.replacement_delta;
           row.position_scarcity = baseline.scarcity;
-          row.starter_need = (need[row.position] || 0) / totalNeed;
+          row.starter_need = OFFENSIVE_POSITIONS.includes(row.position) ? ((need[row.position] || 0) / totalNeed) : 0;
           row.status = getStatus(row, takenSet, yoursSet, queueSet);
           if (row.status === 'available' || row.status === 'queued') {
             availableCounts[row.position] = (availableCounts[row.position] || 0) + 1;
@@ -3279,47 +3860,43 @@ def export_dashboard_html(
           projectionValues.push(Number(row.proj_points_mean || 0));
           starterValues.push(Number(row.starter_delta || 0));
           replacementValues.push(Number(row.replacement_delta || 0));
-          availabilityValues.push(Number(row.availability_to_next_pick || 0));
+          posteriorConfidenceValues.push(Number(row.posterior_prob_beats_replacement || 0));
           fragilityValues.push(Number(row.fragility_score || 0));
           starterNeedValues.push(Number(row.starter_need || 0));
-          scarcityValues.push(Number(row.position_scarcity || 0));
           marketGapValues.push(Number(row.market_gap || 0));
           upsideValues.push((Number(row.proj_points_ceiling || 0) - Number(row.proj_points_mean || 0)));
         });
 
         const upsidePercentiles = rankPercentiles(upsideValues);
-        const availabilityPercentiles = rankPercentiles(availabilityValues);
+        const availabilityPercentiles = rankPercentiles(rows.map((row) => Number(row.availability_to_next_pick || 0)));
         const projectionPercentiles = rankPercentiles(projectionValues);
         rows.forEach((row, index) => {
-          row.upside_score = Math.max(0, Math.min(1, upsidePercentiles[index] + (0.35 * availabilityPercentiles[index]) + (0.15 * projectionPercentiles[index])));
+          row.upside_score = Math.max(0, Math.min(1, upsidePercentiles[index] + (0.35 * availabilityPercentiles[index]) + (0.15 * projectionPercentiles[index]) + (0.45 * Number(row.posterior_prob_beats_replacement || 0))));
         });
         const finalUpsideValues = rows.map((row) => Number(row.upside_score || 0));
         const riskMultiplier = ({ low: 0.80, medium: 1.00, high: 1.18 })[(state.riskTolerance || 'medium').toLowerCase()] || 1.0;
         const componentZ = {
+          proj_points_mean: zScores(projectionValues),
           starter_delta: zScores(starterValues),
           replacement_delta: zScores(replacementValues),
-          proj_points_mean: zScores(projectionValues),
-          availability_to_next_pick: zScores(availabilityValues),
-          upside_score: zScores(finalUpsideValues),
+          posterior_prob_beats_replacement: zScores(posteriorConfidenceValues),
           starter_need: zScores(starterNeedValues),
-          position_scarcity: zScores(scarcityValues),
           fragility_score: zScores(fragilityValues),
           market_gap: zScores(marketGapValues),
         };
 
         rows.forEach((row, index) => {
           row.component_terms = {
-            starter_delta: 0.34 * componentZ.starter_delta[index],
-            replacement_delta: 0.20 * componentZ.replacement_delta[index],
-            proj_points_mean: 0.16 * componentZ.proj_points_mean[index],
-            availability_to_next_pick: 0.12 * componentZ.availability_to_next_pick[index],
-            upside_score: 0.10 * componentZ.upside_score[index],
-            starter_need: 0.08 * componentZ.starter_need[index],
-            position_scarcity: 0.08 * componentZ.position_scarcity[index],
-            fragility_score: -(0.25 * riskMultiplier) * componentZ.fragility_score[index],
+            proj_points_mean: 0.40 * componentZ.proj_points_mean[index],
+            starter_delta: 0.24 * componentZ.starter_delta[index],
+            replacement_delta: 0.18 * componentZ.replacement_delta[index],
+            posterior_prob_beats_replacement: 0.10 * componentZ.posterior_prob_beats_replacement[index],
+            starter_need: 0.03 * componentZ.starter_need[index],
+            fragility_score: -(0.06 * riskMultiplier) * componentZ.fragility_score[index],
             market_gap: 0.06 * componentZ.market_gap[index],
           };
-          row.draft_score = Object.values(row.component_terms).reduce((sum, value) => sum + value, 0);
+          row.board_value_score = Object.values(row.component_terms).reduce((sum, value) => sum + value, 0);
+          row.draft_score = row.board_value_score;
         });
 
         rows.sort((a, b) => (Number(b.draft_score) - Number(a.draft_score)) || (Number(b.proj_points_mean) - Number(a.proj_points_mean)));
@@ -3333,25 +3910,66 @@ def export_dashboard_html(
         });
 
         const availableRows = rows.filter((row) => row.status === 'available' || row.status === 'queued');
-        const bestNow = availableRows.reduce((best, row) => Math.max(best, Number(row.draft_score) || 0), 0);
+        const bestOffensiveValue = availableRows.filter((row) => OFFENSIVE_POSITIONS.includes(row.position)).reduce((best, row) => Math.max(best, Number(row.draft_score) || 0), Number.NEGATIVE_INFINITY);
+        const lineupGainValues = [];
         availableRows.forEach((row) => {
           const posNeed = need[row.position] || 0;
-          const demand = Math.max(1, Number(state.leagueSize || 1) * Math.max(1, posNeed));
+          const demand = OFFENSIVE_POSITIONS.includes(row.position)
+            ? Math.max(1, Number(state.leagueSize || 1) * Math.max(1, posNeed))
+            : Math.max(1, Number(state.leagueSize || 1));
           row.position_run_risk = Math.max(0, Math.min(1, 1 - ((availableCounts[row.position] || 0) / demand)));
-          row.roster_fit_score = posNeed / totalNeed;
-          row.expected_regret = (Math.max(0, bestNow - Number(row.draft_score || 0)) * (1 - Number(row.availability_to_next_pick || 0))) + (0.25 * row.position_run_risk);
-          const riskBias = ({ low: -0.08, medium: 0.0, high: 0.08 })[(state.riskTolerance || 'medium').toLowerCase()] || 0;
-          row.current_pick_utility = Number(row.draft_score || 0) + (0.15 * row.roster_fit_score) + (0.10 * row.position_run_risk) - (0.20 * (1 - Number(row.availability_to_next_pick || 0))) + (riskBias * Number(row.upside_score || 0));
-          row.wait_utility = (Number(row.draft_score || 0) * Number(row.availability_to_next_pick || 0)) + (0.18 * Number(row.upside_score || 0)) - (0.15 * Number(row.fragility_score || 0));
+          row.starter_slot_urgency = OFFENSIVE_POSITIONS.includes(row.position) ? (posNeed / totalNeed) : 0;
+          row.specialist_need_bonus = ((row.position === 'DST' || row.position === 'K') && lateSpecialistsOk && Number(need[row.position] || 0) > 0) ? 2.5 : 0;
+          if ((row.position === 'DST' || row.position === 'K') && openSpecialists.includes(row.position) && remainingRounds <= (openSpecialists.length + 1)) {
+            row.specialist_need_bonus += 3.0;
+          }
+          row.specialist_urgency = ((row.position === 'DST' || row.position === 'K') && lateSpecialistsOk && Number(need[row.position] || 0) > 0)
+            ? ((1.25 * (1 - Number(row.availability_to_next_pick || 0))) + (0.75 * Math.max(0, Math.min(1, 1 / Math.max(1, availableCounts[row.position] || 1)))))
+            : 0;
+          row.roster_fit_score = row.starter_slot_urgency;
+          row.lineup_gain_now = Math.max(
+            0,
+            OFFENSIVE_POSITIONS.includes(row.position) ? Number(row.starter_delta || 0) : (Number(row.replacement_delta || 0) * 0.35),
+            OFFENSIVE_POSITIONS.includes(row.position) ? (Number(row.replacement_delta || 0) * 0.70) : (Number(row.replacement_delta || 0) * 0.20),
+          );
+          lineupGainValues.push(Number(row.lineup_gain_now || 0));
+          row.policy_eligible = true;
+          row.policy_eligibility_reason = 'eligible';
+          if ((row.position === 'DST' || row.position === 'K') && !lateSpecialistsOk) {
+            row.policy_eligible = false;
+            row.policy_eligibility_reason = 'late_round_only';
+          } else if ((row.position === 'QB' || row.position === 'TE') && openOffensiveSlots > 0 && Number(counts[row.position] || 0) >= Number(state.rosterSpots[row.position] || 0) && Number(row.draft_score || 0) < (bestOffensiveValue + SECONDARY_QB_TE_VALUE_EDGE)) {
+            row.policy_eligible = false;
+            row.policy_eligibility_reason = 'starter_priority';
+          }
+        });
+        const lineupGainPercentiles = rankPercentiles(lineupGainValues);
+        availableRows.forEach((row, index) => {
+          row.expected_regret = ((0.55 * lineupGainPercentiles[index]) + (0.25 * Number(row.starter_slot_urgency || 0)) + (0.20 * Number(row.position_run_risk || 0))) * (1 - Number(row.availability_to_next_pick || 0));
+          if ((row.position === 'DST' || row.position === 'K') && lateSpecialistsOk) {
+            row.wait_signal = 'late_round_stash_ok';
+          } else if (Number(row.availability_to_next_pick || 0) < CONSERVATIVE_WAIT_SURVIVAL_THRESHOLD) {
+            row.wait_signal = 'low_survival';
+          } else if (Number(row.expected_regret || 0) > CONSERVATIVE_WAIT_LINEUP_LOSS_THRESHOLD) {
+            row.wait_signal = 'too_much_lineup_loss';
+          } else {
+            row.wait_signal = 'safe_to_wait';
+          }
+          const riskBias = ({ low: -0.03, medium: 0.0, high: 0.03 })[(state.riskTolerance || 'medium').toLowerCase()] || 0;
+          row.current_pick_utility = Number(row.draft_score || 0) + Number(row.specialist_need_bonus || 0) + Number(row.specialist_urgency || 0) + (0.32 * Number(row.starter_slot_urgency || 0)) + (0.22 * lineupGainPercentiles[index]) + (0.08 * Number(row.posterior_prob_beats_replacement || 0)) + (0.06 * Number(row.position_run_risk || 0)) + (riskBias * Number(row.upside_score || 0));
+          if (!row.policy_eligible) {
+            row.current_pick_utility -= 2.5;
+          }
+          row.wait_utility = (Number(row.draft_score || 0) * Number(row.availability_to_next_pick || 0)) + (0.06 * Number(row.upside_score || 0)) - (0.85 * Number(row.expected_regret || 0));
           row.rank_gap_vs_vor = Number(row.simple_vor_rank || 0) - Number(row.draft_rank || 0);
           row.rationale_live = buildPlayerSummary(row);
         });
 
-        const recommendedNow = [...availableRows].sort((a, b) => (Number(b.current_pick_utility) - Number(a.current_pick_utility)) || (Number(b.draft_score) - Number(a.draft_score)));
-        const recommendedWait = [...availableRows].sort((a, b) => (Number(b.wait_utility) - Number(a.wait_utility)) || (Number(b.availability_to_next_pick) - Number(a.availability_to_next_pick)));
+        const recommendedNow = [...availableRows].filter((row) => row.policy_eligible).sort((a, b) => (Number(b.current_pick_utility) - Number(a.current_pick_utility)) || (Number(b.draft_score) - Number(a.draft_score)));
+        const recommendedWait = [...availableRows].filter((row) => row.wait_signal === 'safe_to_wait' || row.wait_signal === 'late_round_stash_ok').sort((a, b) => (Number(b.wait_utility) - Number(a.wait_utility)) || (Number(b.availability_to_next_pick) - Number(a.availability_to_next_pick)));
         const pickNow = recommendedNow.slice(0, 1);
-        const fallbacks = recommendedNow.slice(1, 6);
-        const canWait = recommendedWait.filter((row) => !pickNow.some((candidate) => safeLower(candidate.player_name) === safeLower(row.player_name))).slice(0, 5);
+        const fallbacks = (recommendedNow.length ? recommendedNow : [...availableRows].sort((a, b) => (Number(b.current_pick_utility) - Number(a.current_pick_utility)) || (Number(b.draft_score) - Number(a.draft_score)))).slice(1, 6);
+        const canWait = (recommendedWait.length ? recommendedWait : [...availableRows].sort((a, b) => (Number(b.availability_to_next_pick) - Number(a.availability_to_next_pick)) || (Number(b.draft_score) - Number(a.draft_score)))).filter((row) => !pickNow.some((candidate) => safeLower(candidate.player_name) === safeLower(row.player_name))).slice(0, 5);
 
         const selectedKey = safeLower(state.selectedPlayer || (pickNow[0] && pickNow[0].player_name) || '');
         const selectedRow = rows.find((row) => safeLower(row.player_name) === selectedKey) || pickNow[0] || rows[0] || null;
