@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import math
 import shutil
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
@@ -43,6 +43,53 @@ DEFAULT_ROSTER_TEMPLATE = {
     'FLEX': 1,
     'DST': 1,
     'K': 1,
+}
+SCORING_PRESETS = {
+    'standard': {'label': 'Standard', 'scoring_type': 'Standard', 'ppr_value': 0.0},
+    'half_ppr': {'label': 'Half PPR', 'scoring_type': 'Half-PPR', 'ppr_value': 0.5},
+    'ppr': {'label': 'Full PPR', 'scoring_type': 'PPR', 'ppr_value': 1.0},
+}
+METRIC_GLOSSARY = {
+    'draft_score': {
+        'label': 'Draft score',
+        'summary': 'Overall recommendation score for this draft slot.',
+        'detail': 'Blends player projection, replacement value, roster need, market timing, upside, and fragility into one contextual rank.',
+    },
+    'availability_to_next_pick': {
+        'label': 'Availability to next pick',
+        'summary': 'Estimated chance the player survives until your next turn.',
+        'detail': 'Uses ADP, ADP spread, and uncertainty as a simple availability model. Higher means waiting is safer.',
+    },
+    'expected_regret': {
+        'label': 'Expected regret',
+        'summary': 'Penalty for waiting instead of taking the player now.',
+        'detail': 'Rises when the player is a top value and unlikely to make it back. Lower is better if you want to wait.',
+    },
+    'fragility_score': {
+        'label': 'Fragility score',
+        'summary': 'Risk score for uncertainty, injury, volatility, and thin history.',
+        'detail': 'Higher values mean the profile is shakier. In the contextual model this acts as a penalty, especially in low-risk mode.',
+    },
+    'upside_score': {
+        'label': 'Upside score',
+        'summary': 'How much ceiling and breakout potential the player offers.',
+        'detail': 'Uses ceiling-over-mean, raw projection, and market timing. Higher is more swing-for-the-fences.',
+    },
+    'starter_delta': {
+        'label': 'Starter delta',
+        'summary': 'Projected edge over a typical starter at the same position.',
+        'detail': 'Positive values mean the player is clearly starter-worthy in your league shape.',
+    },
+    'market_gap': {
+        'label': 'Market gap',
+        'summary': 'Difference between where the model and the market rank the player.',
+        'detail': 'Positive values mean the model likes the player more than current market cost.',
+    },
+    'replacement_delta': {
+        'label': 'Simple VOR proxy',
+        'summary': 'Projected edge over replacement level at the position.',
+        'detail': 'This is the dashboard’s baseline VOR-style comparison point when we contrast the contextual score against a simpler value-over-replacement view.',
+    },
 }
 
 
@@ -271,6 +318,304 @@ class DraftDecisionArtifacts:
             'dashboard_payload': self.dashboard_payload,
             'metadata': self.metadata,
         }
+
+
+def _effective_ppr_value(settings: LeagueSettings) -> float:
+    explicit = _coerce_float(getattr(settings, 'ppr_value', np.nan), np.nan)
+    if np.isfinite(explicit):
+        return explicit
+    scoring_type = _safe_string(getattr(settings, 'scoring_type', '')).lower()
+    if 'standard' in scoring_type:
+        return 0.0
+    if 'half' in scoring_type:
+        return 0.5
+    if 'ppr' in scoring_type:
+        return 1.0
+    return 0.5
+
+
+def _resolve_scoring_preset_key(settings: LeagueSettings) -> str:
+    ppr_value = _effective_ppr_value(settings)
+    if np.isclose(ppr_value, 0.0):
+        return 'standard'
+    if np.isclose(ppr_value, 0.5):
+        return 'half_ppr'
+    if np.isclose(ppr_value, 1.0):
+        return 'ppr'
+    return 'custom'
+
+
+def _scoring_settings_for_preset(
+    settings: LeagueSettings, preset_key: str
+) -> LeagueSettings | None:
+    preset = SCORING_PRESETS.get(preset_key)
+    if preset is None:
+        return None
+    return replace(
+        settings,
+        scoring_type=preset['scoring_type'],
+        ppr_value=float(preset['ppr_value']),
+    )
+
+
+def _first_numeric_series(
+    frame: pd.DataFrame, candidates: Iterable[str]
+) -> pd.Series | None:
+    for column in candidates:
+        if column in frame.columns:
+            return pd.to_numeric(frame[column], errors='coerce')
+    return None
+
+
+def _supports_scoring_presets(frame: pd.DataFrame) -> tuple[bool, str]:
+    standard = _first_numeric_series(
+        frame,
+        [
+            'FantPt',
+            'fantasy_points',
+            'fantasy_points_standard',
+            'proj_points_standard',
+            'proj_points_mean',
+        ],
+    )
+    ppr = _first_numeric_series(
+        frame,
+        ['FantPtPPR', 'fantasy_points_ppr', 'proj_points_ppr'],
+    )
+    rec = _first_numeric_series(frame, ['REC', 'receptions', 'Receptions'])
+    if standard is not None and ppr is not None:
+        return True, ''
+    if standard is not None and rec is not None:
+        return True, ''
+    return (
+        False,
+        'Only one scoring projection source is present, so alternate scoring presets would be guesswork.',
+    )
+
+
+def _projection_series_for_settings(
+    frame: pd.DataFrame, settings: LeagueSettings
+) -> pd.Series | None:
+    base_projection = pd.to_numeric(frame.get('proj_points_mean'), errors='coerce')
+    ppr_value = _effective_ppr_value(settings)
+    standard = _first_numeric_series(
+        frame,
+        [
+            'FantPt',
+            'fantasy_points',
+            'fantasy_points_standard',
+            'proj_points_standard',
+            'proj_points_mean',
+        ],
+    )
+    ppr = _first_numeric_series(
+        frame,
+        ['FantPtPPR', 'fantasy_points_ppr', 'proj_points_ppr'],
+    )
+    rec = _first_numeric_series(frame, ['REC', 'receptions', 'Receptions'])
+
+    projection = None
+    if standard is not None and ppr is not None:
+        projection = standard + ppr_value * (ppr - standard)
+    elif standard is not None and rec is not None:
+        projection = standard + ppr_value * rec
+    elif ppr is not None and np.isclose(ppr_value, 1.0):
+        projection = ppr
+    elif standard is not None and np.isclose(ppr_value, 0.0):
+        projection = standard
+
+    if projection is None:
+        return base_projection
+    if base_projection is None:
+        return projection
+    return projection.combine_first(base_projection)
+
+
+def _dashboard_supporting_math(decision_table: pd.DataFrame) -> dict[str, float]:
+    return {
+        'draft_score_mean': float(decision_table['draft_score'].mean())
+        if not decision_table.empty
+        else 0.0,
+        'draft_score_std': float(decision_table['draft_score'].std(ddof=0))
+        if not decision_table.empty
+        else 0.0,
+        'availability_mean': float(decision_table['availability_at_pick'].mean())
+        if not decision_table.empty
+        else 0.0,
+        'top_draft_score': float(decision_table['draft_score'].max())
+        if not decision_table.empty
+        else 0.0,
+        'top_simple_vor_proxy': float(decision_table['replacement_delta'].max())
+        if not decision_table.empty
+        else 0.0,
+    }
+
+
+def _dashboard_position_summary(decision_table: pd.DataFrame) -> list[dict[str, Any]]:
+    if decision_table.empty:
+        return []
+    return (
+        decision_table.groupby('position')
+        .agg(
+            player_count=('player_name', 'count'),
+            mean_draft_score=('draft_score', 'mean'),
+            mean_availability=('availability_at_pick', 'mean'),
+            mean_upside=('upside_score', 'mean'),
+            mean_fragility=('fragility_score', 'mean'),
+            mean_proj=('proj_points_mean', 'mean'),
+            mean_vor_proxy=('replacement_delta', 'mean'),
+        )
+        .reset_index()
+        .to_dict(orient='records')
+    )
+
+
+def _build_bayesian_vor_summary(
+    decision_table: pd.DataFrame, backtest: dict[str, Any]
+) -> dict[str, Any]:
+    table = decision_table.copy()
+    if not table.empty:
+        table['simple_vor_rank'] = (
+            table['replacement_delta']
+            .rank(method='first', ascending=False)
+            .astype(int)
+        )
+        table['rank_gap_vs_vor'] = table['simple_vor_rank'] - table['draft_rank']
+        disagreements = (
+            table.assign(abs_rank_gap=lambda frame: frame['rank_gap_vs_vor'].abs())
+            .sort_values(['abs_rank_gap', 'draft_score'], ascending=[False, False])
+            .head(12)[
+                [
+                    'player_name',
+                    'position',
+                    'draft_rank',
+                    'simple_vor_rank',
+                    'rank_gap_vs_vor',
+                    'draft_score',
+                    'replacement_delta',
+                    'availability_at_pick',
+                    'why_flags',
+                ]
+            ]
+            .to_dict(orient='records')
+        )
+    else:
+        disagreements = []
+
+    overall = backtest.get('overall', {}).get('by_strategy', []) if backtest else []
+    by_strategy = {
+        row.get('strategy'): row for row in overall if isinstance(row, dict)
+    }
+    draft_score_row = by_strategy.get('draft_score')
+    vor_row = by_strategy.get('historical_vor_proxy')
+    if draft_score_row and vor_row:
+        delta = float(draft_score_row['mean_lineup_points']) - float(
+            vor_row['mean_lineup_points']
+        )
+        season_rows = []
+        for season in backtest.get('by_season', []):
+            season_map = season.get('by_strategy', {})
+            draft_score_points = season_map.get('draft_score', {}).get(
+                'our_team_lineup_points'
+            )
+            vor_points = season_map.get('historical_vor_proxy', {}).get(
+                'our_team_lineup_points'
+            )
+            if draft_score_points is None or vor_points is None:
+                continue
+            season_rows.append(
+                {
+                    'holdout_year': season.get('holdout_year'),
+                    'draft_score_lineup_points': float(draft_score_points),
+                    'historical_vor_proxy_lineup_points': float(vor_points),
+                    'delta_lineup_points': float(draft_score_points) - float(vor_points),
+                    'winner': (
+                        'draft_score'
+                        if float(draft_score_points) >= float(vor_points)
+                        else 'historical_vor_proxy'
+                    ),
+                }
+            )
+        return {
+            'available': True,
+            'headline': (
+                'Contextual draft score outperforms the simple VOR proxy in backtests.'
+                if delta > 0
+                else 'Simple VOR proxy matches or beats the contextual draft score in backtests.'
+            ),
+            'winner': 'draft_score' if delta > 0 else 'historical_vor_proxy',
+            'delta_mean_lineup_points': delta,
+            'draft_score_mean_lineup_points': float(
+                draft_score_row['mean_lineup_points']
+            ),
+            'historical_vor_proxy_mean_lineup_points': float(
+                vor_row['mean_lineup_points']
+            ),
+            'season_count': min(
+                int(draft_score_row.get('season_count', 0)),
+                int(vor_row.get('season_count', 0)),
+            ),
+            'holdout_years': backtest.get('holdout_years', []),
+            'by_season': season_rows,
+            'top_disagreements': disagreements,
+            'limitations': [
+                'This comparison is based on internal historical holdout seasons, not a live external validation set.',
+                'The dashboard baseline uses replacement delta as its simple VOR proxy for the current board.',
+            ],
+        }
+
+    return {
+        'available': False,
+        'headline': 'No direct contextual-vs-VOR backtest summary is available for this export.',
+        'top_disagreements': disagreements,
+        'limitations': [
+            'Without the backtest comparison artifact, the board can show only current ranking disagreements, not outcome-level evidence.',
+        ],
+    }
+
+
+def _build_scoring_preset_bundle(
+    player_frame: pd.DataFrame,
+    settings: LeagueSettings,
+    context: DraftContext,
+) -> dict[str, Any]:
+    normalized = normalize_player_frame(player_frame)
+    supported, reason = _supports_scoring_presets(normalized)
+    active_key = _resolve_scoring_preset_key(settings)
+    bundle: dict[str, Any] = {}
+    for preset_key, preset in SCORING_PRESETS.items():
+        preset_settings = _scoring_settings_for_preset(settings, preset_key)
+        if preset_settings is None:
+            continue
+        if not supported and preset_key != active_key:
+            bundle[preset_key] = {
+                'key': preset_key,
+                'label': preset['label'],
+                'available': False,
+                'reason_unavailable': reason,
+                'league_settings': preset_settings.to_dict(),
+            }
+            continue
+        preset_table = build_decision_table(player_frame, preset_settings, context)
+        bundle[preset_key] = {
+            'key': preset_key,
+            'label': preset['label'],
+            'available': True,
+            'league_settings': preset_settings.to_dict(),
+            'decision_table': preset_table.to_dict(orient='records'),
+            'supporting_math': _dashboard_supporting_math(preset_table),
+        }
+    if active_key == 'custom':
+        bundle['custom'] = {
+            'key': 'custom',
+            'label': f'Custom ({_effective_ppr_value(settings):.2f} PPR)',
+            'available': True,
+            'league_settings': settings.to_dict(),
+            'decision_table': build_decision_table(player_frame, settings, context).to_dict(
+                orient='records'
+            ),
+        }
+    return bundle
 
 
 def normalize_player_frame(player_frame: pd.DataFrame) -> pd.DataFrame:
@@ -503,6 +848,9 @@ def build_decision_table(
     context = context or DraftContext(current_pick_number=settings.draft_position)
 
     df = normalize_player_frame(player_frame)
+    projection_series = _projection_series_for_settings(df, settings)
+    if projection_series is not None:
+        df['proj_points_mean'] = projection_series
 
     if df['proj_points_mean'].isna().all():
         raise ValueError('player_frame must contain a usable projection column')
@@ -684,6 +1032,10 @@ def build_decision_table(
     df['draft_score'] = df['draft_score'].fillna(0.0)
     df['draft_rank'] = (
         df['draft_score'].rank(method='first', ascending=False).astype(int)
+    )
+    df['simple_vor_proxy'] = df['replacement_delta']
+    df['simple_vor_rank'] = (
+        df['simple_vor_proxy'].rank(method='first', ascending=False).astype(int)
     )
     df['draft_tier'] = _assign_tiers(df['draft_score'])
     df['market_value_gap'] = df['model_rank'] - df['market_rank']
@@ -1564,6 +1916,7 @@ def build_dashboard_payload(
     league_settings: LeagueSettings,
     backtest: dict[str, Any] | None = None,
     context: DraftContext | None = None,
+    scoring_presets: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a JSON-serializable payload for the local dashboard."""
     backtest = backtest or {}
@@ -1614,22 +1967,21 @@ def build_dashboard_payload(
         ]
     ].copy()
     recommendation_summary = recommendations.head(12).to_dict(orient='records')
-    position_summary = (
-        decision_table.groupby('position')
-        .agg(
-            player_count=('player_name', 'count'),
-            mean_draft_score=('draft_score', 'mean'),
-            mean_availability=('availability_at_pick', 'mean'),
-            mean_upside=('upside_score', 'mean'),
-            mean_fragility=('fragility_score', 'mean'),
-            mean_proj=('proj_points_mean', 'mean'),
-        )
-        .reset_index()
-        .to_dict(orient='records')
+    position_summary = _dashboard_position_summary(decision_table)
+    active_scoring_preset = _resolve_scoring_preset_key(league_settings)
+    selected_player = (
+        _pick_first_row(recommendations['player_name'])
+        if not recommendations.empty
+        else _pick_first_row(decision_table['player_name'])
     )
     return {
         'generated_at': datetime.now().isoformat(timespec='seconds'),
         'league_settings': league_settings.to_dict(),
+        'runtime_controls': {
+            'risk_tolerance_options': ['low', 'medium', 'high'],
+            'supported_scoring_presets': list(SCORING_PRESETS.keys()),
+            'active_scoring_preset': active_scoring_preset,
+        },
         'current_pick_number': context.current_pick_number,
         'next_pick_number': next_pick_number(
             context.current_pick_number,
@@ -1643,29 +1995,34 @@ def build_dashboard_payload(
             'your_players': sorted(context.your_players),
             'roster_counts': context.roster_counts,
         },
+        'selected_player': selected_player,
         'recommendation_inputs': recommendation_inputs.to_dict(orient='records'),
         'recommendation_summary': recommendation_summary,
         'live_state': live_state,
         'decision_table': decision_table.to_dict(orient='records'),
+        'scoring_presets': scoring_presets or {},
         'position_summary': position_summary,
         'tier_cliffs': tier_cliffs.to_dict(orient='records'),
         'roster_scenarios': roster_scenarios.to_dict(orient='records'),
         'source_freshness': source_freshness.to_dict(orient='records'),
         'backtest': backtest,
-        'supporting_math': {
-            'draft_score_mean': float(decision_table['draft_score'].mean())
-            if not decision_table.empty
-            else 0.0,
-            'draft_score_std': float(decision_table['draft_score'].std(ddof=0))
-            if not decision_table.empty
-            else 0.0,
-            'availability_mean': float(decision_table['availability_at_pick'].mean())
-            if not decision_table.empty
-            else 0.0,
-            'top_draft_score': float(decision_table['draft_score'].max())
-            if not decision_table.empty
-            else 0.0,
+        'supporting_math': _dashboard_supporting_math(decision_table),
+        'metric_glossary': METRIC_GLOSSARY,
+        'model_overview': {
+            'headline': 'The draft board is driven by a contextual score, not a pure rank list.',
+            'plain_english': [
+                'The model starts from projection and replacement-level value, then adjusts for upside, fragility, roster need, and draft-timing risk.',
+                'Availability is estimated from ADP plus uncertainty, so the board can distinguish “take now” from “safe to wait.”',
+                'The simple VOR view is still available as a comparison baseline through replacement delta and rank-gap summaries.',
+            ],
+            'limitations': [
+                'This is still a heuristic draft model, not a fully identified posterior draft simulator.',
+                'Backtests here are internal holdout seasons and should be treated as directional evidence, not definitive proof.',
+            ],
         },
+        'bayesian_vor_summary': _build_bayesian_vor_summary(
+            decision_table, backtest
+        ),
     }
 
 
@@ -1992,765 +2349,1579 @@ def export_dashboard_html(
         context=DraftContext(current_pick_number=league_settings.draft_position),
     )
     payload_json = json.dumps(payload, default=str)
-
-    html = f"""
+    generated_label = datetime.now().strftime('%Y-%m-%d %H:%M')
+    html = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>FFBayes Draft Command Center</title>
+  <title>FFBayes Draft War Room</title>
   <style>
-    :root {{
+    :root {
       color-scheme: dark;
-      --bg: #081120;
-      --panel: rgba(15, 23, 42, 0.86);
-      --panel-strong: rgba(17, 24, 39, 0.96);
+      --bg: #07111f;
+      --panel: rgba(15, 23, 42, 0.88);
+      --panel-strong: rgba(17, 24, 39, 0.98);
+      --panel-soft: rgba(15, 23, 42, 0.62);
       --text: #f8fafc;
       --muted: #94a3b8;
+      --border: rgba(148, 163, 184, 0.18);
       --accent: #38bdf8;
       --accent-soft: rgba(56, 189, 248, 0.16);
-      --border: rgba(148, 163, 184, 0.18);
       --good: #34d399;
       --warn: #f59e0b;
       --bad: #f87171;
-    }}
-    * {{ box-sizing: border-box; }}
-    body {{
+      --queue: #a78bfa;
+      --shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+    }
+    * { box-sizing: border-box; }
+    body {
       margin: 0;
       min-height: 100vh;
       background:
         radial-gradient(circle at top left, rgba(56, 189, 248, 0.18), transparent 30%),
-        radial-gradient(circle at top right, rgba(99, 102, 241, 0.12), transparent 24%),
-        linear-gradient(180deg, #050b16 0%, #0b1324 100%);
+        radial-gradient(circle at top right, rgba(129, 140, 248, 0.14), transparent 22%),
+        linear-gradient(180deg, #030712 0%, #0b1324 100%);
       color: var(--text);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      padding: 20px;
-    }}
-    h1, h2, h3, h4, p {{ margin: 0; }}
-    .shell {{
-      max-width: 1600px;
+      padding: 18px;
+    }
+    h1, h2, h3, h4, p { margin: 0; }
+    button, input, select {
+      font: inherit;
+      color: var(--text);
+    }
+    button, select, input[type="number"], input[type="search"] {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(148, 163, 184, 0.20);
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+    button {
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+    button:hover, button.is-active {
+      background: rgba(255, 255, 255, 0.10);
+      border-color: rgba(56, 189, 248, 0.40);
+    }
+    input[type="checkbox"] {
+      accent-color: var(--accent);
+    }
+    .shell {
+      max-width: 1880px;
       margin: 0 auto;
-    }}
-    .hero {{
       display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
       gap: 16px;
-      margin-bottom: 16px;
-    }}
-    .hero-card, .card {{
+    }
+    .topbar, .panel {
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 20px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
-      backdrop-filter: blur(10px);
-    }}
-    .hero-card {{
-      padding: 22px;
-    }}
-    .hero-title {{
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+    .topbar {
+      padding: 20px 22px;
+      display: grid;
+      gap: 16px;
+    }
+    .topbar-head {
       display: flex;
       flex-wrap: wrap;
-      align-items: baseline;
+      justify-content: space-between;
       gap: 12px;
-      margin-bottom: 12px;
-    }}
-    .hero-title h1 {{
+      align-items: flex-start;
+    }
+    .title-wrap {
+      display: grid;
+      gap: 8px;
+    }
+    .title-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+    .title-row h1 {
       font-size: 30px;
       letter-spacing: -0.03em;
-    }}
-    .muted {{ color: var(--muted); }}
-    .meta {{
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      max-width: 900px;
+      line-height: 1.45;
+    }
+    .pill-row, .toolbar-row, .filter-row {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-top: 12px;
-    }}
-    .pill {{
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       padding: 6px 10px;
       border-radius: 999px;
-      background: var(--accent-soft);
-      color: #c9f0ff;
       border: 1px solid rgba(56, 189, 248, 0.24);
+      background: var(--accent-soft);
+      color: #d7f5ff;
       font-size: 12px;
-    }}
-    .grid {{
+    }
+    .pill.good { border-color: rgba(52, 211, 153, 0.30); background: rgba(52, 211, 153, 0.14); color: #d2faec; }
+    .pill.warn { border-color: rgba(245, 158, 11, 0.34); background: rgba(245, 158, 11, 0.14); color: #fde7b0; }
+    .pill.bad { border-color: rgba(248, 113, 113, 0.32); background: rgba(248, 113, 113, 0.12); color: #fecaca; }
+    .layout {
       display: grid;
-      grid-template-columns: 1.15fr 0.85fr;
+      grid-template-columns: minmax(290px, 0.9fr) minmax(0, 1.7fr) minmax(330px, 1fr);
       gap: 16px;
       align-items: start;
-    }}
-    .stack {{
+    }
+    .column, .stack {
       display: grid;
       gap: 16px;
-    }}
-    .card {{
+      align-content: start;
+    }
+    .panel {
       padding: 18px;
-    }}
-    .card.strong {{
+    }
+    .panel.strong {
       background: var(--panel-strong);
-    }}
-    .card h2 {{
+    }
+    .panel h2 {
       font-size: 18px;
-      margin-bottom: 8px;
-    }}
-    .card h3 {{
-      font-size: 15px;
-      margin-bottom: 8px;
-    }}
-    .section {{
-      margin-top: 14px;
-    }}
-    .subtle {{
-      font-size: 12px;
+      margin-bottom: 6px;
+    }
+    .subtle {
       color: var(--muted);
-      margin-bottom: 10px;
-    }}
-    .recommendation-primary {{
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .hero-pick {
       display: grid;
-      gap: 8px;
-      margin-top: 8px;
-    }}
-    .primary-name {{
+      gap: 12px;
+    }
+    .hero-name {
       font-size: 28px;
-      font-weight: 700;
       letter-spacing: -0.03em;
-    }}
-    .primary-meta {{
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }}
-    .metric-grid {{
+      font-weight: 700;
+    }
+    .metric-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
-    }}
-    .metric {{
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .metric {
       background: rgba(255, 255, 255, 0.04);
       border: 1px solid rgba(148, 163, 184, 0.12);
       border-radius: 14px;
       padding: 10px 12px;
-    }}
-    .metric .label {{
+    }
+    .metric .label {
       display: block;
+      margin-bottom: 4px;
       font-size: 11px;
-      color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      margin-bottom: 3px;
-    }}
-    .metric .value {{
+      color: var(--muted);
+    }
+    .metric .value {
+      display: block;
       font-size: 15px;
       font-weight: 600;
-    }}
-    .two-col {{
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 14px;
-    }}
-    .table-wrap {{
-      overflow: auto;
-      border-radius: 16px;
-      border: 1px solid rgba(148, 163, 184, 0.12);
-    }}
-    table {{
-      width: 100%;
-      border-collapse: collapse;
-      color: var(--text);
-      font-size: 13px;
-    }}
-    th, td {{
-      padding: 9px 10px;
-      border-bottom: 1px solid rgba(148, 163, 184, 0.10);
-      text-align: left;
-      vertical-align: top;
-    }}
-    th {{
-      color: #8cd3ff;
-      background: rgba(15, 23, 42, 0.8);
-      position: sticky;
-      top: 0;
-      z-index: 1;
-    }}
-    .search-row {{
-      display: flex;
-      gap: 8px;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
-    }}
-    input[type="search"] {{
-      flex: 1 1 260px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(148, 163, 184, 0.18);
-      color: var(--text);
-      border-radius: 12px;
-      padding: 11px 12px;
-    }}
-    button {{
-      border: 1px solid rgba(148, 163, 184, 0.2);
-      border-radius: 12px;
-      padding: 10px 12px;
-      background: rgba(255, 255, 255, 0.05);
-      color: var(--text);
-      cursor: pointer;
-    }}
-    button:hover {{
-      background: rgba(255, 255, 255, 0.09);
-    }}
-    .action-bar {{
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      margin-top: 10px;
-    }}
-    .list {{
+    }
+    .lane-list, .mini-list, .details-stack, .settings-grid {
       display: grid;
       gap: 10px;
-    }}
-    .list-item {{
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 8px;
-      align-items: center;
-      padding: 10px 12px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(148, 163, 184, 0.12);
+    }
+    .lane-item, .mini-item {
+      padding: 12px;
       border-radius: 14px;
-    }}
-    .item-title {{
-      font-weight: 600;
-    }}
-    .item-subtitle {{
-      color: var(--muted);
-      font-size: 12px;
-      margin-top: 3px;
-    }}
-    .lane {{
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: rgba(255, 255, 255, 0.04);
       display: grid;
-      gap: 8px;
-    }}
-    .lane .lane-head {{
+      gap: 6px;
+    }
+    .lane-item-header, .mini-item-header, .split {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 8px;
-    }}
-    .tiny {{
+    }
+    .item-title {
+      font-weight: 600;
+    }
+    .item-meta {
+      color: var(--muted);
       font-size: 12px;
-    }}
-    .flag {{
+      line-height: 1.4;
+    }
+    .board-controls {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .search-wrap {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .search-wrap input[type="search"] {
+      flex: 1 1 300px;
+    }
+    .board-summary {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .board-table-wrap {
+      overflow: auto;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 16px;
+      max-height: 74vh;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      vertical-align: top;
+      padding: 10px 10px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.10);
+    }
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: rgba(9, 16, 32, 0.96);
+      color: #9bdcff;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    tr.is-selected {
+      outline: 1px solid rgba(56, 189, 248, 0.55);
+      background: rgba(56, 189, 248, 0.10);
+    }
+    tr.is-taken {
+      opacity: 0.55;
+    }
+    tr.is-mine {
+      background: rgba(52, 211, 153, 0.10);
+    }
+    tr.is-queued {
+      background: rgba(167, 139, 250, 0.10);
+    }
+    .status-badge {
       display: inline-flex;
       align-items: center;
       border-radius: 999px;
-      padding: 3px 8px;
-      background: rgba(148, 163, 184, 0.14);
-      color: #dbeafe;
-      margin-right: 6px;
-      margin-top: 4px;
+      padding: 4px 8px;
       font-size: 11px;
-    }}
-    .good {{ color: var(--good); }}
-    .warn {{ color: var(--warn); }}
-    .bad {{ color: var(--bad); }}
-    .responsive-hide {{ display: block; }}
-    @media (max-width: 1100px) {{
-      .hero, .grid, .two-col, .metric-grid {{
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(148, 163, 184, 0.12);
+    }
+    .status-badge.available { color: #dbeafe; }
+    .status-badge.taken { color: #fecaca; border-color: rgba(248, 113, 113, 0.30); background: rgba(248, 113, 113, 0.10); }
+    .status-badge.mine { color: #d2faec; border-color: rgba(52, 211, 153, 0.30); background: rgba(52, 211, 153, 0.12); }
+    .status-badge.queued { color: #e9ddff; border-color: rgba(167, 139, 250, 0.30); background: rgba(167, 139, 250, 0.12); }
+    .tiny {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .action-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .action-group button {
+      padding: 6px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+    .settings-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+    .field label {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .field.full {
+      grid-column: 1 / -1;
+    }
+    .inspector-title {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .summary-box {
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      color: #dbeafe;
+      line-height: 1.5;
+      font-size: 14px;
+    }
+    .bar-stack {
+      display: grid;
+      gap: 10px;
+    }
+    .bar-row {
+      display: grid;
+      gap: 5px;
+    }
+    .bar-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+    }
+    .bar-track {
+      height: 10px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(148, 163, 184, 0.16);
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(56, 189, 248, 0.75), rgba(14, 165, 233, 0.98));
+    }
+    .bar-fill.warn {
+      background: linear-gradient(90deg, rgba(245, 158, 11, 0.75), rgba(234, 88, 12, 0.98));
+    }
+    .bar-fill.good {
+      background: linear-gradient(90deg, rgba(52, 211, 153, 0.78), rgba(5, 150, 105, 0.98));
+    }
+    .bar-fill.bad {
+      background: linear-gradient(90deg, rgba(248, 113, 113, 0.78), rgba(220, 38, 38, 0.98));
+    }
+    details {
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 10px 12px;
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: #dbeafe;
+      list-style: none;
+    }
+    summary::-webkit-details-marker {
+      display: none;
+    }
+    .details-body {
+      margin-top: 12px;
+      display: grid;
+      gap: 12px;
+    }
+    .glossary-list {
+      display: grid;
+      gap: 8px;
+    }
+    .glossary-item {
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.10);
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .glossary-item strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+    .roster-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .empty {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .notice {
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(245, 158, 11, 0.24);
+      background: rgba(245, 158, 11, 0.10);
+      color: #fde7b0;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    @media (max-width: 1440px) {
+      .layout {
         grid-template-columns: 1fr;
-      }}
-    }}
+      }
+      .board-table-wrap {
+        max-height: 58vh;
+      }
+    }
+    @media (max-width: 760px) {
+      body {
+        padding: 10px;
+      }
+      .topbar, .panel {
+        border-radius: 18px;
+      }
+      .metric-grid, .settings-grid {
+        grid-template-columns: 1fr;
+      }
+      .title-row h1 {
+        font-size: 24px;
+      }
+    }
   </style>
 </head>
 <body>
   <div class="shell">
-    <div class="hero">
-      <div class="hero-card">
-        <div class="hero-title">
-          <h1>FFBayes Draft Command Center</h1>
-          <span class="pill">Live pre-draft board</span>
+    <section class="topbar">
+      <div class="topbar-head">
+        <div class="title-wrap">
+          <div class="title-row">
+            <h1>FFBayes Draft War Room</h1>
+            <span class="pill">Live draft mode</span>
+            <span class="pill" id="storage-pill">Saved locally</span>
+          </div>
+          <p class="subtitle">Operate the draft from this board: update league shape, scoring preset, current pick, queue, taken players, and your roster without leaving the dashboard.</p>
         </div>
-        <p class="muted">Generated {datetime.now().strftime('%Y-%m-%d %H:%M')} | League {league_settings.league_size}-team | Draft position {league_settings.draft_position}</p>
-        <div class="meta" id="status-pills"></div>
+        <div class="toolbar-row">
+          <button type="button" id="undo-button">Undo</button>
+          <button type="button" id="advance-button">Advance pick</button>
+          <button type="button" id="reset-button">Reset draft state</button>
+        </div>
       </div>
-      <div class="hero-card">
-        <div class="subtle">Current turn</div>
-        <div class="primary-name" id="current-turn-label">Pick now</div>
-        <div class="primary-meta" id="turn-meta"></div>
+      <div class="pill-row" id="status-pills"></div>
+      <div class="tiny">Generated __GENERATED_LABEL__</div>
+    </section>
+
+    <section class="layout">
+      <div class="column">
+        <section class="panel strong">
+          <h2>Pick Now</h2>
+          <p class="subtle">Best current move after adjusting for your league, roster, and next-pick survival.</p>
+          <div class="hero-pick" id="primary-card"></div>
+        </section>
+
+        <section class="panel">
+          <div class="split">
+            <div>
+              <h2>Fallback Ladder</h2>
+              <p class="subtle">If the top target goes, pivot here.</p>
+            </div>
+            <span class="pill">Immediate pivots</span>
+          </div>
+          <div class="lane-list" id="fallback-list"></div>
+        </section>
+
+        <section class="panel">
+          <div class="split">
+            <div>
+              <h2>Can Wait</h2>
+              <p class="subtle">Strong values with the best shot to survive to your next turn.</p>
+            </div>
+            <span class="pill">Patience lane</span>
+          </div>
+          <div class="lane-list" id="wait-list"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Queue & Roster</h2>
+          <p class="subtle">Keep a short watchlist and confirm your current build at a glance.</p>
+          <div class="mini-list" id="queue-list"></div>
+          <div class="details-stack" style="margin-top: 12px;">
+            <div class="roster-chip-row" id="my-roster"></div>
+            <div class="metric-grid" id="roster-need-grid"></div>
+          </div>
+        </section>
       </div>
-    </div>
 
-    <div class="grid">
-      <div class="stack">
-        <div class="card strong">
-          <h2>Primary Recommendation</h2>
-          <div class="subtle">The single pick we want on this turn.</div>
-          <div class="recommendation-primary" id="primary-card"></div>
-        </div>
-
-        <div class="two-col">
-          <div class="card">
-            <h2>Fallback Ladder</h2>
-            <div class="subtle">If the top target is gone, these are the next-best alternatives.</div>
-            <div class="list" id="fallback-list"></div>
+      <div class="column">
+        <section class="panel strong">
+          <div class="split">
+            <div>
+              <h2>Full Player Board</h2>
+              <p class="subtle">Search every player, keep taken rows visible if you want, and click a row to inspect the model reasoning.</p>
+            </div>
+            <span class="pill" id="board-count-pill">0 players</span>
           </div>
-          <div class="card">
-            <h2>Can Wait</h2>
-            <div class="subtle">Players with the strongest chance to survive to the next pick.</div>
-            <div class="list" id="wait-list"></div>
+          <div class="board-controls">
+            <div class="search-wrap">
+              <input id="player-search" type="search" placeholder="Search name, team, or position" />
+              <button type="button" class="is-active" data-status-filter="all">All</button>
+              <button type="button" data-status-filter="available">Available</button>
+              <button type="button" data-status-filter="queue">Queue</button>
+              <button type="button" data-status-filter="mine">Mine</button>
+              <button type="button" data-status-filter="taken">Taken</button>
+            </div>
+            <div class="filter-row" id="position-filters"></div>
+            <div class="board-summary">
+              <span id="board-summary-text">Showing players</span>
+              <span id="preset-summary-text"></span>
+            </div>
           </div>
-        </div>
-
-        <div class="card">
-          <h2>Draft Board</h2>
-          <div class="subtle">Search, mark off taken players, mark your picks, and undo the last action.</div>
-          <div class="search-row">
-            <input id="player-search" type="search" placeholder="Search players by name or position" />
-            <button type="button" id="undo-button">Undo last action</button>
-            <button type="button" id="advance-button">Advance pick</button>
-          </div>
-          <div class="action-bar" id="board-actions"></div>
-          <div class="table-wrap" style="max-height: 460px; margin-top: 12px;">
+          <div class="board-table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>Player</th>
-                  <th>Pos</th>
-                  <th>Score</th>
-                  <th>Next pick survival</th>
+                  <th>Status</th>
+                  <th>Draft score</th>
+                  <th>VOR proxy</th>
+                  <th>Next-pick survival</th>
+                  <th>Why now</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="board-table"></tbody>
             </table>
           </div>
-        </div>
+        </section>
       </div>
 
-      <div class="stack">
-        <div class="card">
-          <h2>Roster & Construction</h2>
-          <div class="subtle">Current needs, tier cliffs, and position-run pressure.</div>
-          <div class="metric-grid" id="roster-metrics"></div>
-          <div class="section">
-            <h3>Best roster paths</h3>
-            <div class="list" id="roster-paths"></div>
-          </div>
-          <div class="section">
-            <h3>Tier cliffs</h3>
-            <div class="table-wrap" style="max-height: 240px;">
-              <table>
-                <thead><tr><th>Pos</th><th>Player</th><th>Cliff</th></tr></thead>
-                <tbody id="tier-cliff-table"></tbody>
-              </table>
+      <div class="column">
+        <section class="panel">
+          <h2>Draft Controls</h2>
+          <p class="subtle">These settings are now dashboard-first. Changes update the board immediately.</p>
+          <div class="settings-grid">
+            <div class="field">
+              <label for="scoring-preset">Scoring preset</label>
+              <select id="scoring-preset"></select>
+            </div>
+            <div class="field">
+              <label for="risk-tolerance">Risk tolerance</label>
+              <select id="risk-tolerance">
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="league-size">League size</label>
+              <input id="league-size" type="number" min="2" max="20" />
+            </div>
+            <div class="field">
+              <label for="draft-position">Draft position</label>
+              <input id="draft-position" type="number" min="1" max="20" />
+            </div>
+            <div class="field">
+              <label for="current-pick-number">Current pick</label>
+              <input id="current-pick-number" type="number" min="1" />
+            </div>
+            <div class="field">
+              <label for="bench-slots">Bench slots</label>
+              <input id="bench-slots" type="number" min="0" max="12" />
+            </div>
+            <div class="field">
+              <label for="roster-qb">QB starters</label>
+              <input id="roster-qb" type="number" min="0" max="4" />
+            </div>
+            <div class="field">
+              <label for="roster-rb">RB starters</label>
+              <input id="roster-rb" type="number" min="0" max="6" />
+            </div>
+            <div class="field">
+              <label for="roster-wr">WR starters</label>
+              <input id="roster-wr" type="number" min="0" max="6" />
+            </div>
+            <div class="field">
+              <label for="roster-te">TE starters</label>
+              <input id="roster-te" type="number" min="0" max="4" />
+            </div>
+            <div class="field">
+              <label for="roster-flex">Flex starters</label>
+              <input id="roster-flex" type="number" min="0" max="4" />
+            </div>
+            <div class="field full">
+              <div class="notice" id="preset-notice"></div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div class="card">
-          <h2>Support Panel</h2>
-          <div class="subtle">Math, freshness, and explanation stats behind the recommendation.</div>
-          <div class="metric-grid" id="support-metrics"></div>
-          <div class="section">
-            <h3>Source freshness</h3>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>Source</th><th>Age</th><th>Rows</th></tr></thead>
-                <tbody id="freshness-table"></tbody>
-              </table>
-            </div>
+        <section class="panel strong">
+          <h2>Selected Player</h2>
+          <p class="subtle">Click any row to inspect plain-English reasoning, score components, and where the model disagrees with simple VOR.</p>
+          <div id="player-inspector"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Model Notes</h2>
+          <div class="details-stack">
+            <details>
+              <summary>What the model is doing</summary>
+              <div class="details-body" id="model-overview"></div>
+            </details>
+            <details>
+              <summary>Bayesian vs simple VOR</summary>
+              <div class="details-body" id="bayes-vor"></div>
+            </details>
+            <details>
+              <summary>Metric glossary</summary>
+              <div class="details-body" id="metric-glossary"></div>
+            </details>
+            <details>
+              <summary>Source freshness and backtest snapshot</summary>
+              <div class="details-body">
+                <div class="metric-grid" id="support-metrics"></div>
+                <div class="board-table-wrap" style="max-height: 220px;">
+                  <table>
+                    <thead>
+                      <tr><th>Source</th><th>Freshness (days)</th><th>Rows</th></tr>
+                    </thead>
+                    <tbody id="freshness-table"></tbody>
+                  </table>
+                </div>
+                <div class="board-table-wrap" style="max-height: 220px;">
+                  <table>
+                    <thead>
+                      <tr><th>Strategy</th><th>Mean lineup points</th><th>Seasons</th></tr>
+                    </thead>
+                    <tbody id="backtest-table"></tbody>
+                  </table>
+                </div>
+              </div>
+            </details>
           </div>
-          <div class="section">
-            <h3>Backtest snapshot</h3>
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>Strategy</th><th>Mean lineup points</th></tr></thead>
-                <tbody id="backtest-table"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+        </section>
       </div>
-    </div>
+    </section>
   </div>
+
   <script>
-    window.FFBAYES_DASHBOARD = {payload_json};
+    window.FFBAYES_DASHBOARD = __PAYLOAD_JSON__;
 
-    (() => {{
-      const data = window.FFBAYES_DASHBOARD;
-      const state = {{
-        takenPlayers: new Set((data.live_state && data.live_state.taken_players) || []),
-        yourPlayers: new Set((data.live_state && data.live_state.your_players) || []),
-        rosterCounts: Object.assign({{}}, (data.live_state && data.live_state.roster_counts) || {{}}),
-        history: Array.isArray(data.live_state && data.live_state.action_history)
-          ? [...data.live_state.action_history]
-          : [],
-        currentPickNumber: (data.live_state && data.live_state.current_pick_number) || data.current_pick_number || 1,
+    (() => {
+      const data = window.FFBAYES_DASHBOARD || {};
+      const STORAGE_KEY = 'ffbayes-dashboard-state-v2';
+      const POSITION_KEYS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'DST', 'K'];
+      const FLEX_WEIGHTS = Object.assign({ RB: 0.45, WR: 0.45, TE: 0.10 }, (data.league_settings && data.league_settings.flex_weights) || {});
+      const scoringPresets = data.scoring_presets || {};
+      const presetEntries = Object.values(scoringPresets);
+      const availablePreset = presetEntries.find((entry) => entry && entry.available);
+      const defaultPreset = (data.runtime_controls && data.runtime_controls.active_scoring_preset) || (availablePreset && availablePreset.key) || 'half_ppr';
+      const defaultRosterSpots = Object.assign({}, (data.league_settings && data.league_settings.roster_spots) || {});
+      const defaultState = {
+        version: 2,
+        currentPickNumber: (data.current_pick_number || (data.league_settings && data.league_settings.draft_position) || 1),
+        draftPosition: (data.league_settings && data.league_settings.draft_position) || 1,
         leagueSize: (data.league_settings && data.league_settings.league_size) || 10,
-        draftPosition: (data.league_settings && data.league_settings.draft_position) || 10,
+        scoringPreset: defaultPreset,
+        riskTolerance: ((data.league_settings && data.league_settings.risk_tolerance) || 'medium').toLowerCase(),
+        benchSlots: (data.league_settings && data.league_settings.bench_slots) || 6,
+        rosterSpots: Object.assign({}, defaultRosterSpots),
+        takenPlayers: ((data.current_draft_context_defaults && data.current_draft_context_defaults.taken_players) || []).slice(),
+        yourPlayers: ((data.current_draft_context_defaults && data.current_draft_context_defaults.your_players) || []).slice(),
+        queuePlayers: [],
+        history: [],
         search: '',
-      }};
+        positionFilter: 'ALL',
+        statusFilter: 'all',
+        selectedPlayer: data.selected_player || '',
+      };
 
-      const rosterTemplate = Object.assign({{}}, (data.league_settings && data.league_settings.roster_spots) || {{}});
-      const flexWeights = Object.assign({{}}, (data.league_settings && data.league_settings.flex_weights) || {{}});
-      const decisionTable = Array.isArray(data.decision_table) ? data.decision_table : [];
-      const tierCliffs = Array.isArray(data.tier_cliffs) ? data.tier_cliffs : [];
-      const rosterScenarios = Array.isArray(data.roster_scenarios) ? data.roster_scenarios : [];
-      const freshness = Array.isArray(data.source_freshness) ? data.source_freshness : [];
-      const backtest = data.backtest && data.backtest.overall && Array.isArray(data.backtest.overall.by_strategy)
-        ? data.backtest.overall.by_strategy
-        : [];
+      const state = loadState();
+      bindControls();
+      render();
 
-      function safeLower(value) {{
+      function safeLower(value) {
         return (value || '').toString().trim().toLowerCase();
-      }}
+      }
 
-      function nextPickNumber(currentPickNumber, draftPosition, leagueSize) {{
+      function clone(value) {
+        return JSON.parse(JSON.stringify(value));
+      }
+
+      function loadState() {
+        try {
+          const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || 'null');
+          if (!parsed || parsed.version !== defaultState.version) {
+            return clone(defaultState);
+          }
+          return {
+            ...clone(defaultState),
+            ...parsed,
+            rosterSpots: { ...clone(defaultState).rosterSpots, ...(parsed.rosterSpots || {}) },
+            takenPlayers: Array.isArray(parsed.takenPlayers) ? parsed.takenPlayers : clone(defaultState).takenPlayers,
+            yourPlayers: Array.isArray(parsed.yourPlayers) ? parsed.yourPlayers : clone(defaultState).yourPlayers,
+            queuePlayers: Array.isArray(parsed.queuePlayers) ? parsed.queuePlayers : [],
+            history: Array.isArray(parsed.history) ? parsed.history : [],
+          };
+        } catch (_) {
+          return clone(defaultState);
+        }
+      }
+
+      function persistState() {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      }
+
+      function pushHistory() {
+        state.history.push({
+          currentPickNumber: state.currentPickNumber,
+          takenPlayers: state.takenPlayers.slice(),
+          yourPlayers: state.yourPlayers.slice(),
+          queuePlayers: state.queuePlayers.slice(),
+          selectedPlayer: state.selectedPlayer,
+        });
+        if (state.history.length > 60) {
+          state.history.shift();
+        }
+      }
+
+      function nextPickNumber(currentPickNumber, draftPosition, leagueSize) {
         const current = Math.max(1, Number(currentPickNumber) || 1);
         const draft = Math.max(1, Number(draftPosition) || 1);
         const size = Math.max(1, Number(leagueSize) || 1);
         const rounds = Math.max(1, Math.ceil(current / size) + 2);
-        for (let roundNum = 1; roundNum <= rounds; roundNum += 1) {{
-          const pick = roundNum % 2 === 1
-            ? (roundNum - 1) * size + draft
-            : roundNum * size - draft + 1;
-          if (pick > current) {{
+        for (let round = 1; round <= rounds; round += 1) {
+          const pick = round % 2 === 1 ? ((round - 1) * size) + draft : (round * size) - draft + 1;
+          if (pick > current) {
             return pick;
-          }}
-        }}
+          }
+        }
         return current + size;
-      }}
+      }
 
-      function availabilityProbability(adp, targetPick, adpStd, uncertaintyScore) {{
+      function availabilityProbability(adp, targetPick, adpStd, uncertaintyScore) {
         const adpValue = Number(adp);
-        if (!Number.isFinite(adpValue)) return 0.5;
+        if (!Number.isFinite(adpValue)) {
+          return 0.5;
+        }
         let spread = Number(adpStd);
-        if (!Number.isFinite(spread) || spread <= 0) spread = 2.5;
+        if (!Number.isFinite(spread) || spread <= 0) {
+          spread = 2.5;
+        }
         const uncertainty = Number(uncertaintyScore);
-        if (Number.isFinite(uncertainty)) spread += 2.0 * uncertainty;
+        if (Number.isFinite(uncertainty)) {
+          spread += 2.0 * uncertainty;
+        }
         const z = (adpValue - Number(targetPick)) / Math.max(1, spread);
-        const prob = 1 / (1 + Math.exp(-z));
-        return Math.max(0, Math.min(1, prob));
-      }}
+        return Math.max(0, Math.min(1, 1 / (1 + Math.exp(-z))));
+      }
 
-      function rosterNeed() {{
-        const need = {{}};
-        ['QB', 'RB', 'WR', 'TE', 'FLEX', 'DST', 'K'].forEach((pos) => {{
-          need[pos] = Math.max(0, (rosterTemplate[pos] || 0) - (state.rosterCounts[pos] || 0));
-        }});
-        return need;
-      }}
-
-      function positionNeedCore() {{
-        const need = rosterNeed();
-        return ['QB', 'RB', 'WR', 'TE'].reduce((acc, pos) => acc + need[pos], 0) || 1;
-      }}
-
-      function computeRow(row, bestNow, positionCounts) {{
-        const nextTurnPick = nextPickNumber(state.currentPickNumber, state.draftPosition, state.leagueSize);
-        const availToNext = availabilityProbability(row.adp, nextTurnPick, row.adp_std, row.uncertainty_score);
-        const need = rosterNeed();
-        const totalNeed = positionNeedCore();
-        const posNeed = need[row.position] || 0;
-        const remaining = positionCounts[row.position] || 0;
-        const demand = Math.max(1, state.leagueSize * Math.max(1, posNeed));
-        const positionRunRisk = Math.max(0, Math.min(1, 1 - remaining / demand));
-        const rosterFitScore = posNeed / totalNeed;
-        const expectedRegret = Math.max(0, (bestNow - (Number(row.draft_score) || 0))) * (1 - availToNext) + 0.25 * positionRunRisk;
-        const currentPickUtility =
-          (Number(row.draft_score) || 0)
-          + 0.15 * rosterFitScore
-          + 0.10 * positionRunRisk
-          - 0.20 * (1 - availToNext)
-          + 0.04 * (Number(row.upside_score) || 0);
-        const waitUtility =
-          (Number(row.draft_score) || 0) * availToNext
-          + 0.18 * (Number(row.upside_score) || 0)
-          - 0.15 * (Number(row.fragility_score) || 0);
-        return Object.assign({{}}, row, {{
-          availability_to_next_pick: availToNext,
-          position_run_risk: positionRunRisk,
-          roster_fit_score: rosterFitScore,
-          expected_regret: expectedRegret,
-          current_pick_utility: currentPickUtility,
-          wait_utility: waitUtility,
-        }});
-      }}
-
-      function availableRows() {{
-        const query = safeLower(state.search);
-        const rawRows = decisionTable
-          .filter((row) => !state.takenPlayers.has(safeLower(row.player_name)) && !state.yourPlayers.has(safeLower(row.player_name)))
-          .filter((row) => !query || safeLower(row.player_name).includes(query) || safeLower(row.position).includes(query));
-        const positionCounts = rawRows.reduce((counts, row) => {{
-          counts[row.position] = (counts[row.position] || 0) + 1;
-          return counts;
-        }}, {{}});
-        const bestNow = rawRows.reduce((best, row) => Math.max(best, Number(row.draft_score) || 0), 0);
-        return rawRows.map((row) => computeRow(row, bestNow, positionCounts));
-      }}
-
-      function recommendedPanels() {{
-        const rows = availableRows();
-        const sortedNow = [...rows].sort((a, b) => (b.current_pick_utility - a.current_pick_utility) || (b.draft_score - a.draft_score));
-        const sortedWait = [...rows].sort((a, b) => (b.wait_utility - a.wait_utility) || (b.availability_to_next_pick - a.availability_to_next_pick));
-        const pickNow = sortedNow.slice(0, 1);
-        const fallbacks = sortedNow.slice(1, 6);
-        const canWait = sortedWait.filter((row) => !pickNow.some((pick) => safeLower(pick.player_name) === safeLower(row.player_name))).slice(0, 5);
-        return {{ pickNow, fallbacks, canWait, rows }};
-      }}
-
-      function fmtPct(value) {{
-        return `${{Math.round((Number(value) || 0) * 100)}}%`;
-      }}
-
-      function fmtNum(value, digits = 2) {{
+      function formatNumber(value, digits = 2) {
         const num = Number(value);
         return Number.isFinite(num) ? num.toFixed(digits) : '0.00';
-      }}
+      }
 
-      function flagsHtml(row) {{
-        const flags = safeLower(row.why_flags).split('|').filter(Boolean);
-        return flags.map((flag) => `<span class="flag">${{flag}}</span>`).join('');
-      }}
+      function formatPercent(value) {
+        return `${Math.round((Number(value) || 0) * 100)}%`;
+      }
 
-      function recommendationCard(row, leadLabel) {{
-        if (!row) {{
-          return `<div class="muted">No available recommendation.</div>`;
-        }}
-        return `
-          <div class="primary-meta">
-            <span class="pill">${{leadLabel}}</span>
-            <span class="pill">${{row.position}}</span>
-            <span class="pill">score ${{fmtNum(row.draft_score)}}</span>
+      function getPresetEntry() {
+        const requested = scoringPresets[state.scoringPreset];
+        if (requested && requested.available) {
+          return requested;
+        }
+        return Object.values(scoringPresets).find((entry) => entry && entry.available) || { decision_table: data.decision_table || [], available: true, key: defaultPreset, label: 'Current preset' };
+      }
+
+      function activeRows() {
+        const presetEntry = getPresetEntry();
+        return Array.isArray(presetEntry.decision_table) && presetEntry.decision_table.length
+          ? presetEntry.decision_table.map((row) => ({ ...row }))
+          : (Array.isArray(data.decision_table) ? data.decision_table.map((row) => ({ ...row })) : []);
+      }
+
+      function rosterCounts(rows) {
+        const byPlayer = new Map(rows.map((row) => [safeLower(row.player_name), row]));
+        return state.yourPlayers.reduce((counts, playerName) => {
+          const row = byPlayer.get(safeLower(playerName));
+          if (row) {
+            counts[row.position] = (counts[row.position] || 0) + 1;
+          }
+          return counts;
+        }, {});
+      }
+
+      function rosterNeed(counts) {
+        return POSITION_KEYS.reduce((need, position) => {
+          need[position] = Math.max(0, Number(state.rosterSpots[position] || 0) - Number(counts[position] || 0));
+          return need;
+        }, {});
+      }
+
+      function startersByPosition() {
+        return POSITION_KEYS.reduce((acc, position) => {
+          acc[position] = Number(state.rosterSpots[position] || 0) * Math.max(1, Number(state.leagueSize || 1));
+          return acc;
+        }, {});
+      }
+
+      function replacementSlots() {
+        const starters = startersByPosition();
+        const flexSlots = Number(state.rosterSpots.FLEX || 0) * Math.max(1, Number(state.leagueSize || 1));
+        const replacement = { ...starters };
+        replacement.RB = (replacement.RB || 0) + Math.round(flexSlots * (FLEX_WEIGHTS.RB || 0));
+        replacement.WR = (replacement.WR || 0) + Math.round(flexSlots * (FLEX_WEIGHTS.WR || 0));
+        replacement.TE = (replacement.TE || 0) + Math.round(flexSlots * (FLEX_WEIGHTS.TE || 0));
+        return replacement;
+      }
+
+      function positionBaseline(rows, position, slotCount, fallback) {
+        const values = rows
+          .filter((row) => row.position === position)
+          .map((row) => Number(row.proj_points_mean))
+          .filter((value) => Number.isFinite(value))
+          .sort((a, b) => b - a);
+        if (!values.length) {
+          return fallback;
+        }
+        const index = Math.max(0, Math.min(values.length - 1, Math.round(slotCount || 1) - 1));
+        return values[index];
+      }
+
+      function rankPercentiles(values) {
+        const finite = values.map((value, index) => ({ value: Number(value), index })).filter((entry) => Number.isFinite(entry.value));
+        if (!finite.length) {
+          return values.map(() => 0.5);
+        }
+        const sorted = [...finite].sort((a, b) => a.value - b.value);
+        const result = values.map(() => 0.5);
+        sorted.forEach((entry, idx) => {
+          result[entry.index] = sorted.length === 1 ? 0.5 : idx / (sorted.length - 1);
+        });
+        return result;
+      }
+
+      function zScores(values) {
+        const numeric = values.map((value) => Number(value));
+        const finite = numeric.filter((value) => Number.isFinite(value));
+        if (!finite.length) {
+          return numeric.map(() => 0);
+        }
+        const mean = finite.reduce((sum, value) => sum + value, 0) / finite.length;
+        const variance = finite.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / finite.length;
+        const std = Math.sqrt(variance);
+        if (!Number.isFinite(std) || std === 0) {
+          return numeric.map(() => 0);
+        }
+        return numeric.map((value) => Number.isFinite(value) ? (value - mean) / std : 0);
+      }
+
+      function assignTiers(rows) {
+        const total = rows.length || 1;
+        rows.forEach((row, index) => {
+          const bucket = Math.min(5, Math.floor((index / total) * 5) + 1);
+          row.draft_tier = `Tier ${bucket}`;
+        });
+      }
+
+      function getStatus(row, takenSet, yoursSet, queueSet) {
+        const key = safeLower(row.player_name);
+        if (yoursSet.has(key)) {
+          return 'mine';
+        }
+        if (takenSet.has(key)) {
+          return 'taken';
+        }
+        if (queueSet.has(key)) {
+          return 'queued';
+        }
+        return 'available';
+      }
+
+      function buildBoardState() {
+        const rows = activeRows();
+        const takenSet = new Set((state.takenPlayers || []).map(safeLower));
+        const yoursSet = new Set((state.yourPlayers || []).map(safeLower));
+        const queueSet = new Set((state.queuePlayers || []).map(safeLower));
+        const nextPick = nextPickNumber(state.currentPickNumber, state.draftPosition, state.leagueSize);
+        const counts = rosterCounts(rows);
+        const need = rosterNeed(counts);
+        const starterCounts = startersByPosition();
+        const replacementCounts = replacementSlots();
+        const overallMeanProjection = rows
+          .map((row) => Number(row.proj_points_mean))
+          .filter((value) => Number.isFinite(value))
+          .reduce((sum, value, _, values) => sum + value / values.length, 0) || 0;
+
+        const baselines = {};
+        ['QB', 'RB', 'WR', 'TE', 'DST', 'K'].forEach((position) => {
+          baselines[position] = {
+            starter: positionBaseline(rows, position, starterCounts[position] || 1, overallMeanProjection),
+            replacement: positionBaseline(rows, position, replacementCounts[position] || 1, overallMeanProjection),
+            scarcity: 1 / Math.max(1, rows.filter((row) => row.position === position).length),
+          };
+        });
+
+        const totalNeed = ['QB', 'RB', 'WR', 'TE'].reduce((sum, position) => sum + (need[position] || 0), 0) || 1;
+        const projectionValues = [];
+        const starterValues = [];
+        const replacementValues = [];
+        const availabilityValues = [];
+        const fragilityValues = [];
+        const upsideValues = [];
+        const starterNeedValues = [];
+        const scarcityValues = [];
+        const marketGapValues = [];
+        const availableCounts = {};
+
+        rows.forEach((row) => {
+          const baseline = baselines[row.position] || { starter: overallMeanProjection, replacement: overallMeanProjection, scarcity: 0 };
+          row.availability_at_pick = availabilityProbability(row.adp, nextPick, row.adp_std, row.uncertainty_score);
+          row.availability_to_next_pick = row.availability_at_pick;
+          row.starter_baseline = baseline.starter;
+          row.replacement_baseline = baseline.replacement;
+          row.starter_delta = Number(row.proj_points_mean || 0) - baseline.starter;
+          row.replacement_delta = Number(row.proj_points_mean || 0) - baseline.replacement;
+          row.simple_vor_proxy = row.replacement_delta;
+          row.position_scarcity = baseline.scarcity;
+          row.starter_need = (need[row.position] || 0) / totalNeed;
+          row.status = getStatus(row, takenSet, yoursSet, queueSet);
+          if (row.status === 'available' || row.status === 'queued') {
+            availableCounts[row.position] = (availableCounts[row.position] || 0) + 1;
+          }
+          projectionValues.push(Number(row.proj_points_mean || 0));
+          starterValues.push(Number(row.starter_delta || 0));
+          replacementValues.push(Number(row.replacement_delta || 0));
+          availabilityValues.push(Number(row.availability_to_next_pick || 0));
+          fragilityValues.push(Number(row.fragility_score || 0));
+          starterNeedValues.push(Number(row.starter_need || 0));
+          scarcityValues.push(Number(row.position_scarcity || 0));
+          marketGapValues.push(Number(row.market_gap || 0));
+          upsideValues.push((Number(row.proj_points_ceiling || 0) - Number(row.proj_points_mean || 0)));
+        });
+
+        const upsidePercentiles = rankPercentiles(upsideValues);
+        const availabilityPercentiles = rankPercentiles(availabilityValues);
+        const projectionPercentiles = rankPercentiles(projectionValues);
+        rows.forEach((row, index) => {
+          row.upside_score = Math.max(0, Math.min(1, upsidePercentiles[index] + (0.35 * availabilityPercentiles[index]) + (0.15 * projectionPercentiles[index])));
+        });
+        const finalUpsideValues = rows.map((row) => Number(row.upside_score || 0));
+        const riskMultiplier = ({ low: 0.80, medium: 1.00, high: 1.18 })[(state.riskTolerance || 'medium').toLowerCase()] || 1.0;
+        const componentZ = {
+          starter_delta: zScores(starterValues),
+          replacement_delta: zScores(replacementValues),
+          proj_points_mean: zScores(projectionValues),
+          availability_to_next_pick: zScores(availabilityValues),
+          upside_score: zScores(finalUpsideValues),
+          starter_need: zScores(starterNeedValues),
+          position_scarcity: zScores(scarcityValues),
+          fragility_score: zScores(fragilityValues),
+          market_gap: zScores(marketGapValues),
+        };
+
+        rows.forEach((row, index) => {
+          row.component_terms = {
+            starter_delta: 0.34 * componentZ.starter_delta[index],
+            replacement_delta: 0.20 * componentZ.replacement_delta[index],
+            proj_points_mean: 0.16 * componentZ.proj_points_mean[index],
+            availability_to_next_pick: 0.12 * componentZ.availability_to_next_pick[index],
+            upside_score: 0.10 * componentZ.upside_score[index],
+            starter_need: 0.08 * componentZ.starter_need[index],
+            position_scarcity: 0.08 * componentZ.position_scarcity[index],
+            fragility_score: -(0.25 * riskMultiplier) * componentZ.fragility_score[index],
+            market_gap: 0.06 * componentZ.market_gap[index],
+          };
+          row.draft_score = Object.values(row.component_terms).reduce((sum, value) => sum + value, 0);
+        });
+
+        rows.sort((a, b) => (Number(b.draft_score) - Number(a.draft_score)) || (Number(b.proj_points_mean) - Number(a.proj_points_mean)));
+        assignTiers(rows);
+        rows.forEach((row, index) => {
+          row.draft_rank = index + 1;
+        });
+        const simpleVorSorted = [...rows].sort((a, b) => (Number(b.simple_vor_proxy) - Number(a.simple_vor_proxy)) || (Number(b.proj_points_mean) - Number(a.proj_points_mean)));
+        simpleVorSorted.forEach((row, index) => {
+          row.simple_vor_rank = index + 1;
+        });
+
+        const availableRows = rows.filter((row) => row.status === 'available' || row.status === 'queued');
+        const bestNow = availableRows.reduce((best, row) => Math.max(best, Number(row.draft_score) || 0), 0);
+        availableRows.forEach((row) => {
+          const posNeed = need[row.position] || 0;
+          const demand = Math.max(1, Number(state.leagueSize || 1) * Math.max(1, posNeed));
+          row.position_run_risk = Math.max(0, Math.min(1, 1 - ((availableCounts[row.position] || 0) / demand)));
+          row.roster_fit_score = posNeed / totalNeed;
+          row.expected_regret = (Math.max(0, bestNow - Number(row.draft_score || 0)) * (1 - Number(row.availability_to_next_pick || 0))) + (0.25 * row.position_run_risk);
+          const riskBias = ({ low: -0.08, medium: 0.0, high: 0.08 })[(state.riskTolerance || 'medium').toLowerCase()] || 0;
+          row.current_pick_utility = Number(row.draft_score || 0) + (0.15 * row.roster_fit_score) + (0.10 * row.position_run_risk) - (0.20 * (1 - Number(row.availability_to_next_pick || 0))) + (riskBias * Number(row.upside_score || 0));
+          row.wait_utility = (Number(row.draft_score || 0) * Number(row.availability_to_next_pick || 0)) + (0.18 * Number(row.upside_score || 0)) - (0.15 * Number(row.fragility_score || 0));
+          row.rank_gap_vs_vor = Number(row.simple_vor_rank || 0) - Number(row.draft_rank || 0);
+          row.rationale_live = buildPlayerSummary(row);
+        });
+
+        const recommendedNow = [...availableRows].sort((a, b) => (Number(b.current_pick_utility) - Number(a.current_pick_utility)) || (Number(b.draft_score) - Number(a.draft_score)));
+        const recommendedWait = [...availableRows].sort((a, b) => (Number(b.wait_utility) - Number(a.wait_utility)) || (Number(b.availability_to_next_pick) - Number(a.availability_to_next_pick)));
+        const pickNow = recommendedNow.slice(0, 1);
+        const fallbacks = recommendedNow.slice(1, 6);
+        const canWait = recommendedWait.filter((row) => !pickNow.some((candidate) => safeLower(candidate.player_name) === safeLower(row.player_name))).slice(0, 5);
+
+        const selectedKey = safeLower(state.selectedPlayer || (pickNow[0] && pickNow[0].player_name) || '');
+        const selectedRow = rows.find((row) => safeLower(row.player_name) === selectedKey) || pickNow[0] || rows[0] || null;
+        if (selectedRow) {
+          state.selectedPlayer = selectedRow.player_name;
+        }
+
+        return {
+          rows,
+          availableRows,
+          nextPick,
+          rosterCounts: counts,
+          rosterNeed: need,
+          pickNow,
+          fallbacks,
+          canWait,
+          selectedRow,
+          presetEntry: getPresetEntry(),
+        };
+      }
+
+      function buildPlayerSummary(row) {
+        if (!row) {
+          return 'No player selected.';
+        }
+        const reasons = [];
+        if (Number(row.starter_delta) > 0) {
+          reasons.push(`adds ${formatNumber(row.starter_delta)} points over a typical ${row.position} starter`);
+        }
+        if (Number(row.rank_gap_vs_vor) < 0) {
+          reasons.push(`the contextual model likes this profile more than the simple VOR baseline`);
+        } else if (Number(row.rank_gap_vs_vor) > 0) {
+          reasons.push(`simple VOR likes this player a bit more than the contextual score`);
+        }
+        if (Number(row.availability_to_next_pick) < 0.35) {
+          reasons.push(`is unlikely to reach your next pick`);
+        } else if (Number(row.availability_to_next_pick) > 0.70) {
+          reasons.push(`has a realistic chance to survive to your next turn`);
+        }
+        if (Number(row.fragility_score) > 0.60) {
+          reasons.push(`comes with elevated fragility risk`);
+        } else if (Number(row.upside_score) > 0.70) {
+          reasons.push(`brings strong upside if you want ceiling`);
+        }
+        return `${row.player_name} is recommended because ${reasons.slice(0, 3).join(', ')}.`.replace(' because .', '.');
+      }
+
+      function filterRows(rows) {
+        const query = safeLower(state.search);
+        return rows.filter((row) => {
+          if (query) {
+            const haystack = [row.player_name, row.position, row.team].map(safeLower).join(' ');
+            if (!haystack.includes(query)) {
+              return false;
+            }
+          }
+          if (state.positionFilter && state.positionFilter !== 'ALL' && row.position !== state.positionFilter) {
+            return false;
+          }
+          if (state.statusFilter === 'available' && row.status !== 'available' && row.status !== 'queued') {
+            return false;
+          }
+          if (state.statusFilter === 'queue' && row.status !== 'queued') {
+            return false;
+          }
+          if (state.statusFilter === 'mine' && row.status !== 'mine') {
+            return false;
+          }
+          if (state.statusFilter === 'taken' && row.status !== 'taken') {
+            return false;
+          }
+          return true;
+        });
+      }
+
+      function percentileRows(rows, key, invert = false) {
+        const percentiles = rankPercentiles(rows.map((row) => Number(row[key] || 0)));
+        return rows.reduce((acc, row, index) => {
+          acc[safeLower(row.player_name)] = invert ? (1 - percentiles[index]) : percentiles[index];
+          return acc;
+        }, {});
+      }
+
+      function render() {
+        const boardState = buildBoardState();
+        persistState();
+        renderTopbar(boardState);
+        renderRecommendations(boardState);
+        renderQueue(boardState);
+        renderBoard(boardState);
+        renderControls(boardState);
+        renderInspector(boardState);
+        renderModelNotes(boardState);
+      }
+
+      function renderTopbar(boardState) {
+        const presetEntry = boardState.presetEntry;
+        document.getElementById('storage-pill').textContent = 'Saved locally';
+        document.getElementById('status-pills').innerHTML = [
+          ['Current pick', state.currentPickNumber],
+          ['Next pick', boardState.nextPick],
+          ['League', `${state.leagueSize}-team`],
+          ['Draft slot', state.draftPosition],
+          ['Preset', presetEntry.label || presetEntry.key || 'Current'],
+          ['Taken', state.takenPlayers.length],
+          ['Yours', state.yourPlayers.length],
+        ].map(([label, value]) => `<span class="pill">${label}: ${value}</span>`).join('');
+      }
+
+      function renderRecommendations(boardState) {
+        const primary = boardState.pickNow[0];
+        document.getElementById('primary-card').innerHTML = primary ? `
+          <div class="pill-row">
+            <span class="pill">${primary.position}</span>
+            <span class="pill">Draft score ${formatNumber(primary.draft_score)}</span>
+            <span class="pill">Simple VOR rank ${primary.simple_vor_rank}</span>
           </div>
-          <div class="primary-name">${{row.player_name}}</div>
+          <div class="hero-name">${primary.player_name}</div>
+          <div class="summary-box">${buildPlayerSummary(primary)}</div>
           <div class="metric-grid">
-            <div class="metric"><span class="label">Draft score</span><span class="value">${{fmtNum(row.draft_score)}}</span></div>
-            <div class="metric"><span class="label">Availability to next pick</span><span class="value">${{fmtPct(row.availability_to_next_pick)}}</span></div>
-            <div class="metric"><span class="label">Expected regret of waiting</span><span class="value">${{fmtNum(row.expected_regret)}}</span></div>
-            <div class="metric"><span class="label">Roster fit</span><span class="value">${{fmtNum(row.roster_fit_score)}}</span></div>
-            <div class="metric"><span class="label">Position-run risk</span><span class="value">${{fmtNum(row.position_run_risk)}}</span></div>
-            <div class="metric"><span class="label">Why it matters</span><span class="value tiny">${{row.rationale || row.why_flags || 'No rationale'}}</span></div>
+            <div class="metric"><span class="label">Availability to next pick</span><span class="value">${formatPercent(primary.availability_to_next_pick)}</span></div>
+            <div class="metric"><span class="label">Expected regret</span><span class="value">${formatNumber(primary.expected_regret)}</span></div>
+            <div class="metric"><span class="label">Position run risk</span><span class="value">${formatNumber(primary.position_run_risk)}</span></div>
+            <div class="metric"><span class="label">Roster fit</span><span class="value">${formatNumber(primary.roster_fit_score)}</span></div>
           </div>
-          <div>${{flagsHtml(row)}}</div>
-        `;
-      }}
+        ` : '<div class="empty">No available recommendation.</div>';
+        renderLane('fallback-list', boardState.fallbacks, 'No fallback options right now.');
+        renderLane('wait-list', boardState.canWait, 'No wait candidates right now.');
+      }
 
-      function renderTurnMeta(panel) {{
-        const row = panel.pickNow[0];
-        const nextTurnPick = nextPickNumber(state.currentPickNumber, state.draftPosition, state.leagueSize);
-        const lead = row ? `${{row.player_name}} • ${{row.position}}` : 'No current target';
-        document.getElementById('current-turn-label').textContent = lead;
-        document.getElementById('turn-meta').innerHTML = `
-          <span class="pill">Current pick ${{state.currentPickNumber}}</span>
-          <span class="pill">Next pick ${{nextTurnPick}}</span>
-          <span class="pill">Taken ${{state.takenPlayers.size}}</span>
-          <span class="pill">Yours ${{state.yourPlayers.size}}</span>
-        `;
-        document.getElementById('primary-card').innerHTML = recommendationCard(row, 'Pick now');
-      }}
-
-      function renderList(containerId, rows, emptyLabel, accentLabel) {{
-        const container = document.getElementById(containerId);
-        if (!rows.length) {{
-          container.innerHTML = `<div class="muted">${{emptyLabel}}</div>`;
+      function renderLane(elementId, rows, emptyMessage) {
+        const container = document.getElementById(elementId);
+        if (!rows.length) {
+          container.innerHTML = `<div class="empty">${emptyMessage}</div>`;
           return;
-        }}
+        }
         container.innerHTML = rows.map((row) => `
-          <div class="list-item">
-            <div>
-              <div class="item-title">${{row.player_name}} <span class="muted">• ${{row.position}}</span></div>
-              <div class="item-subtitle">
-                score ${{fmtNum(row.draft_score)}} • survival ${{fmtPct(row.availability_to_next_pick)}} • regret ${{fmtNum(row.expected_regret)}}
+          <div class="lane-item">
+            <div class="lane-item-header">
+              <div class="item-title">${row.player_name} <span class="tiny">• ${row.position}</span></div>
+              <span class="status-badge ${row.status}">${row.status}</span>
+            </div>
+            <div class="item-meta">Score ${formatNumber(row.draft_score)} • Survival ${formatPercent(row.availability_to_next_pick)} • Regret ${formatNumber(row.expected_regret)}</div>
+            <div class="tiny">${buildPlayerSummary(row)}</div>
+          </div>
+        `).join('');
+      }
+
+      function renderQueue(boardState) {
+        const queueContainer = document.getElementById('queue-list');
+        const rosterContainer = document.getElementById('my-roster');
+        const rosterNeedGrid = document.getElementById('roster-need-grid');
+        const queueRows = boardState.rows.filter((row) => safeLowerArray(state.queuePlayers).includes(safeLower(row.player_name)));
+        queueContainer.innerHTML = queueRows.length ? queueRows.map((row) => `
+          <div class="mini-item">
+            <div class="mini-item-header">
+              <div class="item-title">${row.player_name} <span class="tiny">• ${row.position}</span></div>
+              <span class="pill">${formatPercent(row.availability_to_next_pick)} survival</span>
+            </div>
+            <div class="item-meta">${buildPlayerSummary(row)}</div>
+          </div>
+        `).join('') : '<div class="empty">Queue players with the “Queue” action in the board.</div>';
+        const yourRows = boardState.rows.filter((row) => safeLowerArray(state.yourPlayers).includes(safeLower(row.player_name)));
+        rosterContainer.innerHTML = yourRows.length ? yourRows.map((row) => `<span class="pill good">${row.player_name} • ${row.position}</span>`).join('') : '<span class="empty">Your roster will appear here as you mark picks.</span>';
+        rosterNeedGrid.innerHTML = POSITION_KEYS.map((position) => `
+          <div class="metric">
+            <span class="label">${position} need</span>
+            <span class="value">${boardState.rosterNeed[position] || 0}</span>
+          </div>
+        `).join('');
+      }
+
+      function renderBoard(boardState) {
+        const filteredRows = filterRows(boardState.rows);
+        const tableBody = document.getElementById('board-table');
+        document.getElementById('board-count-pill').textContent = `${filteredRows.length} shown`;
+        document.getElementById('board-summary-text').textContent = `Showing ${filteredRows.length} of ${boardState.rows.length} players`;
+        document.getElementById('preset-summary-text').textContent = `Preset: ${boardState.presetEntry.label || boardState.presetEntry.key || 'Current'} • Risk: ${(state.riskTolerance || 'medium').toUpperCase()}`;
+        if (!filteredRows.length) {
+          tableBody.innerHTML = '<tr><td colspan="7" class="empty">No players match the current filters.</td></tr>';
+          return;
+        }
+        tableBody.innerHTML = filteredRows.map((row) => {
+          const rowClasses = [
+            safeLower(row.player_name) === safeLower(state.selectedPlayer) ? 'is-selected' : '',
+            row.status === 'taken' ? 'is-taken' : '',
+            row.status === 'mine' ? 'is-mine' : '',
+            row.status === 'queued' ? 'is-queued' : '',
+          ].filter(Boolean).join(' ');
+          return `
+            <tr class="${rowClasses}" data-player-row="${row.player_name}">
+              <td>
+                <div class="item-title">${row.player_name}</div>
+                <div class="tiny">${row.position}${row.team ? ` • ${row.team}` : ''} • ${row.draft_tier || ''}</div>
+              </td>
+              <td><span class="status-badge ${row.status}">${row.status}</span></td>
+              <td>${formatNumber(row.draft_score)}</td>
+              <td>${formatNumber(row.simple_vor_proxy)} <span class="tiny">(rank ${row.simple_vor_rank || '-'})</span></td>
+              <td>${formatPercent(row.availability_to_next_pick)}</td>
+              <td class="tiny">${buildPlayerSummary(row)}</td>
+              <td>
+                <div class="action-group">
+                  <button type="button" data-action="queue" data-player="${row.player_name}">${row.status === 'queued' ? 'Unqueue' : 'Queue'}</button>
+                  <button type="button" data-action="taken" data-player="${row.player_name}">${row.status === 'taken' ? 'Clear' : 'Taken'}</button>
+                  <button type="button" data-action="mine" data-player="${row.player_name}">${row.status === 'mine' ? 'Unmark' : 'Mine'}</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
+        tableBody.querySelectorAll('[data-player-row]').forEach((rowElement) => {
+          rowElement.addEventListener('click', (event) => {
+            if (event.target.closest('button')) {
+              return;
+            }
+            state.selectedPlayer = rowElement.getAttribute('data-player-row');
+            render();
+          });
+        });
+        tableBody.querySelectorAll('button[data-action]').forEach((button) => {
+          button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            applyAction(button.getAttribute('data-action'), button.getAttribute('data-player'));
+          });
+        });
+      }
+
+      function renderControls(boardState) {
+        const presetSelect = document.getElementById('scoring-preset');
+        const currentPreset = getPresetEntry();
+        presetSelect.innerHTML = Object.entries(scoringPresets).map(([key, entry]) => `
+          <option value="${key}" ${key === currentPreset.key ? 'selected' : ''} ${entry.available ? '' : 'disabled'}>
+            ${entry.label}${entry.available ? '' : ' (regen needed)'}
+          </option>
+        `).join('');
+        document.getElementById('risk-tolerance').value = state.riskTolerance || 'medium';
+        document.getElementById('league-size').value = state.leagueSize;
+        document.getElementById('draft-position').value = state.draftPosition;
+        document.getElementById('current-pick-number').value = state.currentPickNumber;
+        document.getElementById('bench-slots').value = state.benchSlots;
+        document.getElementById('roster-qb').value = state.rosterSpots.QB || 0;
+        document.getElementById('roster-rb').value = state.rosterSpots.RB || 0;
+        document.getElementById('roster-wr').value = state.rosterSpots.WR || 0;
+        document.getElementById('roster-te').value = state.rosterSpots.TE || 0;
+        document.getElementById('roster-flex').value = state.rosterSpots.FLEX || 0;
+        document.getElementById('preset-notice').textContent = currentPreset.available
+          ? `Using ${currentPreset.label}. This board can recompute live draft context in-browser.`
+          : (currentPreset.reason_unavailable || 'This preset is unavailable for the exported payload.');
+        const positions = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DST', 'K'];
+        document.getElementById('position-filters').innerHTML = positions.map((position) => `
+          <button type="button" data-position-filter="${position}" class="${state.positionFilter === position ? 'is-active' : ''}">${position}</button>
+        `).join('');
+        document.querySelectorAll('[data-position-filter]').forEach((button) => {
+          button.addEventListener('click', () => {
+            state.positionFilter = button.getAttribute('data-position-filter');
+            render();
+          });
+        });
+        document.querySelectorAll('[data-status-filter]').forEach((button) => {
+          button.classList.toggle('is-active', state.statusFilter === button.getAttribute('data-status-filter'));
+        });
+      }
+
+      function renderInspector(boardState) {
+        const container = document.getElementById('player-inspector');
+        const row = boardState.selectedRow;
+        if (!row) {
+          container.innerHTML = '<div class="empty">Select a player from the board.</div>';
+          return;
+        }
+        const percentileMaps = {
+          projection: percentileRows(boardState.rows, 'proj_points_mean'),
+          upside: percentileRows(boardState.rows, 'upside_score'),
+          fragility: percentileRows(boardState.rows, 'fragility_score', true),
+          survival: percentileRows(boardState.rows, 'availability_to_next_pick'),
+          market: percentileRows(boardState.rows, 'market_gap'),
+        };
+        const contributions = Object.entries(row.component_terms || {}).map(([key, value]) => ({
+          key,
+          value: Number(value || 0),
+          magnitude: Math.abs(Number(value || 0)),
+        }));
+        const totalContribution = contributions.reduce((sum, item) => sum + item.magnitude, 0) || 1;
+        const componentLabels = {
+          starter_delta: 'Starter edge',
+          replacement_delta: 'Simple VOR',
+          proj_points_mean: 'Projection',
+          availability_to_next_pick: 'Draft timing',
+          upside_score: 'Upside',
+          starter_need: 'Roster need',
+          position_scarcity: 'Scarcity',
+          fragility_score: 'Fragility',
+          market_gap: 'Market gap',
+        };
+        container.innerHTML = `
+          <div class="inspector-title">
+            <div class="pill-row">
+              <span class="pill">${row.position}</span>
+              <span class="pill">${row.status}</span>
+              <span class="pill">Draft rank ${row.draft_rank}</span>
+              <span class="pill">VOR rank ${row.simple_vor_rank}</span>
+            </div>
+            <div class="hero-name" style="font-size: 24px;">${row.player_name}</div>
+            <div class="summary-box">${buildPlayerSummary(row)}</div>
+          </div>
+          <div class="metric-grid">
+            <div class="metric"><span class="label">Draft score</span><span class="value">${formatNumber(row.draft_score)}</span></div>
+            <div class="metric"><span class="label">Simple VOR proxy</span><span class="value">${formatNumber(row.simple_vor_proxy)}</span></div>
+            <div class="metric"><span class="label">Availability to next pick</span><span class="value">${formatPercent(row.availability_to_next_pick)}</span></div>
+            <div class="metric"><span class="label">Expected regret</span><span class="value">${formatNumber(row.expected_regret)}</span></div>
+            <div class="metric"><span class="label">Upside score</span><span class="value">${formatPercent(row.upside_score)}</span></div>
+            <div class="metric"><span class="label">Fragility score</span><span class="value">${formatPercent(row.fragility_score)}</span></div>
+          </div>
+          <details open>
+            <summary>Why this player / why not wait?</summary>
+            <div class="details-body">
+              <div class="bar-stack">
+                ${contributions.sort((a, b) => b.magnitude - a.magnitude).map((item) => `
+                  <div class="bar-row">
+                    <div class="bar-head">
+                      <span>${componentLabels[item.key] || item.key}</span>
+                      <span>${formatNumber(item.value)}</span>
+                    </div>
+                    <div class="bar-track">
+                      <div class="bar-fill ${item.key === 'fragility_score' ? 'bad' : (item.value >= 0 ? 'good' : 'warn')}" style="width: ${Math.max(6, Math.round((item.magnitude / totalContribution) * 100))}%"></div>
+                    </div>
+                  </div>
+                `).join('')}
               </div>
             </div>
-            <span class="pill">${{accentLabel}}</span>
-          </div>
-        `).join('');
-      }}
-
-      function renderBoardActions() {{
-        const container = document.getElementById('board-actions');
-        const topPlayers = availableRows().slice(0, 5);
-        container.innerHTML = topPlayers.map((row) => `
-          <button type="button" data-player="${{row.player_name}}" data-action="taken">${{row.player_name}} taken</button>
-          <button type="button" data-player="${{row.player_name}}" data-action="mine">Mine</button>
-        `).join('');
-        container.querySelectorAll('button').forEach((button) => {{
-          button.addEventListener('click', () => {{
-            const player = button.getAttribute('data-player');
-            const action = button.getAttribute('data-action');
-            applyAction(action, player);
-          }});
-        }});
-      }}
-
-      function renderBoardTable(rows) {{
-        const tbody = document.getElementById('board-table');
-        if (!rows.length) {{
-          tbody.innerHTML = '<tr><td colspan="5" class="muted">No players match the current filter.</td></tr>';
-          return;
-        }}
-        tbody.innerHTML = rows.slice(0, 30).map((row) => `
-          <tr>
-            <td>
-              <div><strong>${{row.player_name}}</strong></div>
-              <div class="muted tiny">${{row.position}} • ${{row.pick_mode || ''}} ${{row.recommendation_lane || ''}}</div>
-            </td>
-            <td>${{row.position}}</td>
-            <td>${{fmtNum(row.draft_score)}}</td>
-            <td>${{fmtPct(row.availability_to_next_pick)}}</td>
-            <td>
-              <button type="button" data-player="${{row.player_name}}" data-action="taken">Taken</button>
-              <button type="button" data-player="${{row.player_name}}" data-action="mine">Mine</button>
-            </td>
-          </tr>
-        `).join('');
-        tbody.querySelectorAll('button').forEach((button) => {{
-          button.addEventListener('click', () => {{
-            applyAction(button.getAttribute('data-action'), button.getAttribute('data-player'));
-          }});
-        }});
-      }}
-
-      function renderRosterPanel(panel) {{
-        const need = rosterNeed();
-        const metrics = document.getElementById('roster-metrics');
-        metrics.innerHTML = Object.entries(need).map(([key, value]) => `
-          <div class="metric">
-            <span class="label">${{key}} need</span>
-            <span class="value">${{value}}</span>
-          </div>
-        `).join('');
-
-        document.getElementById('roster-paths').innerHTML = (data.live_state && data.live_state.best_roster_paths || []).map((row) => `
-          <div class="list-item">
-            <div>
-              <div class="item-title">${{row.scenario || 'scenario'}}</div>
-              <div class="item-subtitle">${{row.recommended_build || ''}}</div>
+          </details>
+          <details>
+            <summary>Player fingerprint</summary>
+            <div class="details-body">
+              <div class="bar-stack">
+                ${[
+                  ['Projection', percentileMaps.projection[safeLower(row.player_name)] || 0],
+                  ['Upside', percentileMaps.upside[safeLower(row.player_name)] || 0],
+                  ['Safety', percentileMaps.fragility[safeLower(row.player_name)] || 0],
+                  ['Next-pick survival', percentileMaps.survival[safeLower(row.player_name)] || 0],
+                  ['Model vs market gap', percentileMaps.market[safeLower(row.player_name)] || 0],
+                ].map(([label, value]) => `
+                  <div class="bar-row">
+                    <div class="bar-head"><span>${label}</span><span>${formatPercent(value)}</span></div>
+                    <div class="bar-track"><div class="bar-fill" style="width: ${Math.round(value * 100)}%"></div></div>
+                  </div>
+                `).join('')}
+              </div>
             </div>
-            <span class="pill">${{fmtNum(row.utility_proxy)}}</span>
+          </details>
+        `;
+      }
+
+      function renderModelNotes(boardState) {
+        const modelOverview = data.model_overview || {};
+        const bayesVor = data.bayesian_vor_summary || {};
+        const freshnessRows = Array.isArray(data.source_freshness) ? data.source_freshness : [];
+        const backtestRows = data.backtest && data.backtest.overall && Array.isArray(data.backtest.overall.by_strategy)
+          ? data.backtest.overall.by_strategy
+          : [];
+        document.getElementById('model-overview').innerHTML = `
+          <div class="summary-box">${modelOverview.headline || 'The model mixes projection, VOR-style value, timing, and fragility.'}</div>
+          ${(modelOverview.plain_english || []).map((line) => `<div class="tiny">• ${line}</div>`).join('')}
+          ${(modelOverview.limitations || []).length ? `<div class="notice">${(modelOverview.limitations || []).join(' ')}</div>` : ''}
+        `;
+        document.getElementById('bayes-vor').innerHTML = bayesVor.available ? `
+          <div class="summary-box">${bayesVor.headline}</div>
+          <div class="metric-grid">
+            <div class="metric"><span class="label">Winner</span><span class="value">${bayesVor.winner}</span></div>
+            <div class="metric"><span class="label">Mean lineup delta</span><span class="value">${formatNumber(bayesVor.delta_mean_lineup_points)}</span></div>
+            <div class="metric"><span class="label">Draft score mean</span><span class="value">${formatNumber(bayesVor.draft_score_mean_lineup_points)}</span></div>
+            <div class="metric"><span class="label">Simple VOR mean</span><span class="value">${formatNumber(bayesVor.historical_vor_proxy_mean_lineup_points)}</span></div>
           </div>
-        `).join('') || '<div class="muted">No roster paths available.</div>';
-
-        document.getElementById('tier-cliff-table').innerHTML = tierCliffs.slice(0, 8).map((row) => `
-          <tr>
-            <td>${{row.position}}</td>
-            <td>${{row.player_name}}</td>
-            <td>${{fmtNum(row.tier_cliff_distance)}}</td>
-          </tr>
-        `).join('') || '<tr><td colspan="3" class="muted">No tier cliff data.</td></tr>';
-      }}
-
-      function renderSupport(panel) {{
-        const support = document.getElementById('support-metrics');
-        const supporting = data.supporting_math || {{}};
-        const live = panel.pickNow[0] || {{}};
-        const metrics = [
-          ['Draft score mean', fmtNum(supporting.draft_score_mean)],
-          ['Draft score std', fmtNum(supporting.draft_score_std)],
-          ['Availability mean', fmtPct(supporting.availability_mean)],
-          ['Top score', fmtNum(supporting.top_draft_score)],
-          ['Next pick', String(nextPickNumber(state.currentPickNumber, state.draftPosition, state.leagueSize))],
-          ['Current turn', String(state.currentPickNumber)],
-        ];
-        support.innerHTML = metrics.map(([label, value]) => `
+          <div class="board-table-wrap" style="max-height: 220px;">
+            <table>
+              <thead>
+                <tr><th>Year</th><th>Draft score</th><th>Simple VOR</th><th>Delta</th></tr>
+              </thead>
+              <tbody>
+                ${(bayesVor.by_season || []).map((row) => `
+                  <tr>
+                    <td>${row.holdout_year}</td>
+                    <td>${formatNumber(row.draft_score_lineup_points)}</td>
+                    <td>${formatNumber(row.historical_vor_proxy_lineup_points)}</td>
+                    <td>${formatNumber(row.delta_lineup_points)}</td>
+                  </tr>
+                `).join('') || '<tr><td colspan="4" class="empty">No season-level rows available.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          <div class="board-table-wrap" style="max-height: 220px;">
+            <table>
+              <thead>
+                <tr><th>Player</th><th>Pos</th><th>Draft rank</th><th>VOR rank</th><th>Gap</th></tr>
+              </thead>
+              <tbody>
+                ${(bayesVor.top_disagreements || []).map((row) => `
+                  <tr>
+                    <td>${row.player_name}</td>
+                    <td>${row.position}</td>
+                    <td>${row.draft_rank}</td>
+                    <td>${row.simple_vor_rank}</td>
+                    <td>${row.rank_gap_vs_vor}</td>
+                  </tr>
+                `).join('') || '<tr><td colspan="5" class="empty">No disagreement rows available.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          ${(bayesVor.limitations || []).length ? `<div class="notice">${bayesVor.limitations.join(' ')}</div>` : ''}
+        ` : `
+          <div class="notice">${bayesVor.headline || 'No head-to-head evidence is available in this payload.'}</div>
+          <div class="board-table-wrap" style="max-height: 220px;">
+            <table>
+              <thead>
+                <tr><th>Player</th><th>Pos</th><th>Draft rank</th><th>VOR rank</th><th>Gap</th></tr>
+              </thead>
+              <tbody>
+                ${(bayesVor.top_disagreements || []).map((row) => `
+                  <tr>
+                    <td>${row.player_name}</td>
+                    <td>${row.position}</td>
+                    <td>${row.draft_rank}</td>
+                    <td>${row.simple_vor_rank}</td>
+                    <td>${row.rank_gap_vs_vor}</td>
+                  </tr>
+                `).join('') || '<tr><td colspan="5" class="empty">No disagreement rows available.</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        `;
+        document.getElementById('metric-glossary').innerHTML = `<div class="glossary-list">${
+          Object.entries(data.metric_glossary || {}).map(([key, item]) => `
+            <div class="glossary-item">
+              <strong>${item.label || key}</strong>
+              <div class="tiny">${item.summary || ''}</div>
+              <div class="tiny" style="margin-top: 4px;">${item.detail || ''}</div>
+            </div>
+          `).join('')
+        }</div>`;
+        document.getElementById('support-metrics').innerHTML = [
+          ['Players in board', boardState.rows.length],
+          ['Available players', boardState.availableRows.length],
+          ['Current pick', state.currentPickNumber],
+          ['Next pick', boardState.nextPick],
+          ['League size', state.leagueSize],
+          ['Bench slots', state.benchSlots],
+        ].map(([label, value]) => `
           <div class="metric">
-            <span class="label">${{label}}</span>
-            <span class="value">${{value}}</span>
+            <span class="label">${label}</span>
+            <span class="value">${value}</span>
           </div>
         `).join('');
-
-        document.getElementById('freshness-table').innerHTML = freshness.map((row) => `
+        document.getElementById('freshness-table').innerHTML = freshnessRows.map((row) => `
           <tr>
-            <td>${{row.source_name}}</td>
-            <td>${{row.freshness_days}}</td>
-            <td>${{row.row_count}}</td>
+            <td>${row.source_name || 'unknown'}</td>
+            <td>${row.freshness_days ?? 'n/a'}</td>
+            <td>${row.row_count ?? 'n/a'}</td>
           </tr>
-        `).join('') || '<tr><td colspan="3" class="muted">No freshness data.</td></tr>';
-
-        document.getElementById('backtest-table').innerHTML = backtest.map((row) => `
+        `).join('') || '<tr><td colspan="3" class="empty">No freshness rows available.</td></tr>';
+        document.getElementById('backtest-table').innerHTML = backtestRows.map((row) => `
           <tr>
-            <td>${{row.strategy}}</td>
-            <td>${{fmtNum(row.mean_lineup_points)}}</td>
+            <td>${row.strategy}</td>
+            <td>${formatNumber(row.mean_lineup_points)}</td>
+            <td>${row.season_count ?? 'n/a'}</td>
           </tr>
-        `).join('') || '<tr><td colspan="2" class="muted">No backtest data.</td></tr>';
+        `).join('') || '<tr><td colspan="3" class="empty">No backtest rows available.</td></tr>';
+      }
 
-        const status = document.getElementById('status-pills');
-        status.innerHTML = [
-          ['players', decisionTable.length],
-          ['taken', state.takenPlayers.size],
-          ['yours', state.yourPlayers.size],
-          ['current pick', state.currentPickNumber],
-          ['next pick', nextPickNumber(state.currentPickNumber, state.draftPosition, state.leagueSize)],
-        ].map(([label, value]) => `<span class="pill">${{label}} ${{value}}</span>`).join('');
-      }}
+      function bindControls() {
+        document.getElementById('player-search').addEventListener('input', (event) => {
+          state.search = event.target.value;
+          render();
+        });
+        document.getElementById('undo-button').addEventListener('click', undoLast);
+        document.getElementById('advance-button').addEventListener('click', () => {
+          pushHistory();
+          state.currentPickNumber = Math.max(1, Number(state.currentPickNumber || 1) + 1);
+          render();
+        });
+        document.getElementById('reset-button').addEventListener('click', () => {
+          window.localStorage.removeItem(STORAGE_KEY);
+          Object.assign(state, clone(defaultState));
+          render();
+        });
+        document.querySelectorAll('[data-status-filter]').forEach((button) => {
+          button.addEventListener('click', () => {
+            state.statusFilter = button.getAttribute('data-status-filter');
+            render();
+          });
+        });
+        [
+          ['scoring-preset', (value) => { state.scoringPreset = value; }],
+          ['risk-tolerance', (value) => { state.riskTolerance = value; }],
+          ['league-size', (value) => { state.leagueSize = Math.max(2, Number(value || 10)); state.draftPosition = Math.min(state.draftPosition, state.leagueSize); }],
+          ['draft-position', (value) => { state.draftPosition = Math.max(1, Number(value || 1)); }],
+          ['current-pick-number', (value) => { state.currentPickNumber = Math.max(1, Number(value || 1)); }],
+          ['bench-slots', (value) => { state.benchSlots = Math.max(0, Number(value || 0)); }],
+          ['roster-qb', (value) => { state.rosterSpots.QB = Math.max(0, Number(value || 0)); }],
+          ['roster-rb', (value) => { state.rosterSpots.RB = Math.max(0, Number(value || 0)); }],
+          ['roster-wr', (value) => { state.rosterSpots.WR = Math.max(0, Number(value || 0)); }],
+          ['roster-te', (value) => { state.rosterSpots.TE = Math.max(0, Number(value || 0)); }],
+          ['roster-flex', (value) => { state.rosterSpots.FLEX = Math.max(0, Number(value || 0)); }],
+        ].forEach(([id, setter]) => {
+          document.getElementById(id).addEventListener('change', (event) => {
+            setter(event.target.value);
+            render();
+          });
+        });
+      }
 
-      function render() {{
-        const panel = recommendedPanels();
-        renderTurnMeta(panel);
-        renderList('fallback-list', panel.fallbacks, 'No fallback options are available.', 'fallback');
-        renderList('wait-list', panel.canWait, 'No wait candidates are available.', 'wait');
-        renderBoardActions();
-        renderBoardTable(panel.rows);
-        renderRosterPanel(panel);
-        renderSupport(panel);
-      }}
+      function safeLowerArray(values) {
+        return (values || []).map(safeLower);
+      }
 
-      function applyAction(action, playerName) {{
+      function applyAction(action, playerName) {
         const normalized = safeLower(playerName);
-        const row = decisionTable.find((entry) => safeLower(entry.player_name) === normalized);
-        if (!row) return;
-        if (action === 'taken') {{
-          if (!state.takenPlayers.has(normalized)) {{
-            state.takenPlayers.add(normalized);
-            state.history.push({{ type: 'taken', player_name: row.player_name }});
-          }}
-        }} else if (action === 'mine') {{
-          if (!state.yourPlayers.has(normalized)) {{
-            state.yourPlayers.add(normalized);
-            state.takenPlayers.add(normalized);
-            state.rosterCounts[row.position] = (state.rosterCounts[row.position] || 0) + 1;
-            state.history.push({{ type: 'mine', player_name: row.player_name, position: row.position }});
-          }}
-        }}
+        pushHistory();
+        if (action === 'queue') {
+          state.queuePlayers = state.queuePlayers.some((item) => safeLower(item) === normalized)
+            ? state.queuePlayers.filter((item) => safeLower(item) !== normalized)
+            : [...state.queuePlayers, playerName];
+        } else if (action === 'taken') {
+          const alreadyTaken = state.takenPlayers.some((item) => safeLower(item) === normalized);
+          state.takenPlayers = alreadyTaken
+            ? state.takenPlayers.filter((item) => safeLower(item) !== normalized)
+            : [...state.takenPlayers, playerName];
+          if (alreadyTaken) {
+            state.yourPlayers = state.yourPlayers.filter((item) => safeLower(item) !== normalized);
+          }
+        } else if (action === 'mine') {
+          const alreadyMine = state.yourPlayers.some((item) => safeLower(item) === normalized);
+          state.yourPlayers = alreadyMine
+            ? state.yourPlayers.filter((item) => safeLower(item) !== normalized)
+            : [...state.yourPlayers, playerName];
+          state.takenPlayers = alreadyMine
+            ? state.takenPlayers.filter((item) => safeLower(item) !== normalized)
+            : Array.from(new Set([...state.takenPlayers, playerName]));
+        }
+        state.selectedPlayer = playerName;
         render();
-      }}
+      }
 
-      function undoLast() {{
-        const last = state.history.pop();
-        if (!last) return;
-        const normalized = safeLower(last.player_name);
-        if (last.type === 'taken') {{
-          state.takenPlayers.delete(normalized);
-        }} else if (last.type === 'mine') {{
-          state.yourPlayers.delete(normalized);
-          state.takenPlayers.delete(normalized);
-          if (last.position && state.rosterCounts[last.position]) {{
-            state.rosterCounts[last.position] = Math.max(0, (state.rosterCounts[last.position] || 0) - 1);
-          }}
-        }}
+      function undoLast() {
+        const snapshot = state.history.pop();
+        if (!snapshot) {
+          return;
+        }
+        state.currentPickNumber = snapshot.currentPickNumber;
+        state.takenPlayers = snapshot.takenPlayers;
+        state.yourPlayers = snapshot.yourPlayers;
+        state.queuePlayers = snapshot.queuePlayers;
+        state.selectedPlayer = snapshot.selectedPlayer;
         render();
-      }}
-
-      function advancePick() {{
-        state.currentPickNumber = Math.max(1, state.currentPickNumber + 1);
-        render();
-      }}
-
-      document.getElementById('player-search').addEventListener('input', (event) => {{
-        state.search = event.target.value;
-        render();
-      }});
-      document.getElementById('undo-button').addEventListener('click', undoLast);
-      document.getElementById('advance-button').addEventListener('click', advancePick);
-
-      render();
-    }})();
+      }
+    })();
   </script>
 </body>
 </html>
 """
+    html = html.replace('__PAYLOAD_JSON__', payload_json).replace(
+        '__GENERATED_LABEL__', generated_label
+    )
 
     output_path.write_text(html, encoding='utf-8')
     return output_path
@@ -2770,6 +3941,7 @@ def build_draft_decision_artifacts(
     tier_cliffs = build_tier_cliffs(decision_table)
     roster_scenarios = build_roster_scenarios(decision_table, settings)
     source_freshness = _compute_freshness(normalize_player_frame(player_frame))
+    scoring_presets = _build_scoring_preset_bundle(player_frame, settings, context)
     backtest = (
         run_draft_backtest(season_history, settings)
         if season_history is not None and not season_history.empty
@@ -2784,6 +3956,7 @@ def build_draft_decision_artifacts(
         settings,
         backtest=backtest,
         context=context,
+        scoring_presets=scoring_presets,
     )
     metadata = {
         'generated_at': datetime.now().isoformat(timespec='seconds'),
@@ -2823,6 +3996,7 @@ def _stage_runtime_dashboard_shortcuts(
 
     from ffbayes.utils.path_constants import get_project_root, get_runtime_root
 
+    shortcuts: dict[str, Path] = {}
     try:
         runtime_root = get_runtime_root()
         dashboard_dir = runtime_root / 'dashboard'
@@ -2844,12 +4018,17 @@ def _stage_runtime_dashboard_shortcuts(
         if payload_path.exists() and payload_path.resolve() != year_payload.resolve():
             shutil.copy2(payload_path, year_payload)
 
-        shortcuts: dict[str, Path] = {
+        shortcuts.update(
+            {
             'runtime_dashboard_dir': dashboard_dir,
             'runtime_dashboard_index': index_path,
             'runtime_dashboard_payload': payload_target,
-        }
+            }
+        )
+    except OSError:
+        pass
 
+    try:
         project_root = get_project_root()
         repo_dashboard_dir = project_root / 'dashboard'
         repo_dashboard_dir.mkdir(parents=True, exist_ok=True)
@@ -2877,10 +4056,10 @@ def _stage_runtime_dashboard_shortcuts(
                 'repo_dashboard_payload': repo_payload,
             }
         )
-        return shortcuts
     except OSError:
-        # Convenience-only; do not fail the main artifact export.
-        return {}
+        pass
+
+    return shortcuts
 
 
 def save_draft_decision_artifacts(

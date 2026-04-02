@@ -275,6 +275,29 @@ def _build_current_snapshot_from_vor(vor_path: Path) -> pd.DataFrame:
                 else:
                     frame[column] = frame[history_column]
                 frame = frame.drop(columns=[history_column])
+
+    latest_unified_snapshot = _load_latest_unified_snapshot()
+    if latest_unified_snapshot is not None and not latest_unified_snapshot.empty:
+        scoring_columns = [
+            column
+            for column in ['FantPt', 'FantPtPPR', 'fantasy_points_ppr', 'REC']
+            if column in latest_unified_snapshot.columns
+        ]
+        if scoring_columns:
+            frame = frame.merge(
+                latest_unified_snapshot[['player_name', 'position', *scoring_columns]],
+                on=['player_name', 'position'],
+                how='left',
+                suffixes=('', '_latest'),
+            )
+            for column in scoring_columns:
+                latest_column = f'{column}_latest'
+                if latest_column in frame.columns:
+                    if column in frame.columns:
+                        frame[column] = frame[column].combine_first(frame[latest_column])
+                    else:
+                        frame[column] = frame[latest_column]
+                    frame = frame.drop(columns=[latest_column])
     return _collapse_latest_player_snapshot(frame)
 
 
@@ -289,6 +312,19 @@ def _load_history_features() -> pd.DataFrame | None:
     else:
         return None
     return _build_history_features(history)
+
+
+def _load_latest_unified_snapshot() -> pd.DataFrame | None:
+    """Load the latest one-row-per-player unified snapshot if available."""
+    csv_path = get_unified_dataset_csv_path()
+    json_path = get_unified_dataset_path()
+    if csv_path.exists():
+        snapshot = pd.read_csv(csv_path)
+    elif json_path.exists():
+        snapshot = pd.read_json(json_path)
+    else:
+        return None
+    return _collapse_latest_player_snapshot(snapshot)
 
 
 def _build_history_features(history_frame: pd.DataFrame) -> pd.DataFrame:

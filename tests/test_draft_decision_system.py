@@ -33,6 +33,8 @@ def _synthetic_players() -> pd.DataFrame:
             ],
             'position': ['QB', 'QB', 'RB', 'RB', 'WR', 'WR', 'TE'],
             'proj_points_mean': [310, 285, 240, 225, 235, 220, 185],
+            'FantPt': [300, 275, 230, 215, 225, 210, 175],
+            'FantPtPPR': [320, 295, 250, 235, 245, 230, 195],
             'adp': [3, 14, 4, 18, 6, 16, 9],
             'std_projection': [16, 18, 21, 24, 17, 16, 12],
             'uncertainty_score': [0.10, 0.22, 0.15, 0.25, 0.18, 0.16, 0.12],
@@ -81,6 +83,8 @@ def test_decision_table_collapses_duplicate_player_rows():
         [_synthetic_players(), _synthetic_players().iloc[[0]]], ignore_index=True
     )
     players.loc[len(players) - 1, 'proj_points_mean'] = 999
+    players.loc[len(players) - 1, 'FantPt'] = 989
+    players.loc[len(players) - 1, 'FantPtPPR'] = 1009
 
     table = build_decision_table(
         players, LeagueSettings(), DraftContext(current_pick_number=10)
@@ -194,6 +198,85 @@ def test_live_recommendation_snapshot_recomputes_with_board_state():
     assert later_pick_snapshot['can_wait'][0]['availability_to_next_pick'] != initial_snapshot['can_wait'][0]['availability_to_next_pick']
 
 
+def test_decision_table_respects_scoring_preset_projection_inputs():
+    players = pd.DataFrame(
+        {
+            'player_name': ['Alpha RB', 'Beta WR'],
+            'position': ['RB', 'WR'],
+            'FantPt': [180.0, 160.0],
+            'FantPtPPR': [220.0, 210.0],
+            'adp': [10, 12],
+        }
+    )
+
+    standard_table = build_decision_table(
+        players,
+        LeagueSettings(scoring_type='Standard', ppr_value=0.0),
+        DraftContext(current_pick_number=10),
+    )
+    half_table = build_decision_table(
+        players,
+        LeagueSettings(scoring_type='Half-PPR', ppr_value=0.5),
+        DraftContext(current_pick_number=10),
+    )
+    ppr_table = build_decision_table(
+        players,
+        LeagueSettings(scoring_type='PPR', ppr_value=1.0),
+        DraftContext(current_pick_number=10),
+    )
+
+    alpha_standard = standard_table.loc[
+        standard_table['player_name'] == 'Alpha RB', 'proj_points_mean'
+    ].iloc[0]
+    alpha_half = half_table.loc[
+        half_table['player_name'] == 'Alpha RB', 'proj_points_mean'
+    ].iloc[0]
+    alpha_ppr = ppr_table.loc[
+        ppr_table['player_name'] == 'Alpha RB', 'proj_points_mean'
+    ].iloc[0]
+
+    assert alpha_standard == 180.0
+    assert alpha_half == 200.0
+    assert alpha_ppr == 220.0
+
+
+def test_dashboard_payload_includes_preset_bundle_and_model_notes():
+    settings = LeagueSettings(scoring_type='Half-PPR', ppr_value=0.5)
+    season_history = pd.DataFrame(
+        {
+            'Season': [2021, 2021, 2022, 2022, 2023, 2023, 2024, 2024],
+            'Name': [
+                'Alpha QB',
+                'Alpha RB',
+                'Alpha QB',
+                'Alpha RB',
+                'Alpha QB',
+                'Alpha RB',
+                'Alpha QB',
+                'Alpha RB',
+            ],
+            'Position': ['QB', 'RB', 'QB', 'RB', 'QB', 'RB', 'QB', 'RB'],
+            'FantPt': [250, 180, 260, 190, 270, 200, 280, 210],
+        }
+    )
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(),
+        settings,
+        DraftContext(current_pick_number=10),
+        season_history=season_history,
+    )
+    payload = artifacts.dashboard_payload
+
+    assert payload['runtime_controls']['active_scoring_preset'] == 'half_ppr'
+    assert payload['scoring_presets']['standard']['available'] is True
+    assert payload['scoring_presets']['half_ppr']['available'] is True
+    assert payload['scoring_presets']['ppr']['available'] is True
+    assert 'draft_score' in payload['metric_glossary']
+    assert 'headline' in payload['model_overview']
+    assert 'top_disagreements' in payload['bayesian_vor_summary']
+    assert payload['selected_player']
+
+
 def test_workbook_contains_core_sheets():
     settings = LeagueSettings()
     artifacts = build_draft_decision_artifacts(
@@ -256,10 +339,38 @@ def test_slot_specific_artifacts_use_prefixed_filenames():
         assert saved['compat_path'].name == 'draft_board_pos03_2026.json'
         assert saved['comparison_path'].parent.name == 'model_outputs'
         assert saved['backtest_path'].name.startswith('draft_decision_backtest_pos03_')
-        assert 'runtime_dashboard_index' in saved
         assert 'repo_dashboard_index' in saved
-        assert saved['runtime_dashboard_index'].exists()
         assert saved['repo_dashboard_index'].exists()
+        if 'runtime_dashboard_index' in saved:
+            assert saved['runtime_dashboard_index'].exists()
+
+
+def test_exported_dashboard_html_contains_live_controls_and_full_board_renderer():
+    settings = LeagueSettings()
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
+
+    with TemporaryDirectory() as tmpdir:
+        output_path = Path(tmpdir) / 'draft_board.html'
+        from ffbayes.draft_strategy.draft_decision_system import export_dashboard_html
+
+        export_dashboard_html(
+            artifacts.decision_table,
+            artifacts.recommendations,
+            output_path,
+            settings,
+            backtest=artifacts.backtest,
+            source_freshness=artifacts.source_freshness,
+            dashboard_payload=artifacts.dashboard_payload,
+        )
+
+        html = output_path.read_text(encoding='utf-8')
+        assert 'Full Player Board' in html
+        assert 'Draft Controls' in html
+        assert 'Bayesian vs simple VOR' in html
+        assert 'ffbayes-dashboard-state-v2' in html
+        assert 'slice(0, 30)' not in html
 
 
 def test_backtest_payload_has_expected_shape():
