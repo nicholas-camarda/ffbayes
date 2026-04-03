@@ -1,18 +1,20 @@
-# FFBayes: Advanced Fantasy Football Analytics Pipeline
+# FFBayes: Fantasy Football Analytics Pipeline
 
-A sophisticated fantasy football analytics system that combines Monte Carlo simulations, Bayesian uncertainty modeling, and draft-utility decision modeling to generate draft-board recommendations for draft day.
+A fantasy football analytics system that combines Monte Carlo simulations, Bayesian uncertainty modeling, and draft-utility decision modeling to generate draft-board recommendations.
 
-## 🌐 **Live Dashboard**
+## Dashboard Paths
 
 ### [Open the live draft dashboard](https://nicholas-camarda.github.io/ffbayes/)
 
-- This is the actual user-facing draft helper.
+- This is the GitHub Pages view of the dashboard for repo browsers.
+- Local draft users should run `ffbayes draft-strategy` and open the generated `dashboard/index.html` shortcut instead.
+- The local dashboard shortcut is created by `ffbayes draft-strategy`; it will not exist in a fresh clone until that command runs.
 - Local runtime outputs live under `~/ProjectsRuntime/ffbayes/` by default.
 - If you need a different runtime root, set `FFBAYES_RUNTIME_ROOT` explicitly before running the CLI.
 
-## 🚀 **Quick Start**
+## Quick Start
 
-### **Step 1: Setup**
+### Step 1: Setup
 ```bash
 # Clone
 git clone https://github.com/nicholas-camarda/ffbayes.git
@@ -26,7 +28,7 @@ conda activate ffbayes
 pip install -e .
 ```
 
-### **Step 2: Configure Your League**
+### Step 2: Configure Your League
 Edit `config/user_config.json` to set your preferences:
 
 ```json
@@ -41,33 +43,15 @@ Edit `config/user_config.json` to set your preferences:
 }
 ```
 
-### **Step 3: Run the pipeline**
+### Step 3: Run the Draft Helper
 The unified CLI exposes the current commands through `ffbayes` and `ffbayes-cli`.
 
 ```bash
-# Data collection and preprocessing
-ffbayes collect --years 2021,2022,2023 --allow-stale-season
-ffbayes validate
-ffbayes preprocess
-
 # Draft-day workflow
-ffbayes pre-draft
 ffbayes draft-strategy --draft-position 10 --league-size 10 --risk-tolerance medium
-ffbayes draft-backtest
-ffbayes compare-strategies
-ffbayes bayesian-vor
-
-# Publish runtime outputs to the cloud mirror
-ffbayes publish --year 2025
-
-# Deploy the dashboard to GitHub Pages
-ffbayes publish-pages --year 2025
-
-# After committing/pushing `site/`, open the live dashboard
-# https://nicholas-camarda.github.io/ffbayes/
 ```
 
-### **Command Reference**
+### Command Reference
 - `ffbayes collect`: downloads raw season data and refreshes the runtime season datasets.
 - `ffbayes validate`: checks the collected data for completeness and freshness.
 - `ffbayes preprocess`: builds the analysis-ready combined dataset used by downstream models.
@@ -76,8 +60,6 @@ ffbayes publish-pages --year 2025
 - `ffbayes draft-backtest`: backtests draft decision strategies against historical season data.
 - `ffbayes compare-strategies`: compares draft strategy variants and summarizes how they differ.
 - `ffbayes bayesian-vor`: compares the Bayesian outputs with traditional VOR rankings.
-- `ffbayes publish`: copies selected runtime artifacts into the cloud mirror for long-term storage.
-- `ffbayes publish-pages`: stages the current dashboard HTML and payload into `site/` for GitHub Pages.
 - `ffbayes split`: runs the supported split pipeline directly if you want to bypass the convenience shortcuts.
 - `ffbayes pipeline`: runs the full end-to-end pipeline in one command.
 
@@ -89,81 +71,70 @@ The split pipeline runs collection in summary mode, so it shows the yearly colle
 
 Maintenance note: if nflverse changes the underlying Python loaders again, keep the adaptation logic inside `src/ffbayes/data_pipeline/nflverse_backend.py` so the rest of the pipeline stays pandas-first.
 
-**What You Get:**
-- 📊 **Draft Board Workbook**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
-- 🧠 **Dashboard Payload**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
-- 🌐 **HTML Dashboard**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
-- ⭐ **Convenience Dashboard Shortcut (repo root)**: `dashboard/index.html`
-- 🌍 **Live Dashboard**: [nicholas-camarda.github.io/ffbayes](https://nicholas-camarda.github.io/ffbayes/) serving the staged dashboard from `site/index.html`
-- 📋 **Decision Backtest**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
-If you want the published mirror, run:
-```bash
-ffbayes publish --year <year>
-```
+### Outputs
+- Draft board workbook: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
+- Dashboard payload: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
+- HTML dashboard: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
+- Convenience dashboard shortcut (repo root): `dashboard/index.html`
+- Convenience dashboard shortcut (runtime): `~/ProjectsRuntime/ffbayes/dashboard/index.html`
+- Live dashboard: [nicholas-camarda.github.io/ffbayes](https://nicholas-camarda.github.io/ffbayes/) serving the staged dashboard from `site/index.html`
+- Decision backtest: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
 
-If you want the dashboard hosted on GitHub Pages, run:
-```bash
-ffbayes publish-pages --year <year>
-```
+### Optional Publishing
+- `ffbayes publish --year <year>` copies selected runtime artifacts into the cloud mirror for long-term storage.
+- `ffbayes publish-pages --year <year>` stages the current dashboard HTML and payload into `site/` for GitHub Pages.
 
-## 🌐 Dashboard: GitHub Viewers vs. Local Users
-
-There are two convenient ways to use the dashboard, depending on whether you
-are just browsing the repo or you have it cloned.
+## Dashboard Paths
 
 ### GitHub Repo Viewers (No Clone)
 
 - Open the live dashboard here: [nicholas-camarda.github.io/ffbayes](https://nicholas-camarda.github.io/ffbayes/)
-- The intended experience is the repo's **GitHub Pages** site, which serves the
-  most recently staged `site/index.html`.
-- Pages only updates when someone runs `ffbayes publish-pages` and commits/pushes
-  the updated `site/` directory to `master` (the workflow deploys `./site`).
+- The intended experience is the repo's **GitHub Pages** site, which serves the most recently staged `site/index.html`.
+- Pages only updates when someone runs `ffbayes publish-pages` and commits/pushes the updated `site/` directory to `master` (the workflow deploys `./site`).
 
 ### Local Users (Repo Cloned)
 
-- Run `ffbayes draft-strategy ...` and then open the repo-root shortcut:
-  `dashboard/index.html`
-- (Also available) the shallow, stable runtime dashboard:
-  `~/ProjectsRuntime/ffbayes/dashboard/index.html`
-- If you prefer a repo-local stable path (useful for GitHub Pages or a bookmark inside the repo),
-  run `ffbayes publish-pages --year <year>` and then open `site/index.html`.
+- Run `ffbayes draft-strategy ...` and then open the repo-root shortcut: `dashboard/index.html`
+- Also available is the shallow, stable runtime dashboard: `~/ProjectsRuntime/ffbayes/dashboard/index.html`
+- The local dashboard shortcut is generated by `ffbayes draft-strategy`; it will not exist in a fresh clone until that command runs.
+- If you want the GitHub Pages version, stage it with `ffbayes publish-pages --year <year>` and then open `site/index.html`.
 
-### **Step 4: Use During Draft**
+### Step 4: Use During Draft
 - Open `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
-- Use `site/index.html` once it has been staged for GitHub Pages
+- Use `dashboard/index.html` or `~/ProjectsRuntime/ffbayes/dashboard/index.html` for the live draft helper
 - Follow the pick-by-pick recommendations in the workbook
 - Use backup options if primary targets are gone
 
-### **Step 5: After the Draft**
+### Step 5: After the Draft
 The supported CLI surface now stops at the pre-draft command center. Keep the runtime artifacts if you want a local audit trail, or mirror the supported pre-draft outputs with `ffbayes publish`.
 
 ---
 
-## 📊 **What Makes FFBayes Different**
+## Modeling Approach
 
-### **🎲 Hybrid Monte Carlo + Bayesian Model**
-- **Monte Carlo**: Uses 5 years of actual NFL performance data with 5000 simulations
-- **Bayesian**: Adds intelligent uncertainty modeling with confidence intervals
-- **Generalization**: Handles new/unknown players through pattern learning
-- **Data Integrity**: Robust name resolution with position-aware fuzzy matching
+### Hybrid Monte Carlo and Bayesian Model
+- Monte Carlo: uses 5 years of NFL performance data with 5000 simulations
+- Bayesian: adds uncertainty modeling with confidence intervals
+- Generalization: handles new or previously unseen players through pattern learning
+- Data integrity: uses position-aware fuzzy matching for name resolution
 
-### **🚀 Intelligent Generalization**
-Unlike traditional models that fail with new players, FFBayes can:
-- **Evaluate Rookies**: Project performance based on position patterns and team context
-- **Handle Limited Data**: Use intelligent sampling for players with few games
-- **Adapt to Changes**: Project veterans on new teams using historical patterns
-- **Quantify Uncertainty**: Always provide confidence bounds, even for unknown players
+### Generalization for New or Sparse Players
+Compared with models that depend heavily on historical player-level volume, FFBayes can:
+- Evaluate rookies using position patterns and team context
+- Handle limited data by sampling from comparable historical cases
+- Adapt to team changes using broader historical patterns
+- Quantify uncertainty even when direct player history is limited
 
-### **📈 VOR + Advanced Analytics**
-- **Traditional VOR**: Industry-standard value over replacement
-- **Enhanced Analysis**: Position scarcity, team construction, risk management
-- **Result**: Better draft decisions than rankings alone
+### VOR and Draft Utility
+- Traditional VOR: value over replacement as a baseline ranking method
+- Additional signals: position scarcity, team construction, and risk management
+- Result: draft recommendations that incorporate more than rank order alone
 
 ---
 
-## 📁 **Output Organization**
+## Output Organization
 
-### **Pre-Draft Outputs** (Use During Draft)
+### Pre-Draft Outputs
 Runtime working tree: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/`
 
 - `artifacts/vor_strategy/` - VOR rankings and draft guide outputs
@@ -174,7 +145,7 @@ Runtime working tree: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/`
 
 Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/pre_draft/` after `ffbayes publish`
 
-### **Visualizations** (Analysis & Strategy)
+### Visualizations
 Runtime plots: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/diagnostics/`
 
 - `pre_draft/` - Strategy comparison, draft-score diagnostics, freshness views, and slot sensitivity
@@ -184,9 +155,9 @@ Published preview images: `~/Library/CloudStorage/OneDrive-Personal/SideProjects
 
 ---
 
-## 🔧 **Configuration**
+## Configuration
 
-### **Main Configuration: `config/user_config.json`**
+### Main Configuration: `config/user_config.json`
 ```json
 {
   "league_settings": {
@@ -208,7 +179,7 @@ Published preview images: `~/Library/CloudStorage/OneDrive-Personal/SideProjects
 }
 ```
 
-### **Pipeline Configuration**
+### Pipeline Configuration
 - `config/pipeline_config.json` defines the full end-to-end pipeline.
 - `config/pipeline_pre_draft.json` drives the split runner.
 
@@ -225,15 +196,15 @@ The current pipeline steps are:
 
 ---
 
-## 📊 **Visualizations**
+## Draft Outputs
 
-### **Primary Draft Outputs**
-- **Draft Board Workbook** - `draft_board_<year>.xlsx` with board, by-position, my picks, tier cliffs, availability, targets by round, roster scenarios, player notes, diagnostics, freshness, and backtest summary
-- **Dashboard Payload** - `dashboard_payload_<year>.json` for the local interactive dashboard
-- **HTML Fallback** - `draft_board_<year>.html` for browser access without a notebook or app shell
-- **Decision Backtest** - `draft_decision_backtest_<year_range>.json` comparing draft strategies on the same targets
+### Primary Draft Outputs
+- Draft board workbook: `draft_board_<year>.xlsx` with board, by-position, my picks, tier cliffs, availability, targets by round, roster scenarios, player notes, diagnostics, freshness, and backtest summary
+- Dashboard payload: `dashboard_payload_<year>.json` for the local interactive dashboard
+- HTML fallback: `draft_board_<year>.html` for browser access without a notebook or app shell
+- Decision backtest: `draft_decision_backtest_<year_range>.json` comparing draft strategies on the same targets
 
-### **How the Draft Score Works**
+### How the Draft Score Works
 
 The main decision number is a weighted utility score, not just a projection rank:
 
@@ -263,32 +234,32 @@ Interpretation guide:
 - High `upside_score` with high `fragility_score` means "boom-bust upside."
 - High `why_flags` density means the player is unusual enough to inspect manually.
 
-### **Publication**
+### Publication
 - Runtime outputs stay local by default.
 - To mirror selected results into the cloud workspace, run `ffbayes publish --year <year>`.
 
 ---
 
-## 🎯 **Usage Examples**
+## Usage Examples
 
-### **Basic 10-Team League (Position 10)**
+### Basic 10-Team League (Position 10)
 ```bash
 ffbayes pre-draft
 ```
 
-### **12-Team League (Position 5, Full PPR)**
+### 12-Team League (Position 5, Full PPR)
 ```bash
 # Update config/user_config.json:
 # "league_size": 12, "draft_position": 5, "ppr_value": 1.0
 ffbayes pre-draft
 ```
 
-### **After-Draft Analysis**
+### After-Draft Analysis
 ```bash
 # The supported CLI surface stops at the pre-draft command center.
 ```
 
-### **Other Common Commands**
+### Other Common Commands
 ```bash
 ffbayes collect --years 2021,2022,2023 --allow-stale-season
 ffbayes preprocess
@@ -302,29 +273,26 @@ ffbayes publish-pages --year 2025
 
 ---
 
-## 🆘 **Troubleshooting**
+## Troubleshooting
 
-### **Common Issues**
+### Common Issues
 
-#### **"No players found in database"**
-- **Problem**: Player names don't match database format
-- **Solution**: Use full names (e.g., "Patrick Mahomes" not "P. Mahomes")
-- **Smart Resolution**: The pipeline includes enhanced name resolution for:
-  - Initials (e.g., "P. Mahomes" → "Patrick Mahomes")
-  - Suffixes (e.g., "Michael Pittman Jr." → "Michael Pittman")
-  - Position-aware fuzzy matching
+#### "No players found in database"
+- Problem: player names do not match the database format
+- Solution: use full names, for example `Patrick Mahomes` instead of `P. Mahomes`
+- Name resolution support includes initials, suffix normalization, and position-aware fuzzy matching
 
-#### **"Pipeline failed with errors"**
-- **Problem**: Critical step failed
-- **Solution**: Check logs in `~/ProjectsRuntime/ffbayes/logs/` for detailed error information
-- **Check**: Verify your draft-board inputs and league settings before rerunning the pre-draft command center
+#### "Pipeline failed with errors"
+- Problem: a critical step failed
+- Solution: check logs in `~/ProjectsRuntime/ffbayes/logs/` for detailed error information
+- Verify draft-board inputs and league settings before rerunning the pre-draft workflow
 
-#### **"Missing required columns"**
-- **Problem**: Team file has wrong column names
-- **Solution**: Use `Name`, `Position`, `Team` columns (or `POS`, `PLAYER`, `BYE` for legacy format)
-- **Default path**: `~/ProjectsRuntime/ffbayes/data/raw/my_ff_teams/drafted_team_<year>.tsv`
+#### "Missing required columns"
+- Problem: the team file has incorrect column names
+- Solution: use `Name`, `Position`, `Team` columns, or `POS`, `PLAYER`, `BYE` for the legacy format
+- Default path: `~/ProjectsRuntime/ffbayes/data/raw/my_ff_teams/drafted_team_<year>.tsv`
 
-### **Team File Format**
+### Team File Format
 Your team file should have these columns:
 ```tsv
 Name	Position	Team
@@ -333,7 +301,7 @@ James Cook	RB	BUF
 # ... your full team
 ```
 
-**Legacy format also supported:**
+Legacy format also supported:
 ```tsv
 POS	PLAYER	BYE
 QB	Patrick Mahomes	10
@@ -343,7 +311,7 @@ RB	James Cook	7
 
 ---
 
-## 📚 **Technical Documentation**
+## Technical Documentation
 
 For detailed technical information:
 - [Documentation Index](docs/README.md) - Navigation for the docs folder
@@ -352,17 +320,7 @@ For detailed technical information:
 
 ---
 
-## 🎉 **Success Stories**
-
-> "FFBayes gave me a complete draft strategy in minutes. The Excel output was perfect for draft day." - *10-team league winner*
-
-> "The uncertainty analysis helped me balance safe picks with high-upside players." - *12-team league finalist*
-
-> "Finally, a fantasy tool that doesn't require a PhD to use!" - *8-team league player*
-
----
-
-## 🤝 **Contributing**
+## Contributing
 
 We welcome contributions. Follow the repository guidance in [AGENTS.md](AGENTS.md) and keep changes aligned with the current CLI, path constants, and test coverage.
 
@@ -370,7 +328,7 @@ Before submitting changes, run `ruff check .`, `ruff format .`, and `conda run -
 
 ---
 
-## 📊 Visualizations
+## Visualizations
 
 The visualization layer produces the draft board HTML dashboard, workbook-backed audit tables, and the supporting validation plots.
 
@@ -385,10 +343,6 @@ The dashboard is designed to answer four draft-day questions quickly:
 - What position run risk should I care about?
 - Which strategy has been working best in the backtest?
 
-## 📄 **License**
+## License
 
 MIT License.
-
----
-
-**FFBayes**: Where Monte Carlo meets Bayesian intelligence for fantasy football dominance.

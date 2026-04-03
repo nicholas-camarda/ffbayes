@@ -39,9 +39,11 @@ dashboard/
 .ffbayes_runtime/
 .ffbayes_cloud/
 my_ff_teams
-.playwright-mcp/
 AGENTS.md
 
+# Playwright
+node_modules/
+.playwright-mcp/
 
 # Outputs
 *.tsv

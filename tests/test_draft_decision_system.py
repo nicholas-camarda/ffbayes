@@ -495,6 +495,63 @@ def test_exported_dashboard_html_contains_live_controls_and_full_board_renderer(
         assert 'slice(0, 30)' not in html
 
 
+def test_exported_dashboard_html_includes_reset_confirmation_and_state_helpers():
+    settings = LeagueSettings()
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
+
+    with TemporaryDirectory() as tmpdir:
+        output_path = Path(tmpdir) / 'draft_board.html'
+        from ffbayes.draft_strategy.draft_decision_system import export_dashboard_html
+
+        export_dashboard_html(
+            artifacts.decision_table,
+            artifacts.recommendations,
+            output_path,
+            settings,
+            backtest=artifacts.backtest,
+            source_freshness=artifacts.source_freshness,
+            dashboard_payload=artifacts.dashboard_payload,
+        )
+
+        html = output_path.read_text(encoding='utf-8')
+        assert 'function clearDraftProgressState()' in html
+        assert 'window.confirm(' in html
+        assert (
+            'Clear taken players, your roster, queue, and undo history while keeping your current league settings and current pick?'
+            in html
+        )
+        assert 'function isInspectableStatus(status)' in html
+        assert 'pickNow[0] || availableRows[0] || rows[0] || null' in html
+
+
+def test_exported_dashboard_html_includes_flex_need_adjustment_logic():
+    settings = LeagueSettings()
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
+
+    with TemporaryDirectory() as tmpdir:
+        output_path = Path(tmpdir) / 'draft_board.html'
+        from ffbayes.draft_strategy.draft_decision_system import export_dashboard_html
+
+        export_dashboard_html(
+            artifacts.decision_table,
+            artifacts.recommendations,
+            output_path,
+            settings,
+            backtest=artifacts.backtest,
+            source_freshness=artifacts.source_freshness,
+            dashboard_payload=artifacts.dashboard_payload,
+        )
+
+        html = output_path.read_text(encoding='utf-8')
+        assert 'const flexEligibleExtras = [\'RB\', \'WR\', \'TE\']' in html
+        assert 'function offensiveNeedByPosition(need, position)' in html
+        assert 'acc[position] = offensiveNeedByPosition(need, position);' in html
+
+
 def test_backtest_payload_has_expected_shape():
     season_history = pd.DataFrame(
         {

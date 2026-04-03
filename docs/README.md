@@ -74,8 +74,9 @@ docs/
 
 1. **Read the [Main README](../README.md)** for complete setup instructions
 2. **Check [Output Examples](OUTPUT_EXAMPLES.md)** to see what you'll get
-3. **Run the pipeline**: `ffbayes pre-draft`
-4. **Use the outputs** during your draft and throughout the season
+3. **Run the draft helper**: `ffbayes draft-strategy`
+4. **Open the generated dashboard** at `dashboard/index.html` or `~/ProjectsRuntime/ffbayes/dashboard/index.html`
+5. **Use `site/index.html` only after `ffbayes publish-pages --year <year>`** if you want the GitHub Pages staging path
 
 ---
 
@@ -85,6 +86,6 @@ docs/
 - **Technical Questions**: See the Technical Deep Dive documentation
 - **Development**: Review the Development Setup and Contributing guides
 - **Bugs**: Check the logs in `~/ProjectsRuntime/ffbayes/logs/`
-- **Publishing**: Run `ffbayes publish --year <year>` for the cloud mirror, or `ffbayes publish-pages --year <year>` for GitHub Pages
+- **Publishing**: Run `ffbayes publish --year <year>` for the cloud mirror, or `ffbayes publish-pages --year <year>` for GitHub Pages staging
 
 ---

@@ -3635,6 +3635,31 @@ def export_dashboard_html(
         }
       }
 
+      function snapshotControlState() {
+        return {
+          currentPickNumber: Math.max(1, Number(state.currentPickNumber) || 1),
+          draftPosition: Math.max(1, Number(state.draftPosition) || 1),
+          leagueSize: Math.max(2, Number(state.leagueSize) || 2),
+          scoringPreset: state.scoringPreset,
+          riskTolerance: state.riskTolerance,
+          benchSlots: Math.max(0, Number(state.benchSlots) || 0),
+          rosterSpots: { ...(state.rosterSpots || {}) },
+        };
+      }
+
+      function clearDraftProgressState() {
+        const controlState = snapshotControlState();
+        Object.assign(state, clone(defaultState), controlState, {
+          rosterSpots: { ...controlState.rosterSpots },
+          takenPlayers: [],
+          yourPlayers: [],
+          queuePlayers: [],
+          history: [],
+          search: '',
+          selectedPlayer: '',
+        });
+      }
+
       function nextPickNumber(currentPickNumber, draftPosition, leagueSize) {
         const current = Math.max(1, Number(currentPickNumber) || 1);
         const draft = Math.max(1, Number(draftPosition) || 1);
@@ -3712,10 +3737,29 @@ def export_dashboard_html(
       }
 
       function rosterNeed(counts) {
-        return POSITION_KEYS.reduce((need, position) => {
-          need[position] = Math.max(0, Number(state.rosterSpots[position] || 0) - Number(counts[position] || 0));
-          return need;
+        const need = POSITION_KEYS.reduce((acc, position) => {
+          acc[position] = Math.max(0, Number(state.rosterSpots[position] || 0) - Number(counts[position] || 0));
+          return acc;
         }, {});
+        const flexEligibleExtras = ['RB', 'WR', 'TE'].reduce((sum, position) => {
+          const baseSlots = Number(state.rosterSpots[position] || 0);
+          const filled = Number(counts[position] || 0);
+          return sum + Math.max(0, filled - baseSlots);
+        }, 0);
+        need.FLEX = Math.max(0, Number(state.rosterSpots.FLEX || 0) - flexEligibleExtras);
+        return need;
+      }
+
+      function offensiveNeedByPosition(need, position) {
+        const baseNeed = Number(need[position] || 0);
+        if (position === 'RB' || position === 'WR' || position === 'TE') {
+          return baseNeed + (Number(need.FLEX || 0) * Number(FLEX_WEIGHTS[position] || 0));
+        }
+        return baseNeed;
+      }
+
+      function isInspectableStatus(status) {
+        return status === 'available' || status === 'queued';
       }
 
       function startersByPosition() {
@@ -3811,6 +3855,10 @@ def export_dashboard_html(
         const lateSpecialistsOk = specialistWindowOpen();
         const counts = rosterCounts(rows);
         const need = rosterNeed(counts);
+        const effectiveNeed = OFFENSIVE_POSITIONS.reduce((acc, position) => {
+          acc[position] = offensiveNeedByPosition(need, position);
+          return acc;
+        }, {});
         const totalRounds = Object.values(state.rosterSpots || {}).reduce((sum, value) => sum + (Number(value) || 0), 0) + (Number(state.benchSlots) || 0);
         const remainingRounds = Math.max(1, totalRounds - roundNumber + 1);
         const openSpecialists = ['DST', 'K'].filter((position) => Number(need[position] || 0) > 0);
@@ -3830,8 +3878,8 @@ def export_dashboard_html(
           };
         });
 
-        const totalNeed = OFFENSIVE_POSITIONS.reduce((sum, position) => sum + (need[position] || 0), 0) || 1;
-        const openOffensiveSlots = OFFENSIVE_POSITIONS.reduce((sum, position) => sum + (need[position] || 0), 0);
+        const totalNeed = OFFENSIVE_POSITIONS.reduce((sum, position) => sum + (effectiveNeed[position] || 0), 0) || 1;
+        const openOffensiveSlots = OFFENSIVE_POSITIONS.reduce((sum, position) => sum + (effectiveNeed[position] || 0), 0);
         const projectionValues = [];
         const starterValues = [];
         const replacementValues = [];
@@ -3852,7 +3900,7 @@ def export_dashboard_html(
           row.replacement_delta = Number(row.proj_points_mean || 0) - baseline.replacement;
           row.simple_vor_proxy = row.replacement_delta;
           row.position_scarcity = baseline.scarcity;
-          row.starter_need = OFFENSIVE_POSITIONS.includes(row.position) ? ((need[row.position] || 0) / totalNeed) : 0;
+          row.starter_need = OFFENSIVE_POSITIONS.includes(row.position) ? ((effectiveNeed[row.position] || 0) / totalNeed) : 0;
           row.status = getStatus(row, takenSet, yoursSet, queueSet);
           if (row.status === 'available' || row.status === 'queued') {
             availableCounts[row.position] = (availableCounts[row.position] || 0) + 1;
@@ -3913,7 +3961,7 @@ def export_dashboard_html(
         const bestOffensiveValue = availableRows.filter((row) => OFFENSIVE_POSITIONS.includes(row.position)).reduce((best, row) => Math.max(best, Number(row.draft_score) || 0), Number.NEGATIVE_INFINITY);
         const lineupGainValues = [];
         availableRows.forEach((row) => {
-          const posNeed = need[row.position] || 0;
+          const posNeed = effectiveNeed[row.position] || 0;
           const demand = OFFENSIVE_POSITIONS.includes(row.position)
             ? Math.max(1, Number(state.leagueSize || 1) * Math.max(1, posNeed))
             : Math.max(1, Number(state.leagueSize || 1));
@@ -3971,10 +4019,15 @@ def export_dashboard_html(
         const fallbacks = (recommendedNow.length ? recommendedNow : [...availableRows].sort((a, b) => (Number(b.current_pick_utility) - Number(a.current_pick_utility)) || (Number(b.draft_score) - Number(a.draft_score)))).slice(1, 6);
         const canWait = (recommendedWait.length ? recommendedWait : [...availableRows].sort((a, b) => (Number(b.availability_to_next_pick) - Number(a.availability_to_next_pick)) || (Number(b.draft_score) - Number(a.draft_score)))).filter((row) => !pickNow.some((candidate) => safeLower(candidate.player_name) === safeLower(row.player_name))).slice(0, 5);
 
-        const selectedKey = safeLower(state.selectedPlayer || (pickNow[0] && pickNow[0].player_name) || '');
-        const selectedRow = rows.find((row) => safeLower(row.player_name) === selectedKey) || pickNow[0] || rows[0] || null;
+        const selectedKey = safeLower(state.selectedPlayer);
+        const selectedCandidate = rows.find((row) => safeLower(row.player_name) === selectedKey) || null;
+        const selectedRow = (
+          selectedCandidate && isInspectableStatus(selectedCandidate.status)
+        ) ? selectedCandidate : (pickNow[0] || availableRows[0] || rows[0] || null);
         if (selectedRow) {
           state.selectedPlayer = selectedRow.player_name;
+        } else {
+          state.selectedPlayer = '';
         }
 
         return {
@@ -4417,8 +4470,13 @@ def export_dashboard_html(
         });
         document.getElementById('undo-button').addEventListener('click', undoLast);
         document.getElementById('reset-button').addEventListener('click', () => {
-          window.localStorage.removeItem(STORAGE_KEY);
-          Object.assign(state, clone(defaultState));
+          const confirmed = window.confirm(
+            'Clear taken players, your roster, queue, and undo history while keeping your current league settings and current pick?'
+          );
+          if (!confirmed) {
+            return;
+          }
+          clearDraftProgressState();
           render();
         });
         [
@@ -4482,7 +4540,6 @@ def export_dashboard_html(
         if (shouldAdvancePick) {
           state.currentPickNumber = Math.max(1, Number(state.currentPickNumber || 1) + 1);
         }
-        state.selectedPlayer = playerName;
         render();
       }
 
