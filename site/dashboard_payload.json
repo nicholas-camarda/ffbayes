@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-03T15:41:55",
+  "generated_at": "2026-04-04T18:35:49",
   "league_settings": {
     "league_size": 10,
     "draft_position": 10,
@@ -110440,7 +110440,7 @@
     {
       "source_name": "snake-draft_ppr-0.5_vor_top-120_2026.csv",
       "source_updated_at": "2026-04-02 18:17:19.493081093",
-      "freshness_days": 0,
+      "freshness_days": 2,
       "row_count": 522,
       "missing_rate": 0.7241379310344828
     }

@@ -2963,6 +2963,10 @@ def export_dashboard_html(
       background: rgba(255, 255, 255, 0.10);
       border-color: rgba(56, 189, 248, 0.40);
     }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
     input[type="checkbox"] {
       accent-color: var(--accent);
     }
@@ -3015,6 +3019,15 @@ def export_dashboard_html(
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
+    }
+    .toolbar-stack {
+      display: grid;
+      gap: 8px;
+      justify-items: end;
+    }
+    .toolbar-note {
+      max-width: 340px;
+      text-align: right;
     }
     .pill {
       display: inline-flex;
@@ -3354,9 +3367,13 @@ def export_dashboard_html(
           </div>
           <p class="subtitle">Operate the draft from this board: update league shape, scoring preset, current pick, queue, taken players, and your roster without leaving the dashboard.</p>
         </div>
-        <div class="toolbar-row">
-          <button type="button" id="undo-button">Undo</button>
-          <button type="button" id="reset-button">Reset draft state</button>
+        <div class="toolbar-stack">
+          <div class="toolbar-row">
+            <button type="button" id="undo-button">Undo</button>
+            <button type="button" id="redo-button">Redo</button>
+            <button type="button" id="finalize-button">Finalize Draft</button>
+          </div>
+          <div class="tiny toolbar-note" id="finalize-note"></div>
         </div>
       </div>
       <div class="pill-row" id="status-pills"></div>
@@ -3564,6 +3581,7 @@ def export_dashboard_html(
       const CONSERVATIVE_WAIT_SURVIVAL_THRESHOLD = 0.74;
       const CONSERVATIVE_WAIT_LINEUP_LOSS_THRESHOLD = 0.28;
       const SECONDARY_QB_TE_VALUE_EDGE = 0.45;
+      const FINALIZED_SCHEMA_VERSION = 'finalized_draft_v1';
       const scoringPresets = data.scoring_presets || {};
       const presetEntries = Object.values(scoringPresets);
       const availablePreset = presetEntries.find((entry) => entry && entry.available);
@@ -3582,6 +3600,8 @@ def export_dashboard_html(
         yourPlayers: ((data.current_draft_context_defaults && data.current_draft_context_defaults.your_players) || []).slice(),
         queuePlayers: [],
         history: [],
+        redoHistory: [],
+        pickLog: [],
         search: '',
         selectedPlayer: data.selected_player || '',
       };
@@ -3598,6 +3618,82 @@ def export_dashboard_html(
         return JSON.parse(JSON.stringify(value));
       }
 
+      function escapeHtml(value) {
+        return (value ?? '').toString()
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function serializeForHtml(value) {
+        return JSON.stringify(value).replace(/</g, '\\u003c');
+      }
+
+      function formatSignedNumber(value) {
+        const numeric = Number(value || 0);
+        return `${numeric > 0 ? '+' : ''}${formatNumber(numeric)}`;
+      }
+
+      function downloadTextFile(filename, text, mimeType) {
+        const blob = new Blob([text], { type: mimeType });
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = filename;
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
+      }
+
+      function isLocalFinalizeSupported() {
+        return window.location.protocol === 'file:';
+      }
+
+      function rosterCapacity() {
+        return Object.values(state.rosterSpots || {}).reduce((sum, value) => sum + (Number(value) || 0), 0) + (Number(state.benchSlots) || 0);
+      }
+
+      function draftYearLabel() {
+        return String((data.generated_at || '').slice(0, 4) || new Date().getFullYear());
+      }
+
+      function timestampLabel() {
+        return new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '_');
+      }
+
+      function summarizeValueIndicator(row) {
+        const draftRank = Number(row.draft_rank || 0);
+        const marketRank = Number(row.market_rank || row.adp || 0);
+        if (!Number.isFinite(draftRank) || !Number.isFinite(marketRank) || !draftRank || !marketRank) {
+          return 'Fair';
+        }
+        const edge = marketRank - draftRank;
+        if (edge >= 12) {
+          return 'Value';
+        }
+        if (edge <= -12) {
+          return 'Reach';
+        }
+        return 'Fair';
+      }
+
+      function summarizeRiskStyle(avgFragility, avgUpside) {
+        if (avgFragility >= 0.55 && avgUpside >= 0.65) {
+          return 'Ceiling-heavy and fragile';
+        }
+        if (avgFragility >= 0.55) {
+          return 'Fragile';
+        }
+        if (avgUpside >= 0.65) {
+          return 'Ceiling-heavy';
+        }
+        return 'Balanced';
+      }
+
       function loadState() {
         try {
           const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || 'null');
@@ -3612,6 +3708,8 @@ def export_dashboard_html(
             yourPlayers: Array.isArray(parsed.yourPlayers) ? parsed.yourPlayers : clone(defaultState).yourPlayers,
             queuePlayers: Array.isArray(parsed.queuePlayers) ? parsed.queuePlayers : [],
             history: Array.isArray(parsed.history) ? parsed.history : [],
+            redoHistory: Array.isArray(parsed.redoHistory) ? parsed.redoHistory : [],
+            pickLog: Array.isArray(parsed.pickLog) ? parsed.pickLog : [],
           };
         } catch (_) {
           return clone(defaultState);
@@ -3622,42 +3720,39 @@ def export_dashboard_html(
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       }
 
-      function pushHistory() {
-        state.history.push({
+      function captureDraftSnapshot() {
+        return {
           currentPickNumber: state.currentPickNumber,
           takenPlayers: state.takenPlayers.slice(),
           yourPlayers: state.yourPlayers.slice(),
           queuePlayers: state.queuePlayers.slice(),
+          pickLog: state.pickLog.slice(),
           selectedPlayer: state.selectedPlayer,
-        });
-        if (state.history.length > 60) {
-          state.history.shift();
-        }
-      }
-
-      function snapshotControlState() {
-        return {
-          currentPickNumber: Math.max(1, Number(state.currentPickNumber) || 1),
-          draftPosition: Math.max(1, Number(state.draftPosition) || 1),
-          leagueSize: Math.max(2, Number(state.leagueSize) || 2),
-          scoringPreset: state.scoringPreset,
-          riskTolerance: state.riskTolerance,
-          benchSlots: Math.max(0, Number(state.benchSlots) || 0),
-          rosterSpots: { ...(state.rosterSpots || {}) },
         };
       }
 
-      function clearDraftProgressState() {
-        const controlState = snapshotControlState();
-        Object.assign(state, clone(defaultState), controlState, {
-          rosterSpots: { ...controlState.rosterSpots },
-          takenPlayers: [],
-          yourPlayers: [],
-          queuePlayers: [],
-          history: [],
-          search: '',
-          selectedPlayer: '',
-        });
+      function pushSnapshot(stack, snapshot) {
+        stack.push(snapshot);
+        if (stack.length > 60) {
+          stack.shift();
+        }
+      }
+
+      function pushHistory() {
+        pushSnapshot(state.history, captureDraftSnapshot());
+        state.redoHistory = [];
+      }
+
+      function restoreDraftSnapshot(snapshot) {
+        if (!snapshot) {
+          return;
+        }
+        state.currentPickNumber = snapshot.currentPickNumber;
+        state.takenPlayers = snapshot.takenPlayers;
+        state.yourPlayers = snapshot.yourPlayers;
+        state.queuePlayers = snapshot.queuePlayers;
+        state.pickLog = snapshot.pickLog || [];
+        state.selectedPlayer = snapshot.selectedPlayer;
       }
 
       function nextPickNumber(currentPickNumber, draftPosition, leagueSize) {
@@ -4105,6 +4200,8 @@ def export_dashboard_html(
 
       function renderTopbar(boardState) {
         const presetEntry = boardState.presetEntry;
+        const finalizeButton = document.getElementById('finalize-button');
+        const finalizeNote = document.getElementById('finalize-note');
         document.getElementById('storage-pill').textContent = 'Saved locally';
         document.getElementById('status-pills').innerHTML = [
           ['Current pick', state.currentPickNumber],
@@ -4115,6 +4212,12 @@ def export_dashboard_html(
           ['Taken', state.takenPlayers.length],
           ['Yours', state.yourPlayers.length],
         ].map(([label, value]) => `<span class="pill">${label}: ${value}</span>`).join('');
+        document.getElementById('undo-button').disabled = !state.history.length;
+        document.getElementById('redo-button').disabled = !state.redoHistory.length;
+        finalizeButton.hidden = !isLocalFinalizeSupported();
+        finalizeNote.textContent = isLocalFinalizeSupported()
+          ? 'Finalize downloads a locked HTML snapshot, JSON export, and post-draft summary from this local dashboard.'
+          : 'Finalize downloads are only supported from the local generated dashboard opened as a file.';
       }
 
       function renderRecommendations(boardState) {
@@ -4463,21 +4566,390 @@ def export_dashboard_html(
         `).join('') || '<tr><td colspan="3" class="empty">No backtest rows available.</td></tr>';
       }
 
+      function getDraftedRows(boardState) {
+        const draftedSet = new Set((state.yourPlayers || []).map(safeLower));
+        return boardState.rows
+          .filter((row) => draftedSet.has(safeLower(row.player_name)))
+          .map((row) => ({ ...row }));
+      }
+
+      function isRosterComplete(boardState) {
+        const draftedRows = getDraftedRows(boardState);
+        const openNeed = Object.values(boardState.rosterNeed || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+        return draftedRows.length >= rosterCapacity() && openNeed === 0;
+      }
+
+      function sortRowsForLineup(rows) {
+        return [...rows].sort((a, b) => (
+          (Number(b.proj_points_mean || 0) - Number(a.proj_points_mean || 0))
+          || (Number(b.draft_score || 0) - Number(a.draft_score || 0))
+        ));
+      }
+
+      function buildStarterBenchSplit(draftedRows) {
+        const used = new Set();
+        const starters = [];
+        const addSlot = (position, slotCount, labelPrefix) => {
+          const pool = sortRowsForLineup(
+            draftedRows.filter((row) => row.position === position && !used.has(safeLower(row.player_name)))
+          );
+          for (let index = 0; index < Math.max(0, slotCount); index += 1) {
+            const row = pool[index];
+            if (!row) {
+              break;
+            }
+            used.add(safeLower(row.player_name));
+            starters.push({ ...row, lineup_slot: `${labelPrefix}${index + 1}` });
+          }
+        };
+
+        addSlot('QB', Number(state.rosterSpots.QB || 0), 'QB');
+        addSlot('RB', Number(state.rosterSpots.RB || 0), 'RB');
+        addSlot('WR', Number(state.rosterSpots.WR || 0), 'WR');
+        addSlot('TE', Number(state.rosterSpots.TE || 0), 'TE');
+        addSlot('DST', Number(state.rosterSpots.DST || 0), 'DST');
+        addSlot('K', Number(state.rosterSpots.K || 0), 'K');
+
+        const flexPool = sortRowsForLineup(
+          draftedRows.filter((row) => ['RB', 'WR', 'TE'].includes(row.position) && !used.has(safeLower(row.player_name)))
+        );
+        for (let index = 0; index < Math.max(0, Number(state.rosterSpots.FLEX || 0)); index += 1) {
+          const row = flexPool[index];
+          if (!row) {
+            break;
+          }
+          used.add(safeLower(row.player_name));
+          starters.push({ ...row, lineup_slot: `FLEX${index + 1}` });
+        }
+
+        const bench = sortRowsForLineup(
+          draftedRows.filter((row) => !used.has(safeLower(row.player_name)))
+        ).map((row, index) => ({ ...row, lineup_slot: `BENCH${index + 1}` }));
+
+        return { starters, bench };
+      }
+
+      function sumMetric(rows, key) {
+        return rows.reduce((sum, row) => sum + Number(row[key] || 0), 0);
+      }
+
+      function buildFinalizedDraftPayload(boardState) {
+        const draftedRows = getDraftedRows(boardState);
+        const split = buildStarterBenchSplit(draftedRows);
+        const starterFragility = split.starters.length
+          ? split.starters.reduce((sum, row) => sum + Number(row.fragility_score || 0), 0) / split.starters.length
+          : 0;
+        const fullFragility = draftedRows.length
+          ? draftedRows.reduce((sum, row) => sum + Number(row.fragility_score || 0), 0) / draftedRows.length
+          : 0;
+        const starterUpside = split.starters.length
+          ? split.starters.reduce((sum, row) => sum + Number(row.upside_score || 0), 0) / split.starters.length
+          : 0;
+        const fullUpside = draftedRows.length
+          ? draftedRows.reduce((sum, row) => sum + Number(row.upside_score || 0), 0) / draftedRows.length
+          : 0;
+        const capacity = rosterCapacity();
+        const rosterComplete = isRosterComplete(boardState);
+        const projectedStarterMean = sumMetric(split.starters, 'proj_points_mean');
+        const projectedStarterFloor = sumMetric(split.starters, 'proj_points_floor');
+        const projectedStarterCeiling = sumMetric(split.starters, 'proj_points_ceiling');
+        const benchProjection = sumMetric(split.bench, 'proj_points_mean');
+        const draftedPlayerRows = draftedRows.map((row) => ({
+          player_name: row.player_name,
+          position: row.position,
+          team: row.team || '',
+          adp: row.adp,
+          market_rank: row.market_rank,
+          draft_rank: row.draft_rank,
+          draft_score: row.draft_score,
+          simple_vor_proxy: row.simple_vor_proxy,
+          fragility_score: row.fragility_score,
+          upside_score: row.upside_score,
+          proj_points_mean: row.proj_points_mean,
+          proj_points_floor: row.proj_points_floor,
+          proj_points_ceiling: row.proj_points_ceiling,
+          lineup_slot: [...split.starters, ...split.bench].find((item) => safeLower(item.player_name) === safeLower(row.player_name))?.lineup_slot || '',
+          value_indicator: summarizeValueIndicator(row),
+        }));
+        const followedCount = (state.pickLog || []).filter((entry) => entry.followed_model).length;
+        const latestPickedPlayer = state.pickLog.length
+          ? draftedPlayerRows.find((row) => safeLower(row.player_name) === safeLower(state.pickLog[state.pickLog.length - 1].player_name))
+          : null;
+        return {
+          schema_version: FINALIZED_SCHEMA_VERSION,
+          exported_at: new Date().toISOString(),
+          source_payload_generated_at: data.generated_at || '',
+          title: 'FFBayes Finalized Draft Snapshot',
+          league_settings: {
+            league_size: state.leagueSize,
+            draft_position: state.draftPosition,
+            scoring_preset: state.scoringPreset,
+            risk_tolerance: state.riskTolerance,
+            bench_slots: state.benchSlots,
+            roster_spots: { ...(state.rosterSpots || {}) },
+          },
+          final_state: {
+            current_pick_number: state.currentPickNumber,
+            next_pick_number: boardState.nextPick,
+            taken_players: state.takenPlayers.slice(),
+            your_players: state.yourPlayers.slice(),
+            queue_players: state.queuePlayers.slice(),
+            roster_capacity: capacity,
+            drafted_player_count: draftedRows.length,
+            roster_complete: rosterComplete,
+          },
+          drafted_players: draftedPlayerRows,
+          starters: split.starters.map((row) => ({ player_name: row.player_name, position: row.position, lineup_slot: row.lineup_slot, proj_points_mean: row.proj_points_mean })),
+          bench: split.bench.map((row) => ({ player_name: row.player_name, position: row.position, lineup_slot: row.lineup_slot, proj_points_mean: row.proj_points_mean })),
+          summary_metrics: {
+            starter_lineup_mean: projectedStarterMean,
+            starter_lineup_floor: projectedStarterFloor,
+            starter_lineup_ceiling: projectedStarterCeiling,
+            bench_depth_mean: benchProjection,
+            starter_fragility_avg: starterFragility,
+            full_roster_fragility_avg: fullFragility,
+            starter_upside_avg: starterUpside,
+            full_roster_upside_avg: fullUpside,
+            risk_style: summarizeRiskStyle(starterFragility, starterUpside),
+            model_follow_count: followedCount,
+            model_pivot_count: Math.max(0, (state.pickLog || []).length - followedCount),
+          },
+          value_recap: draftedPlayerRows.map((row) => ({
+            player_name: row.player_name,
+            position: row.position,
+            adp: row.adp,
+            market_rank: row.market_rank,
+            draft_rank: row.draft_rank,
+            draft_score: row.draft_score,
+            value_indicator: row.value_indicator,
+          })),
+          pick_receipts: (state.pickLog || []).slice(),
+          selected_player: latestPickedPlayer || draftedPlayerRows[0] || null,
+        };
+      }
+
+      function tableRowsHtml(rows, columns) {
+        return rows.length
+          ? rows.map((row) => `
+            <tr>${columns.map((column) => `<td>${escapeHtml(row[column.key] ?? '')}</td>`).join('')}</tr>
+          `).join('')
+          : `<tr><td colspan="${columns.length}" class="empty">No rows available.</td></tr>`;
+      }
+
+      function buildFinalizedSnapshotHtml(payload) {
+        const draftedRows = payload.drafted_players || [];
+        const starters = payload.starters || [];
+        const bench = payload.bench || [];
+        const selectedPlayer = payload.selected_player || draftedRows[0] || null;
+        const metrics = payload.summary_metrics || {};
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FFBayes Finalized Draft Snapshot</title>
+  <style>
+    :root { color-scheme: dark; --bg:#08111e; --panel:#0f172a; --border:rgba(148,163,184,0.18); --text:#f8fafc; --muted:#94a3b8; --accent:#38bdf8; --good:#34d399; --warn:#f59e0b; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:linear-gradient(180deg,#030712 0%,#0b1324 100%); color:var(--text); font-family:Inter,ui-sans-serif,system-ui,sans-serif; padding:20px; }
+    .shell { max-width:1480px; margin:0 auto; display:grid; gap:16px; }
+    .panel { background:rgba(15,23,42,0.92); border:1px solid var(--border); border-radius:20px; padding:18px; }
+    .layout { display:grid; grid-template-columns:1.1fr 0.9fr; gap:16px; }
+    .pill { display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; border:1px solid rgba(56,189,248,0.24); background:rgba(56,189,248,0.14); color:#d7f5ff; font-size:12px; margin-right:8px; margin-bottom:8px; }
+    .metric-grid { display:grid; gap:10px; grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .metric { background:rgba(255,255,255,0.04); border:1px solid rgba(148,163,184,0.12); border-radius:14px; padding:10px 12px; }
+    .label { display:block; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px; }
+    .value { display:block; font-size:16px; font-weight:600; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { text-align:left; padding:10px; border-bottom:1px solid rgba(148,163,184,0.12); vertical-align:top; }
+    th { color:#9bdcff; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; }
+    .summary-box { padding:12px; border-radius:14px; background:rgba(255,255,255,0.04); border:1px solid rgba(148,163,184,0.12); line-height:1.5; }
+    .roster-grid { display:grid; gap:12px; grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .empty { color:var(--muted); }
+    @media (max-width: 980px) { .layout, .metric-grid, .roster-grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="panel">
+      <div class="pill">Read-only snapshot</div>
+      <div class="pill">Schema ${escapeHtml(payload.schema_version || '')}</div>
+      <div class="pill">League ${escapeHtml(payload.league_settings?.league_size || '')}-team</div>
+      <h1 style="margin:8px 0 6px 0;">FFBayes Finalized Draft Snapshot</h1>
+      <p style="color:#94a3b8; margin:0;">Saved from the local live draft dashboard. This snapshot is locked and contains no draft controls.</p>
+    </section>
+    <section class="panel">
+      <div class="metric-grid">
+        <div class="metric"><span class="label">Starter lineup mean</span><span class="value">${escapeHtml(formatNumber(metrics.starter_lineup_mean || 0))}</span></div>
+        <div class="metric"><span class="label">Starter lineup floor</span><span class="value">${escapeHtml(formatNumber(metrics.starter_lineup_floor || 0))}</span></div>
+        <div class="metric"><span class="label">Starter lineup ceiling</span><span class="value">${escapeHtml(formatNumber(metrics.starter_lineup_ceiling || 0))}</span></div>
+        <div class="metric"><span class="label">Bench depth mean</span><span class="value">${escapeHtml(formatNumber(metrics.bench_depth_mean || 0))}</span></div>
+        <div class="metric"><span class="label">Risk style</span><span class="value">${escapeHtml(metrics.risk_style || 'Balanced')}</span></div>
+        <div class="metric"><span class="label">Model pivots</span><span class="value">${escapeHtml(String(metrics.model_pivot_count || 0))}</span></div>
+      </div>
+    </section>
+    <section class="layout">
+      <section class="panel">
+        <h2 style="margin-top:0;">Final Roster</h2>
+        <div class="roster-grid">
+          <div>
+            <h3>Starters</h3>
+            <table>
+              <thead><tr><th>Slot</th><th>Player</th><th>Pos</th><th>Proj</th></tr></thead>
+              <tbody>${tableRowsHtml(starters, [{ key: 'lineup_slot' }, { key: 'player_name' }, { key: 'position' }, { key: 'proj_points_mean' }])}</tbody>
+            </table>
+          </div>
+          <div>
+            <h3>Bench</h3>
+            <table>
+              <thead><tr><th>Slot</th><th>Player</th><th>Pos</th><th>Proj</th></tr></thead>
+              <tbody>${tableRowsHtml(bench, [{ key: 'lineup_slot' }, { key: 'player_name' }, { key: 'position' }, { key: 'proj_points_mean' }])}</tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+      <section class="panel">
+        <h2 style="margin-top:0;">Player Inspector</h2>
+        ${selectedPlayer ? `
+          <div class="summary-box">
+            <strong>${escapeHtml(selectedPlayer.player_name || '')}</strong><br />
+            ${escapeHtml(selectedPlayer.position || '')}${selectedPlayer.team ? ` • ${escapeHtml(selectedPlayer.team)}` : ''}<br />
+            Draft rank ${escapeHtml(String(selectedPlayer.draft_rank || 'n/a'))} • ADP ${escapeHtml(formatNumber(selectedPlayer.adp || 0))}<br />
+            Draft score ${escapeHtml(formatNumber(selectedPlayer.draft_score || 0))} • Simple VOR ${escapeHtml(formatNumber(selectedPlayer.simple_vor_proxy || 0))}<br />
+            Fragility ${escapeHtml(formatPercent(selectedPlayer.fragility_score || 0))} • Upside ${escapeHtml(formatPercent(selectedPlayer.upside_score || 0))}
+          </div>
+        ` : '<div class="empty">No drafted player available.</div>'}
+        <div style="margin-top:12px;">
+          <h3>Pick Receipts</h3>
+          <table>
+            <thead><tr><th>Pick</th><th>Player</th><th>Top recommendation</th><th>Decision</th></tr></thead>
+            <tbody>${tableRowsHtml(payload.pick_receipts || [], [{ key: 'pick_number' }, { key: 'player_name' }, { key: 'top_recommendation' }, { key: 'decision_label' }])}</tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </div>
+</body>
+</html>`;
+      }
+
+      function buildFinalizedSummaryHtml(payload) {
+        const metrics = payload.summary_metrics || {};
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FFBayes Post-Draft Summary</title>
+  <style>
+    :root { color-scheme: dark; --bg:#08111e; --panel:#0f172a; --border:rgba(148,163,184,0.18); --text:#f8fafc; --muted:#94a3b8; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:linear-gradient(180deg,#030712 0%,#0b1324 100%); color:var(--text); font-family:Inter,ui-sans-serif,system-ui,sans-serif; padding:20px; }
+    .shell { max-width:1280px; margin:0 auto; display:grid; gap:16px; }
+    .panel { background:rgba(15,23,42,0.92); border:1px solid var(--border); border-radius:20px; padding:18px; }
+    .metric-grid { display:grid; gap:10px; grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .metric { background:rgba(255,255,255,0.04); border:1px solid rgba(148,163,184,0.12); border-radius:14px; padding:10px 12px; }
+    .label { display:block; color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px; }
+    .value { display:block; font-size:16px; font-weight:600; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { text-align:left; padding:10px; border-bottom:1px solid rgba(148,163,184,0.12); vertical-align:top; }
+    th { color:#9bdcff; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; }
+    .summary-box { padding:12px; border-radius:14px; background:rgba(255,255,255,0.04); border:1px solid rgba(148,163,184,0.12); line-height:1.5; }
+    @media (max-width: 980px) { .metric-grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="panel">
+      <h1 style="margin:0 0 6px 0;">FFBayes Post-Draft Summary</h1>
+      <p style="color:#94a3b8; margin:0;">A compact recap of the roster you drafted and how it looked through the draft-board model.</p>
+    </section>
+    <section class="panel">
+      <h2 style="margin-top:0;">Final Roster Recap</h2>
+      <div class="summary-box">
+        Drafted ${escapeHtml(String(payload.final_state?.drafted_player_count || 0))} of ${escapeHtml(String(payload.final_state?.roster_capacity || 0))} total roster spots.
+        Roster complete: ${escapeHtml(payload.final_state?.roster_complete ? 'Yes' : 'No')}.
+      </div>
+      <table style="margin-top:12px;">
+        <thead><tr><th>Player</th><th>Pos</th><th>Slot</th><th>Proj</th></tr></thead>
+        <tbody>${tableRowsHtml(payload.drafted_players || [], [{ key: 'player_name' }, { key: 'position' }, { key: 'lineup_slot' }, { key: 'proj_points_mean' }])}</tbody>
+      </table>
+    </section>
+    <section class="panel">
+      <h2 style="margin-top:0;">Team Projection Snapshot</h2>
+      <div class="metric-grid">
+        <div class="metric"><span class="label">Starter lineup mean</span><span class="value">${escapeHtml(formatNumber(metrics.starter_lineup_mean || 0))}</span></div>
+        <div class="metric"><span class="label">Starter lineup floor</span><span class="value">${escapeHtml(formatNumber(metrics.starter_lineup_floor || 0))}</span></div>
+        <div class="metric"><span class="label">Starter lineup ceiling</span><span class="value">${escapeHtml(formatNumber(metrics.starter_lineup_ceiling || 0))}</span></div>
+        <div class="metric"><span class="label">Bench depth mean</span><span class="value">${escapeHtml(formatNumber(metrics.bench_depth_mean || 0))}</span></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2 style="margin-top:0;">Risk & Upside Profile</h2>
+      <div class="summary-box">
+        This roster profiles as <strong>${escapeHtml(metrics.risk_style || 'Balanced')}</strong>.
+        Starter fragility averages ${escapeHtml(formatPercent(metrics.starter_fragility_avg || 0))} with starter upside averaging ${escapeHtml(formatPercent(metrics.starter_upside_avg || 0))}.
+      </div>
+      <div class="metric-grid" style="margin-top:12px;">
+        <div class="metric"><span class="label">Starter fragility avg</span><span class="value">${escapeHtml(formatPercent(metrics.starter_fragility_avg || 0))}</span></div>
+        <div class="metric"><span class="label">Full-roster fragility avg</span><span class="value">${escapeHtml(formatPercent(metrics.full_roster_fragility_avg || 0))}</span></div>
+        <div class="metric"><span class="label">Starter upside avg</span><span class="value">${escapeHtml(formatPercent(metrics.starter_upside_avg || 0))}</span></div>
+        <div class="metric"><span class="label">Full-roster upside avg</span><span class="value">${escapeHtml(formatPercent(metrics.full_roster_upside_avg || 0))}</span></div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2 style="margin-top:0;">Draft Value Recap</h2>
+      <table>
+        <thead><tr><th>Player</th><th>Pos</th><th>ADP</th><th>Draft rank</th><th>Indicator</th></tr></thead>
+        <tbody>${tableRowsHtml(payload.value_recap || [], [{ key: 'player_name' }, { key: 'position' }, { key: 'adp' }, { key: 'draft_rank' }, { key: 'value_indicator' }])}</tbody>
+      </table>
+    </section>
+    <section class="panel">
+      <h2 style="margin-top:0;">Pick-by-Pick Receipts</h2>
+      <table>
+        <thead><tr><th>Pick</th><th>Player</th><th>Top recommendation</th><th>Decision</th><th>Draft score</th></tr></thead>
+        <tbody>${tableRowsHtml(payload.pick_receipts || [], [{ key: 'pick_number' }, { key: 'player_name' }, { key: 'top_recommendation' }, { key: 'decision_label' }, { key: 'draft_score' }])}</tbody>
+      </table>
+    </section>
+  </div>
+</body>
+</html>`;
+      }
+
+      function finalizeDraft(boardState) {
+        if (!isLocalFinalizeSupported()) {
+          return;
+        }
+        if (!isRosterComplete(boardState)) {
+          const confirmed = window.confirm('Your roster is not full yet. Download a finalized draft snapshot anyway?');
+          if (!confirmed) {
+            return;
+          }
+        }
+        const payload = buildFinalizedDraftPayload(boardState);
+        const year = draftYearLabel();
+        const stamp = timestampLabel();
+        window.__ffbayesLastFinalizedPayload = payload;
+        window.__ffbayesFinalizedDownloads = [
+          `ffbayes_finalized_draft_${year}_${stamp}.json`,
+          `ffbayes_finalized_draft_${year}_${stamp}.html`,
+          `ffbayes_finalized_summary_${year}_${stamp}.html`,
+        ];
+        downloadTextFile(`ffbayes_finalized_draft_${year}_${stamp}.json`, JSON.stringify(payload, null, 2), 'application/json');
+        downloadTextFile(`ffbayes_finalized_draft_${year}_${stamp}.html`, buildFinalizedSnapshotHtml(payload), 'text/html');
+        downloadTextFile(`ffbayes_finalized_summary_${year}_${stamp}.html`, buildFinalizedSummaryHtml(payload), 'text/html');
+      }
+
       function bindControls() {
         document.getElementById('player-search').addEventListener('input', (event) => {
           state.search = event.target.value;
           render();
         });
         document.getElementById('undo-button').addEventListener('click', undoLast);
-        document.getElementById('reset-button').addEventListener('click', () => {
-          const confirmed = window.confirm(
-            'Clear taken players, your roster, queue, and undo history while keeping your current league settings and current pick?'
-          );
-          if (!confirmed) {
-            return;
-          }
-          clearDraftProgressState();
-          render();
+        document.getElementById('redo-button').addEventListener('click', redoLast);
+        document.getElementById('finalize-button').addEventListener('click', () => {
+          const boardState = buildBoardState();
+          finalizeDraft(boardState);
         });
         [
           ['scoring-preset', (value) => { state.scoringPreset = value; }],
@@ -4503,8 +4975,32 @@ def export_dashboard_html(
         return (values || []).map(safeLower);
       }
 
+      function buildPickReceipt(row, boardState) {
+        const topRecommendation = (boardState.pickNow && boardState.pickNow[0]) || null;
+        return {
+          pick_number: state.currentPickNumber,
+          player_name: row.player_name,
+          position: row.position,
+          team: row.team || '',
+          adp: Number(row.adp || 0),
+          market_rank: Number(row.market_rank || 0),
+          draft_score: Number(row.draft_score || 0),
+          simple_vor_proxy: Number(row.simple_vor_proxy || 0),
+          fragility_score: Number(row.fragility_score || 0),
+          upside_score: Number(row.upside_score || 0),
+          top_recommendation: topRecommendation ? topRecommendation.player_name : '',
+          recommended_draft_score: topRecommendation ? Number(topRecommendation.draft_score || 0) : null,
+          followed_model: !!(topRecommendation && safeLower(topRecommendation.player_name) === safeLower(row.player_name)),
+          decision_label: topRecommendation && safeLower(topRecommendation.player_name) === safeLower(row.player_name)
+            ? 'Followed model'
+            : 'Pivoted',
+        };
+      }
+
       function applyAction(action, playerName) {
         const normalized = safeLower(playerName);
+        const boardState = buildBoardState();
+        const targetRow = boardState.rows.find((row) => safeLower(row.player_name) === normalized) || null;
         pushHistory();
         let shouldAdvancePick = false;
         if (action === 'queue') {
@@ -4534,9 +5030,15 @@ def export_dashboard_html(
             state.queuePlayers = state.queuePlayers.filter((item) => safeLower(item) !== normalized);
           } else {
             state.queuePlayers = state.queuePlayers.filter((item) => safeLower(item) !== normalized);
+            if (targetRow) {
+              state.pickLog = [...state.pickLog, buildPickReceipt(targetRow, boardState)];
+            }
             shouldAdvancePick = true;
           }
         }
+        state.pickLog = (state.pickLog || []).filter((entry) =>
+          state.yourPlayers.some((item) => safeLower(item) === safeLower(entry.player_name))
+        );
         if (shouldAdvancePick) {
           state.currentPickNumber = Math.max(1, Number(state.currentPickNumber || 1) + 1);
         }
@@ -4548,11 +5050,18 @@ def export_dashboard_html(
         if (!snapshot) {
           return;
         }
-        state.currentPickNumber = snapshot.currentPickNumber;
-        state.takenPlayers = snapshot.takenPlayers;
-        state.yourPlayers = snapshot.yourPlayers;
-        state.queuePlayers = snapshot.queuePlayers;
-        state.selectedPlayer = snapshot.selectedPlayer;
+        pushSnapshot(state.redoHistory, captureDraftSnapshot());
+        restoreDraftSnapshot(snapshot);
+        render();
+      }
+
+      function redoLast() {
+        const snapshot = state.redoHistory.pop();
+        if (!snapshot) {
+          return;
+        }
+        pushSnapshot(state.history, captureDraftSnapshot());
+        restoreDraftSnapshot(snapshot);
         render();
       }
     })();

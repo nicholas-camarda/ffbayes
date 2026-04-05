@@ -495,7 +495,7 @@ def test_exported_dashboard_html_contains_live_controls_and_full_board_renderer(
         assert 'slice(0, 30)' not in html
 
 
-def test_exported_dashboard_html_includes_reset_confirmation_and_state_helpers():
+def test_exported_dashboard_html_includes_undo_redo_state_helpers():
     settings = LeagueSettings()
     artifacts = build_draft_decision_artifacts(
         _synthetic_players(), settings, DraftContext(current_pick_number=10)
@@ -516,14 +516,106 @@ def test_exported_dashboard_html_includes_reset_confirmation_and_state_helpers()
         )
 
         html = output_path.read_text(encoding='utf-8')
-        assert 'function clearDraftProgressState()' in html
-        assert 'window.confirm(' in html
-        assert (
-            'Clear taken players, your roster, queue, and undo history while keeping your current league settings and current pick?'
-            in html
-        )
+        assert 'id="redo-button"' in html
+        assert 'id="finalize-button"' in html
+        assert 'redoHistory: []' in html
+        assert 'pickLog: []' in html
+        assert 'function captureDraftSnapshot()' in html
+        assert 'function restoreDraftSnapshot(snapshot)' in html
         assert 'function isInspectableStatus(status)' in html
         assert 'pickNow[0] || availableRows[0] || rows[0] || null' in html
+        assert "window.location.protocol === 'file:'" in html
+        assert "window.confirm('Your roster is not full yet. Download a finalized draft snapshot anyway?')" in html
+        assert 'Reset draft state' not in html
+
+
+def test_exported_dashboard_html_clears_redo_history_on_new_actions():
+    settings = LeagueSettings()
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
+
+    with TemporaryDirectory() as tmpdir:
+        output_path = Path(tmpdir) / 'draft_board.html'
+        from ffbayes.draft_strategy.draft_decision_system import export_dashboard_html
+
+        export_dashboard_html(
+            artifacts.decision_table,
+            artifacts.recommendations,
+            output_path,
+            settings,
+            backtest=artifacts.backtest,
+            source_freshness=artifacts.source_freshness,
+            dashboard_payload=artifacts.dashboard_payload,
+        )
+
+        html = output_path.read_text(encoding='utf-8')
+        assert 'state.redoHistory = [];' in html
+        assert "document.getElementById('redo-button').disabled = !state.redoHistory.length;" in html
+        assert 'pushSnapshot(state.redoHistory, captureDraftSnapshot());' in html
+
+
+def test_exported_dashboard_html_includes_finalize_download_and_pick_log_helpers():
+    settings = LeagueSettings()
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
+
+    with TemporaryDirectory() as tmpdir:
+        output_path = Path(tmpdir) / 'draft_board.html'
+        from ffbayes.draft_strategy.draft_decision_system import export_dashboard_html
+
+        export_dashboard_html(
+            artifacts.decision_table,
+            artifacts.recommendations,
+            output_path,
+            settings,
+            backtest=artifacts.backtest,
+            source_freshness=artifacts.source_freshness,
+            dashboard_payload=artifacts.dashboard_payload,
+        )
+
+        html = output_path.read_text(encoding='utf-8')
+        assert 'function buildFinalizedDraftPayload(boardState)' in html
+        assert 'function buildFinalizedSnapshotHtml(payload)' in html
+        assert 'function buildFinalizedSummaryHtml(payload)' in html
+        assert 'function buildPickReceipt(row, boardState)' in html
+        assert 'window.__ffbayesFinalizedDownloads' in html
+        assert 'window.__ffbayesLastFinalizedPayload = payload;' in html
+        assert 'Pick-by-Pick Receipts' in html
+        assert 'Risk & Upside Profile' in html
+        assert 'pickLog: state.pickLog.slice()' in html
+        assert 'state.pickLog = snapshot.pickLog || [];' in html
+
+
+def test_exported_dashboard_html_includes_finalize_bundle_builders():
+    settings = LeagueSettings()
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
+
+    with TemporaryDirectory() as tmpdir:
+        output_path = Path(tmpdir) / 'draft_board.html'
+        from ffbayes.draft_strategy.draft_decision_system import export_dashboard_html
+
+        export_dashboard_html(
+            artifacts.decision_table,
+            artifacts.recommendations,
+            output_path,
+            settings,
+            backtest=artifacts.backtest,
+            source_freshness=artifacts.source_freshness,
+            dashboard_payload=artifacts.dashboard_payload,
+        )
+
+        html = output_path.read_text(encoding='utf-8')
+        assert "const FINALIZED_SCHEMA_VERSION = 'finalized_draft_v1';" in html
+        assert 'function buildFinalizedDraftPayload(boardState)' in html
+        assert 'function buildFinalizedSnapshotHtml(payload)' in html
+        assert 'function buildFinalizedSummaryHtml(payload)' in html
+        assert 'schema_version: FINALIZED_SCHEMA_VERSION' in html
+        assert 'ffbayes_finalized_draft_' in html
+        assert 'ffbayes_finalized_summary_' in html
 
 
 def test_exported_dashboard_html_includes_flex_need_adjustment_logic():
