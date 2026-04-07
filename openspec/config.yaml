@@ -1,0 +1,28 @@
+schema: spec-driven
+
+context: |
+  Stack: Python 3.10 package under `src/ffbayes` with pandas/polars data work, PyMC analysis, and a small Node + Playwright smoke-test sidecar from `package.json`.
+  Runtime: use the `ffbayes` conda env from `environment.yml`; Python tooling and pipeline commands are expected to run there.
+  Interfaces: extend the unified `ffbayes` CLI and existing `project.scripts` entrypoints before adding new standalone scripts.
+  Testing: Python coverage is pytest in `tests/`; dashboard publication also has smoke coverage via `node tests/dashboard_smoke.mjs` and `tests/test_publish_pages.py`.
+  Lint/type style: Ruff formatting and lint rules live in `pyproject.toml` (single quotes, space indentation); `mypy src` is the repo type-check entrypoint.
+  Paths: keep path policy in `src/ffbayes/utils/path_constants.py`; default runtime writes go to `~/ProjectsRuntime/ffbayes` and cloud mirrors to `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes` unless explicit env overrides are used.
+  Artifact flow: canonical outputs are year-scoped under `runs/<year>/pre_draft/...`; `publish-pages` stages repo-tracked `site/` files from runtime dashboard HTML and payload.
+  Domain constraint: only the `pre_draft` phase is supported, so preserve existing `pre_draft`, `draft_strategy`, and dashboard artifact naming unless a migration is explicit.
+
+rules:
+  proposal:
+    - Name the affected CLI commands/modules and whether the change affects runtime artifacts, cloud mirroring, or `site/` Pages staging.
+    - Call out path, environment-variable, and phase migration risk explicitly when behavior touches outputs or publishing.
+
+  specs:
+    - Use current terms such as `ffbayes`, `pre_draft`, `draft_strategy`, `publish-pages`, and `dashboard_payload.json` instead of inventing new names.
+    - Separate behavior for repo files, runtime outputs, and published/site copies whenever a change crosses those storage boundaries.
+
+  design:
+    - Reuse `path_constants.py`, existing CLI dispatch in `src/ffbayes/cli.py`, and current JSON config files before proposing new abstractions or hardcoded paths.
+    - Describe data and artifact flow from pipeline step to runtime output to cloud or Pages staging, including failure modes for missing dashboard files or env overrides.
+
+  tasks:
+    - Break work along existing modules under `src/ffbayes/...` and include tests for any touched CLI, path, or artifact-staging behavior.
+    - Add README or config doc updates when command surface, output locations, or dashboard publication behavior changes.

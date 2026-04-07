@@ -111406,5 +111406,20 @@
       "This comparison is based on internal historical holdout seasons, not a live external validation set.",
       "The dashboard keeps the contextual draft score as a decision policy layered on posterior projections, not a pure posterior rank list."
     ]
+  },
+  "publish_provenance": {
+    "schema_version": "publish_provenance_v1",
+    "season_year": 2026,
+    "published_at": "2026-04-07T13:06:29",
+    "dashboard_generated_at": "2026-04-04T18:35:49",
+    "source_html": "draft_board_2026.html",
+    "source_payload": "dashboard_payload_2026.json",
+    "analysis_freshness": {
+      "status": "unknown",
+      "override_used": false,
+      "warnings": []
+    },
+    "override_used": false,
+    "warnings": []
   }
 }

@@ -601,9 +601,76 @@ def _build_bayesian_vor_summary(
         'available': False,
         'comparison_scope': 'board_only',
         'headline': 'No direct contextual-vs-VOR backtest summary is available for this export.',
+        'reason_unavailable': 'No normalized backtest comparison rows were available.',
         'top_disagreements': disagreements,
         'limitations': [
             'Without the backtest comparison artifact, the board can show only current ranking disagreements, not outcome-level evidence.',
+        ],
+    }
+
+
+def _build_decision_evidence(
+    decision_table: pd.DataFrame,
+    backtest: dict[str, Any],
+    analysis_provenance: dict[str, Any] | None,
+    bayesian_vor_summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    bayesian_vor_summary = bayesian_vor_summary or _build_bayesian_vor_summary(
+        decision_table, backtest
+    )
+    analysis_provenance = analysis_provenance or {}
+    freshness_context = (
+        analysis_provenance.get('backtest_inputs')
+        or analysis_provenance.get('overall_freshness')
+        or {
+            'status': 'unknown',
+            'override_used': False,
+            'warnings': [],
+            'available_sources': [],
+        }
+    )
+    strategy_summary = backtest.get('overall', {}).get('by_strategy', []) if backtest else []
+    evaluation_scope = backtest.get('evaluation_scope', {}) if backtest else {}
+    limitations = list(
+        dict.fromkeys(
+            [
+                *(bayesian_vor_summary.get('limitations') or []),
+                'Treat internal holdout backtests as directional decision evidence, not external validation.',
+            ]
+        )
+    )
+
+    status = 'available'
+    reason_unavailable = None
+    if not bayesian_vor_summary.get('available') or not strategy_summary:
+        status = 'unavailable'
+        reason_unavailable = bayesian_vor_summary.get(
+            'reason_unavailable',
+            'No backtest comparison artifact was available for this draft board.',
+        )
+    elif freshness_context.get('status') == 'degraded':
+        status = 'degraded'
+
+    return {
+        'available': status != 'unavailable',
+        'status': status,
+        'headline': bayesian_vor_summary.get(
+            'headline', 'Decision evidence is unavailable for this board.'
+        ),
+        'reason_unavailable': reason_unavailable,
+        'evaluation_scope': evaluation_scope,
+        'freshness': freshness_context,
+        'strategy_summary': strategy_summary,
+        'season_rows': bayesian_vor_summary.get('by_season', []),
+        'top_disagreements': bayesian_vor_summary.get('top_disagreements', []),
+        'winner': bayesian_vor_summary.get('winner'),
+        'delta_mean_lineup_points': bayesian_vor_summary.get('delta_mean_lineup_points'),
+        'season_count': bayesian_vor_summary.get('season_count'),
+        'holdout_years': bayesian_vor_summary.get('holdout_years', []),
+        'limitations': limitations,
+        'interpretation_guidance': [
+            'Use this panel to judge whether the board has internal evidence, not to treat it as externally validated truth.',
+            'Freshness state applies to the evidence source, so degraded freshness weakens confidence even when a winner is shown.',
         ],
     }
 
@@ -2471,6 +2538,7 @@ def build_dashboard_payload(
     backtest: dict[str, Any] | None = None,
     context: DraftContext | None = None,
     scoring_presets: dict[str, Any] | None = None,
+    analysis_provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a JSON-serializable payload for the local dashboard."""
     backtest = backtest or {}
@@ -2526,6 +2594,14 @@ def build_dashboard_payload(
     recommendation_summary = recommendations.head(12).to_dict(orient='records')
     position_summary = _dashboard_position_summary(decision_table)
     active_scoring_preset = _resolve_scoring_preset_key(league_settings)
+    analysis_provenance = analysis_provenance or {}
+    bayesian_vor_summary = _build_bayesian_vor_summary(decision_table, backtest)
+    decision_evidence = _build_decision_evidence(
+        decision_table,
+        backtest,
+        analysis_provenance,
+        bayesian_vor_summary=bayesian_vor_summary,
+    )
     selected_player = (
         _pick_first_row(recommendations['player_name'])
         if not recommendations.empty
@@ -2562,6 +2638,8 @@ def build_dashboard_payload(
         'tier_cliffs': tier_cliffs.to_dict(orient='records'),
         'roster_scenarios': roster_scenarios.to_dict(orient='records'),
         'source_freshness': source_freshness.to_dict(orient='records'),
+        'analysis_provenance': analysis_provenance,
+        'decision_evidence': decision_evidence,
         'backtest': backtest,
         'supporting_math': _dashboard_supporting_math(decision_table),
         'metric_glossary': METRIC_GLOSSARY,
@@ -2577,9 +2655,7 @@ def build_dashboard_payload(
                 'Backtests here are internal holdout seasons and should be treated as directional evidence, not definitive proof.',
             ],
         },
-        'bayesian_vor_summary': _build_bayesian_vor_summary(
-            decision_table, backtest
-        ),
+        'bayesian_vor_summary': bayesian_vor_summary,
     }
 
 
@@ -2635,6 +2711,7 @@ def export_workbook(
     league_settings: LeagueSettings,
     backtest: dict[str, Any] | None = None,
     context: DraftContext | None = None,
+    dashboard_payload: dict[str, Any] | None = None,
 ) -> Path:
     """Write the portable draft workbook."""
     wb = openpyxl.Workbook()
@@ -2800,15 +2877,73 @@ def export_workbook(
                 ),
             ],
             ignore_index=True,
-        )
+    )
     _write_dataframe_sheet(wb, 'Model Diagnostics', diagnostics)
     _write_dataframe_sheet(wb, 'Source Freshness', source_freshness)
 
-    # Add a compact backtest summary if available.
-    if backtest and backtest.get('overall'):
-        summary = pd.DataFrame(backtest['overall'].get('by_strategy', []))
-        if not summary.empty:
-            _write_dataframe_sheet(wb, 'Backtest Summary', summary)
+    payload = dashboard_payload or {}
+    decision_evidence = payload.get('decision_evidence') or _build_decision_evidence(
+        decision_table,
+        backtest or {},
+        payload.get('analysis_provenance') if isinstance(payload, dict) else None,
+    )
+    evidence_rows = pd.DataFrame(
+        [
+            {'metric': 'status', 'value': decision_evidence.get('status', 'unknown')},
+            {'metric': 'headline', 'value': decision_evidence.get('headline', '')},
+            {'metric': 'winner', 'value': decision_evidence.get('winner', '')},
+            {
+                'metric': 'delta_mean_lineup_points',
+                'value': decision_evidence.get('delta_mean_lineup_points'),
+            },
+            {'metric': 'season_count', 'value': decision_evidence.get('season_count')},
+            {
+                'metric': 'freshness_status',
+                'value': decision_evidence.get('freshness', {}).get('status', 'unknown'),
+            },
+            {
+                'metric': 'override_used',
+                'value': decision_evidence.get('freshness', {}).get('override_used', False),
+            },
+            {
+                'metric': 'reason_unavailable',
+                'value': decision_evidence.get('reason_unavailable', ''),
+            },
+        ]
+    )
+    _write_dataframe_sheet(wb, 'Decision Evidence', evidence_rows)
+
+    strategy_summary = pd.DataFrame(decision_evidence.get('strategy_summary', []))
+    if not strategy_summary.empty:
+        _write_dataframe_sheet(wb, 'Backtest Summary', strategy_summary)
+
+    provenance = payload.get('analysis_provenance', {}) if isinstance(payload, dict) else {}
+    provenance_rows = []
+    overall_freshness = provenance.get('overall_freshness') or {}
+    provenance_rows.append(
+        {
+            'scope': 'overall',
+            'source_name': 'analysis_provenance',
+            'status': overall_freshness.get('status', 'unknown'),
+            'override_used': overall_freshness.get('override_used', False),
+            'latest_expected_year': '',
+            'latest_found_year': '',
+            'warnings': ' | '.join(overall_freshness.get('warnings', [])),
+        }
+    )
+    for label, entry in (provenance.get('sources') or {}).items():
+        provenance_rows.append(
+            {
+                'scope': label,
+                'source_name': entry.get('source_name', label),
+                'status': entry.get('status', 'unknown'),
+                'override_used': entry.get('override_used', False),
+                'latest_expected_year': entry.get('latest_expected_year', ''),
+                'latest_found_year': entry.get('latest_found_year', ''),
+                'warnings': ' | '.join(entry.get('warnings', [])),
+            }
+        )
+    _write_dataframe_sheet(wb, 'Artifact Provenance', pd.DataFrame(provenance_rows))
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -3532,21 +3667,22 @@ def export_dashboard_html(
               <div class="details-body" id="model-overview"></div>
             </details>
             <details>
-              <summary>Bayesian vs simple VOR</summary>
-              <div class="details-body" id="bayes-vor"></div>
+              <summary>Decision evidence</summary>
+              <div class="details-body" id="decision-evidence"></div>
             </details>
             <details>
               <summary>Metric glossary</summary>
               <div class="details-body" id="metric-glossary"></div>
             </details>
             <details>
-              <summary>Source freshness and backtest snapshot</summary>
+              <summary>Freshness and provenance</summary>
               <div class="details-body">
+                <div id="provenance-panel"></div>
                 <div class="metric-grid" id="support-metrics"></div>
                 <div class="board-table-wrap" style="max-height: 220px;">
                   <table>
                     <thead>
-                      <tr><th>Source</th><th>Freshness (days)</th><th>Rows</th></tr>
+                      <tr><th>Source</th><th>Status</th><th>Override</th><th>Expected / found</th></tr>
                     </thead>
                     <tbody id="freshness-table"></tbody>
                   </table>
@@ -3803,6 +3939,14 @@ def export_dashboard_html(
 
       function formatPercent(value) {
         return `${Math.round((Number(value) || 0) * 100)}%`;
+      }
+
+      function formatTimestamp(value) {
+        if (!value) {
+          return 'n/a';
+        }
+        const dt = new Date(value);
+        return Number.isNaN(dt.getTime()) ? String(value) : dt.toLocaleString();
       }
 
       function getPresetEntry() {
@@ -4453,23 +4597,46 @@ def export_dashboard_html(
 
       function renderModelNotes(boardState) {
         const modelOverview = data.model_overview || {};
-        const bayesVor = data.bayesian_vor_summary || {};
-        const freshnessRows = Array.isArray(data.source_freshness) ? data.source_freshness : [];
-        const backtestRows = data.backtest && data.backtest.overall && Array.isArray(data.backtest.overall.by_strategy)
-          ? data.backtest.overall.by_strategy
-          : [];
+        const decisionEvidence = data.decision_evidence || {};
+        const analysisProvenance = data.analysis_provenance || {};
+        const publishProvenance = data.publish_provenance || {};
+        const analysisFreshness = analysisProvenance.overall_freshness || decisionEvidence.freshness || {};
+        const freshnessRows = Object.values(analysisProvenance.sources || {});
+        const fallbackFreshnessRows = Array.isArray(data.source_freshness) ? data.source_freshness : [];
+        const renderedFreshnessRows = freshnessRows.length ? freshnessRows : fallbackFreshnessRows;
+        const backtestRows = Array.isArray(decisionEvidence.strategy_summary)
+          ? decisionEvidence.strategy_summary
+          : (data.backtest && data.backtest.overall && Array.isArray(data.backtest.overall.by_strategy)
+            ? data.backtest.overall.by_strategy
+            : []);
         document.getElementById('model-overview').innerHTML = `
           <div class="summary-box">${modelOverview.headline || 'The model mixes projection, VOR-style value, timing, and fragility.'}</div>
           ${(modelOverview.plain_english || []).map((line) => `<div class="tiny">• ${line}</div>`).join('')}
           ${(modelOverview.limitations || []).length ? `<div class="notice">${(modelOverview.limitations || []).join(' ')}</div>` : ''}
         `;
-        document.getElementById('bayes-vor').innerHTML = bayesVor.available ? `
-          <div class="summary-box">${bayesVor.headline}</div>
+        document.getElementById('decision-evidence').innerHTML = decisionEvidence.available ? `
+          <div class="summary-box">${decisionEvidence.headline || 'Decision evidence is available for this board.'}</div>
           <div class="metric-grid">
-            <div class="metric"><span class="label">Winner</span><span class="value">${bayesVor.winner}</span></div>
-            <div class="metric"><span class="label">Mean lineup delta</span><span class="value">${formatNumber(bayesVor.delta_mean_lineup_points)}</span></div>
-            <div class="metric"><span class="label">Draft score mean</span><span class="value">${formatNumber(bayesVor.draft_score_mean_lineup_points)}</span></div>
-            <div class="metric"><span class="label">Simple VOR mean</span><span class="value">${formatNumber(bayesVor.historical_vor_proxy_mean_lineup_points)}</span></div>
+            <div class="metric"><span class="label">Evidence status</span><span class="value">${decisionEvidence.status || 'available'}</span></div>
+            <div class="metric"><span class="label">Freshness</span><span class="value">${(decisionEvidence.freshness && decisionEvidence.freshness.status) || 'unknown'}</span></div>
+            <div class="metric"><span class="label">Winner</span><span class="value">${decisionEvidence.winner || 'n/a'}</span></div>
+            <div class="metric"><span class="label">Mean lineup delta</span><span class="value">${formatNumber(decisionEvidence.delta_mean_lineup_points)}</span></div>
+          </div>
+          <div class="board-table-wrap" style="max-height: 220px;">
+            <table>
+              <thead>
+                <tr><th>Strategy</th><th>Mean lineup points</th><th>Seasons</th></tr>
+              </thead>
+              <tbody>
+                ${backtestRows.map((row) => `
+                  <tr>
+                    <td>${row.strategy}</td>
+                    <td>${formatNumber(row.mean_lineup_points)}</td>
+                    <td>${row.season_count ?? 'n/a'}</td>
+                  </tr>
+                `).join('') || '<tr><td colspan="3" class="empty">No strategy rows available.</td></tr>'}
+              </tbody>
+            </table>
           </div>
           <div class="board-table-wrap" style="max-height: 220px;">
             <table>
@@ -4477,7 +4644,7 @@ def export_dashboard_html(
                 <tr><th>Year</th><th>Draft score</th><th>Simple VOR</th><th>Delta</th></tr>
               </thead>
               <tbody>
-                ${(bayesVor.by_season || []).map((row) => `
+                ${(decisionEvidence.season_rows || []).map((row) => `
                   <tr>
                     <td>${row.holdout_year}</td>
                     <td>${formatNumber(row.draft_score_lineup_points)}</td>
@@ -4494,7 +4661,7 @@ def export_dashboard_html(
                 <tr><th>Player</th><th>Pos</th><th>Draft rank</th><th>VOR rank</th><th>Gap</th></tr>
               </thead>
               <tbody>
-                ${(bayesVor.top_disagreements || []).map((row) => `
+                ${(decisionEvidence.top_disagreements || []).map((row) => `
                   <tr>
                     <td>${row.player_name}</td>
                     <td>${row.position}</td>
@@ -4506,16 +4673,16 @@ def export_dashboard_html(
               </tbody>
             </table>
           </div>
-          ${(bayesVor.limitations || []).length ? `<div class="notice">${bayesVor.limitations.join(' ')}</div>` : ''}
+          ${(decisionEvidence.limitations || []).length ? `<div class="notice">${decisionEvidence.limitations.join(' ')}</div>` : ''}
         ` : `
-          <div class="notice">${bayesVor.headline || 'No head-to-head evidence is available in this payload.'}</div>
+          <div class="notice">${decisionEvidence.reason_unavailable || decisionEvidence.headline || 'No decision evidence is available in this payload.'}</div>
           <div class="board-table-wrap" style="max-height: 220px;">
             <table>
               <thead>
                 <tr><th>Player</th><th>Pos</th><th>Draft rank</th><th>VOR rank</th><th>Gap</th></tr>
               </thead>
               <tbody>
-                ${(bayesVor.top_disagreements || []).map((row) => `
+                ${(decisionEvidence.top_disagreements || []).map((row) => `
                   <tr>
                     <td>${row.player_name}</td>
                     <td>${row.position}</td>
@@ -4537,11 +4704,24 @@ def export_dashboard_html(
             </div>
           `).join('')
         }</div>`;
+        document.getElementById('provenance-panel').innerHTML = `
+          <div class="summary-box">${publishProvenance.published_at
+            ? `Pages staged ${formatTimestamp(publishProvenance.published_at)} from ${publishProvenance.source_html || 'index.html'}.`
+            : 'Publish provenance will appear after `ffbayes publish-pages` stages this dashboard.'}</div>
+          <div class="tiny">Dashboard generated: ${formatTimestamp(data.generated_at)}</div>
+          <div class="tiny">Analysis freshness: ${(analysisFreshness.status || 'unknown')}${analysisFreshness.override_used ? ' (explicit override used)' : ''}</div>
+          ${(publishProvenance.dashboard_generated_at || publishProvenance.source_payload)
+            ? `<div class="tiny">Staged payload: ${publishProvenance.source_payload || 'dashboard_payload.json'} • generated ${formatTimestamp(publishProvenance.dashboard_generated_at)}</div>`
+            : ''}
+          ${(analysisFreshness.warnings || []).length ? `<div class="notice">${analysisFreshness.warnings.join(' ')}</div>` : ''}
+        `;
         document.getElementById('support-metrics').innerHTML = [
+          ['Evidence status', decisionEvidence.status || 'unavailable'],
+          ['Analysis freshness', analysisFreshness.status || 'unknown'],
+          ['Published at', publishProvenance.published_at ? formatTimestamp(publishProvenance.published_at) : 'local-only'],
           ['Players in board', boardState.rows.length],
           ['Available players', boardState.availableRows.length],
           ['Current pick', state.currentPickNumber],
-          ['Next pick', boardState.nextPick],
           ['League size', state.leagueSize],
           ['Bench slots', state.benchSlots],
         ].map(([label, value]) => `
@@ -4550,13 +4730,14 @@ def export_dashboard_html(
             <span class="value">${value}</span>
           </div>
         `).join('');
-        document.getElementById('freshness-table').innerHTML = freshnessRows.map((row) => `
+        document.getElementById('freshness-table').innerHTML = renderedFreshnessRows.map((row) => `
           <tr>
-            <td>${row.source_name || 'unknown'}</td>
-            <td>${row.freshness_days ?? 'n/a'}</td>
-            <td>${row.row_count ?? 'n/a'}</td>
+            <td>${row.source_name || row.label || 'unknown'}</td>
+            <td>${row.status || (row.freshness_days != null ? `${row.freshness_days}d` : 'unknown')}</td>
+            <td>${row.override_used ? 'yes' : 'no'}</td>
+            <td>${row.latest_expected_year ?? '-'} / ${row.latest_found_year ?? '-'}</td>
           </tr>
-        `).join('') || '<tr><td colspan="3" class="empty">No freshness rows available.</td></tr>';
+        `).join('') || '<tr><td colspan="4" class="empty">No freshness rows available.</td></tr>';
         document.getElementById('backtest-table').innerHTML = backtestRows.map((row) => `
           <tr>
             <td>${row.strategy}</td>
@@ -5082,6 +5263,7 @@ def build_draft_decision_artifacts(
     league_settings: LeagueSettings | None = None,
     context: DraftContext | None = None,
     season_history: pd.DataFrame | None = None,
+    analysis_provenance: dict[str, Any] | None = None,
 ) -> DraftDecisionArtifacts:
     """Build the full set of draft decision artifacts in memory."""
     settings = league_settings or LeagueSettings()
@@ -5107,6 +5289,7 @@ def build_draft_decision_artifacts(
         backtest=backtest,
         context=context,
         scoring_presets=scoring_presets,
+        analysis_provenance=analysis_provenance,
     )
     metadata = {
         'generated_at': datetime.now().isoformat(timespec='seconds'),
@@ -5116,6 +5299,7 @@ def build_draft_decision_artifacts(
             'league_size': settings.league_size,
         },
         'decision_table_columns': list(decision_table.columns),
+        'analysis_provenance': analysis_provenance or {},
     }
     return DraftDecisionArtifacts(
         league_settings=settings,
@@ -5255,6 +5439,7 @@ def save_draft_decision_artifacts(
         workbook_path,
         artifacts.league_settings,
         backtest=artifacts.backtest,
+        dashboard_payload=artifacts.dashboard_payload,
     )
     payload_path.write_text(
         json.dumps(artifacts.dashboard_payload, default=str, indent=2), encoding='utf-8'

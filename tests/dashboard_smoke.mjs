@@ -191,6 +191,10 @@ async function runSmoke() {
     if ((await readText('h1')) !== 'FFBayes Draft War Room') {
       throw new Error('Dashboard did not load the expected title');
     }
+    const bodyText = (await page.textContent('body')) || '';
+    if (!bodyText.includes('Decision evidence') || !bodyText.includes('Freshness and provenance')) {
+      throw new Error('Dashboard did not render the decision evidence and provenance sections');
+    }
     if (await page.locator('#reset-button').count()) {
       throw new Error('Reset button should not be present');
     }
@@ -463,6 +467,10 @@ async function runSmoke() {
     const remoteNote = (await remotePage.textContent(selectors.finalizeNote)) || '';
     if (!remoteNote.includes('only supported from the local generated dashboard')) {
       throw new Error('Non-local finalize note did not explain the limitation');
+    }
+    const remoteProvenance = (await remotePage.textContent('#provenance-panel')) || '';
+    if (!remoteProvenance.includes('Publish provenance') && !remoteProvenance.includes('Pages staged')) {
+      throw new Error('Dashboard did not expose provenance messaging on the staged site');
     }
     await remotePage.close();
 

@@ -450,12 +450,143 @@ def _collapse_latest_player_snapshot(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def _load_season_history() -> pd.DataFrame | None:
-    from ffbayes.utils.path_constants import SEASON_DATASETS_DIR
+    season_history, _ = _load_season_history_with_freshness()
+    return season_history
 
-    files = sorted(SEASON_DATASETS_DIR.glob('*season.csv'))
-    if not files:
+
+def _read_json_if_exists(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
         return None
-    return pd.concat((pd.read_csv(file_path) for file_path in files), ignore_index=True)
+    try:
+        return json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _summarize_freshness_manifest(
+    manifest: dict[str, Any] | None,
+    label: str,
+) -> dict[str, Any] | None:
+    if not isinstance(manifest, dict):
+        return None
+    freshness = manifest.get('freshness') or {}
+    analysis_window = manifest.get('analysis_window') or {}
+    warnings = freshness.get('warnings') or manifest.get('warnings') or []
+    missing_years = freshness.get('missing_years') or manifest.get('missing_years') or []
+    status = (
+        freshness.get('status')
+        or manifest.get('freshness_status')
+        or analysis_window.get('freshness_status')
+        or 'unknown'
+    )
+    override_used = bool(
+        freshness.get('override_used')
+        if 'override_used' in freshness
+        else manifest.get(
+            'override_used',
+            analysis_window.get('override_used', analysis_window.get('allow_stale', False)),
+        )
+    )
+    return {
+        'label': label,
+        'source_name': manifest.get('source_name', label),
+        'source_path': manifest.get('source_path'),
+        'generated_at': manifest.get('generated_at'),
+        'status': status,
+        'is_fresh': bool(
+            freshness.get('is_fresh')
+            if 'is_fresh' in freshness
+            else manifest.get('is_fresh', analysis_window.get('is_fresh', False))
+        ),
+        'override_used': override_used,
+        'latest_expected_year': freshness.get(
+            'latest_expected_year', analysis_window.get('latest_expected_year')
+        ),
+        'latest_found_year': freshness.get(
+            'latest_found_year', analysis_window.get('latest_found_year')
+        ),
+        'missing_years': list(missing_years),
+        'warnings': list(warnings),
+        'found_years': list(
+            manifest.get('found_years', analysis_window.get('found_years', []))
+        ),
+    }
+
+
+def _combine_freshness_entries(
+    entries: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    if not entries:
+        return {
+            'status': 'unknown',
+            'override_used': False,
+            'warnings': [],
+            'available_sources': [],
+        }
+
+    statuses = {entry.get('status', 'unknown') for entry in entries.values()}
+    if 'degraded' in statuses:
+        status = 'degraded'
+    elif statuses == {'fresh'}:
+        status = 'fresh'
+    elif 'fresh' in statuses:
+        status = 'mixed'
+    else:
+        status = 'unknown'
+
+    warnings: list[str] = []
+    for entry in entries.values():
+        warnings.extend(entry.get('warnings', []))
+
+    deduped_warnings = list(dict.fromkeys(str(warning) for warning in warnings if warning))
+    return {
+        'status': status,
+        'override_used': any(entry.get('override_used', False) for entry in entries.values()),
+        'warnings': deduped_warnings,
+        'available_sources': sorted(entries.keys()),
+    }
+
+
+def _load_season_history_with_freshness() -> tuple[pd.DataFrame | None, dict[str, Any] | None]:
+    from ffbayes.analysis.draft_decision_backtest import load_season_history_with_freshness
+
+    try:
+        return load_season_history_with_freshness()
+    except FileNotFoundError:
+        return None, None
+
+
+def _load_analysis_provenance(
+    backtest_freshness_manifest: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from ffbayes.utils.path_constants import RAW_DATA_DIR
+
+    manifest_paths = {
+        'collection_inputs': RAW_DATA_DIR / 'freshness_manifest.json',
+        'validation_inputs': RAW_DATA_DIR / 'validate_data_freshness.json',
+        'preprocess_inputs': RAW_DATA_DIR / 'preprocess_freshness_manifest.json',
+        'board_inputs': RAW_DATA_DIR / 'unified_dataset_freshness.json',
+    }
+
+    sources: dict[str, dict[str, Any]] = {}
+    for label, path in manifest_paths.items():
+        summary = _summarize_freshness_manifest(_read_json_if_exists(path), label)
+        if summary is not None:
+            sources[label] = summary
+
+    backtest_summary = _summarize_freshness_manifest(
+        backtest_freshness_manifest, 'backtest_inputs'
+    )
+    if backtest_summary is not None:
+        sources['backtest_inputs'] = backtest_summary
+
+    return {
+        'generated_at': datetime.now().isoformat(timespec='seconds'),
+        'overall_freshness': _combine_freshness_entries(sources),
+        'sources': sources,
+        'board_inputs': sources.get('board_inputs'),
+        'backtest_inputs': sources.get('backtest_inputs'),
+    }
 
 
 def _position_priority(recommendations: pd.DataFrame) -> str:
@@ -620,11 +751,14 @@ def _run_single_slot(
 ) -> dict[str, Any]:
     """Build and save artifacts for one draft slot."""
     context = DraftContext(current_pick_number=league_settings.draft_position)
+    season_history, backtest_freshness_manifest = _load_season_history_with_freshness()
+    analysis_provenance = _load_analysis_provenance(backtest_freshness_manifest)
     artifacts = build_draft_decision_artifacts(
         predictions,
         league_settings=league_settings,
         context=context,
-        season_history=_load_season_history(),
+        season_history=season_history,
+        analysis_provenance=analysis_provenance,
     )
 
     results_dir = output_dir or get_draft_strategy_dir(current_year)

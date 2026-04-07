@@ -4,7 +4,6 @@
       "name": "data_collection",
       "script": "ffbayes.data_pipeline.collect_data",
       "description": "Collect NFL fantasy football data",
-      "args": "--allow-stale-season",
       "env": {
         "FFBAYES_PROCESS_DATASET_PROGRESS": "summary"
       },
@@ -18,9 +17,6 @@
       "name": "data_validation",
       "script": "ffbayes.data_pipeline.validate_data",
       "description": "Validate collected data quality",
-      "env": {
-        "FFBAYES_ALLOW_STALE_SEASON": "true"
-      },
       "timeout": 120,
       "retry_count": 2,
       "dependencies": [
@@ -33,9 +29,6 @@
       "name": "data_preprocessing",
       "script": "ffbayes.data_pipeline.preprocess_analysis_data",
       "description": "Preprocess data for analysis",
-      "env": {
-        "FFBAYES_ALLOW_STALE_SEASON": "true"
-      },
       "timeout": 180,
       "retry_count": 2,
       "dependencies": [
@@ -60,9 +53,6 @@
       "name": "create_unified_dataset",
       "script": "ffbayes.data_pipeline.create_unified_dataset",
       "description": "Create unified dataset with VOR rankings for all models",
-      "env": {
-        "FFBAYES_ALLOW_STALE_SEASON": "true"
-      },
       "timeout": 120,
       "retry_count": 2,
       "dependencies": [
@@ -100,9 +90,6 @@
       "name": "draft_strategy_comparison",
       "script": "ffbayes.analysis.draft_decision_backtest",
       "description": "Backtest market, VOR, consensus, and draft-score strategies",
-      "env": {
-        "FFBAYES_ALLOW_STALE_SEASON": "true"
-      },
       "timeout": 300,
       "retry_count": 2,
       "dependencies": [

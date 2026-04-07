@@ -39,7 +39,6 @@ logger = logging.getLogger(__name__)
 
 # Pipeline configuration
 QUICK_TEST = os.getenv('QUICK_TEST', 'false').lower() == 'true'
-ALLOW_STALE_SEASON = os.getenv('FFBAYES_ALLOW_STALE_SEASON', 'false').lower() == 'true'
 
 
 def _normalize_player_name(value) -> str:
@@ -584,6 +583,7 @@ def load_combined_dataset(data_directory=None):
     from ffbayes.utils.analysis_windows import (
         build_freshness_manifest,
         resolve_analysis_window,
+        stale_data_override_enabled,
         write_freshness_manifest,
     )
     from ffbayes.utils.path_constants import COMBINED_DATASETS_DIR, RAW_DATA_DIR
@@ -603,6 +603,7 @@ def load_combined_dataset(data_directory=None):
 
     latest_file = max(analysis_files, key=lambda x: x.stat().st_mtime)
     logger.info(f'📊 Loading: {latest_file}')
+    allow_stale_season = stale_data_override_enabled()
 
     data = pd.read_csv(latest_file)
     logger.info(f'✅ Loaded: {data.shape}')
@@ -613,7 +614,7 @@ def load_combined_dataset(data_directory=None):
             int(year)
             for year in pd.Series(data['Season']).dropna().astype(int).unique().tolist()
         ],
-        allow_stale=True,
+        allow_stale=allow_stale_season,
     )
     freshness_manifest = build_freshness_manifest(
         freshness_window,
@@ -630,13 +631,12 @@ def load_combined_dataset(data_directory=None):
             'Skipping unified dataset freshness manifest write: %s', exc
         )
 
-    if (
-        not ALLOW_STALE_SEASON
-        and freshness_window.latest_expected_year is not None
-        and freshness_window.latest_expected_year not in freshness_window.found_years
-    ):
-        raise RuntimeError(
-            f'Missing latest expected season {freshness_window.latest_expected_year} in combined dataset.'
+    for warning in freshness_window.warnings:
+        logger.warning('%s', warning)
+    if freshness_window.freshness_status == 'degraded':
+        logger.warning(
+            'Proceeding with a degraded unified dataset window because '
+            'FFBAYES_ALLOW_STALE_SEASON=true was explicitly set.'
         )
 
     return data

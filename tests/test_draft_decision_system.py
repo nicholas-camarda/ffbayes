@@ -392,8 +392,65 @@ def test_dashboard_payload_includes_preset_bundle_and_model_notes():
     assert payload['scoring_presets']['ppr']['available'] is True
     assert 'draft_score' in payload['metric_glossary']
     assert 'headline' in payload['model_overview']
+    assert 'decision_evidence' in payload
+    assert payload['decision_evidence']['available'] is True
     assert 'top_disagreements' in payload['bayesian_vor_summary']
     assert payload['selected_player']
+
+
+def test_dashboard_payload_marks_degraded_decision_evidence_when_provenance_is_degraded():
+    settings = LeagueSettings()
+    season_history = pd.DataFrame(
+        {
+            'Season': [2021, 2021, 2022, 2022, 2023, 2023, 2024, 2024],
+            'Name': [
+                'Alpha QB',
+                'Alpha RB',
+                'Alpha QB',
+                'Alpha RB',
+                'Alpha QB',
+                'Alpha RB',
+                'Alpha QB',
+                'Alpha RB',
+            ],
+            'Position': ['QB', 'RB', 'QB', 'RB', 'QB', 'RB', 'QB', 'RB'],
+            'FantPt': [250, 180, 260, 190, 270, 200, 280, 210],
+        }
+    )
+    provenance = {
+        'overall_freshness': {
+            'status': 'degraded',
+            'override_used': True,
+            'warnings': ['Missing latest expected season: 2025'],
+        },
+        'backtest_inputs': {
+            'status': 'degraded',
+            'override_used': True,
+            'warnings': ['Missing latest expected season: 2025'],
+        },
+        'sources': {
+            'backtest_inputs': {
+                'source_name': 'draft_backtest',
+                'status': 'degraded',
+                'override_used': True,
+                'latest_expected_year': 2025,
+                'latest_found_year': 2024,
+                'warnings': ['Missing latest expected season: 2025'],
+            }
+        },
+    }
+
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(),
+        settings,
+        DraftContext(current_pick_number=10),
+        season_history=season_history,
+        analysis_provenance=provenance,
+    )
+
+    assert artifacts.dashboard_payload['analysis_provenance']['overall_freshness']['status'] == 'degraded'
+    assert artifacts.dashboard_payload['decision_evidence']['status'] == 'degraded'
+    assert artifacts.dashboard_payload['decision_evidence']['freshness']['override_used'] is True
 
 
 def test_workbook_contains_core_sheets():
@@ -433,7 +490,9 @@ def test_workbook_contains_core_sheets():
             'Roster Construction Scenarios',
             'Player Notes',
             'Model Diagnostics',
+            'Decision Evidence',
             'Source Freshness',
+            'Artifact Provenance',
         }.issubset(set(wb.sheetnames))
 
 
@@ -487,7 +546,8 @@ def test_exported_dashboard_html_contains_live_controls_and_full_board_renderer(
         html = output_path.read_text(encoding='utf-8')
         assert 'Full Player Board' in html
         assert 'Draft Controls' in html
-        assert 'Bayesian vs simple VOR' in html
+        assert 'Decision evidence' in html
+        assert 'Freshness and provenance' in html
         assert 'ffbayes-dashboard-state-v2' in html
         assert 'advance-button' not in html
         assert 'data-status-filter' not in html
@@ -516,6 +576,8 @@ def test_exported_dashboard_html_includes_undo_redo_state_helpers():
         )
 
         html = output_path.read_text(encoding='utf-8')
+        assert 'id="provenance-panel"' in html
+        assert 'Publish provenance will appear after `ffbayes publish-pages` stages this dashboard.' in html
         assert 'id="redo-button"' in html
         assert 'id="finalize-button"' in html
         assert 'redoHistory: []' in html

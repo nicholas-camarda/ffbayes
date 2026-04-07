@@ -4,12 +4,19 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Sequence
 
 DEFAULT_ANALYSIS_WINDOW_SIZE = 5
+STALE_OVERRIDE_ENV_VAR = 'FFBAYES_ALLOW_STALE_SEASON'
+
+
+def stale_data_override_enabled(env_var: str = STALE_OVERRIDE_ENV_VAR) -> bool:
+    """Return whether degraded freshness execution was explicitly requested."""
+    return os.getenv(env_var, 'false').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
 def get_analysis_years(reference_year: int | None = None, window_size: int = DEFAULT_ANALYSIS_WINDOW_SIZE) -> list[int]:
@@ -54,7 +61,23 @@ class AnalysisWindow:
         payload['latest_expected_year'] = self.latest_expected_year
         payload['latest_found_year'] = self.latest_found_year
         payload['is_fresh'] = self.is_fresh
+        payload['is_degraded'] = self.freshness_status != 'fresh'
+        payload['override_used'] = self.allow_stale
         return payload
+
+
+def build_freshness_status(window: AnalysisWindow) -> dict:
+    """Build a compact, UI-friendly freshness status record."""
+    return {
+        'status': window.freshness_status,
+        'is_fresh': window.is_fresh,
+        'is_degraded': window.freshness_status != 'fresh',
+        'override_used': bool(window.allow_stale),
+        'latest_expected_year': window.latest_expected_year,
+        'latest_found_year': window.latest_found_year,
+        'missing_years': list(window.missing_years),
+        'warnings': list(window.warnings),
+    }
 
 
 def resolve_analysis_window(
@@ -112,11 +135,16 @@ def build_freshness_manifest(
 ) -> dict:
     """Build a freshness manifest for a source tree."""
     found_files = list(found_files or [])
+    freshness = build_freshness_status(window)
     return {
         'generated_at': datetime.now().isoformat(timespec='seconds'),
         'source_name': source_name,
         'source_path': str(source_path) if source_path is not None else None,
         'source_updated_at': source_updated_at,
+        'freshness_status': freshness['status'],
+        'override_used': freshness['override_used'],
+        'is_fresh': freshness['is_fresh'],
+        'freshness': freshness,
         'analysis_window': window.to_dict(),
         'expected_years': list(window.expected_years),
         'found_years': list(window.found_years),

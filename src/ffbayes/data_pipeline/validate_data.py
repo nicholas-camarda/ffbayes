@@ -453,12 +453,13 @@ def check_data_completeness():
         build_freshness_manifest,
         get_analysis_years,
         resolve_analysis_window,
+        stale_data_override_enabled,
         write_freshness_manifest,
     )
     from ffbayes.utils.path_constants import RAW_DATA_DIR, SEASON_DATASETS_DIR
 
     current_year = datetime.now().year
-    allow_stale = os.getenv('FFBAYES_ALLOW_STALE_SEASON', 'false').lower() == 'true'
+    allow_stale = stale_data_override_enabled()
     expected_years = get_analysis_years(current_year)
     found_files = sorted(SEASON_DATASETS_DIR.glob('*season.csv'))
     found_years = [
@@ -468,7 +469,7 @@ def check_data_completeness():
     ]
 
     freshness_window = resolve_analysis_window(
-        found_years, reference_year=current_year, allow_stale=True
+        found_years, reference_year=current_year, allow_stale=allow_stale
     )
     write_freshness_manifest(
         build_freshness_manifest(
@@ -481,16 +482,20 @@ def check_data_completeness():
     )
 
     missing_years = [year for year in expected_years if year not in found_years]
+    if freshness_window.warnings:
+        for warning in freshness_window.warnings:
+            print(f'   ⚠️  {warning}')
     if missing_years:
         print(f'   ❌ Missing data for years: {missing_years}')
-        if freshness_window.latest_expected_year in missing_years and not allow_stale:
-            raise RuntimeError(
-                f'Missing latest expected season {freshness_window.latest_expected_year}. '
-                'Re-run with FFBAYES_ALLOW_STALE_SEASON=true only if you explicitly want to continue.'
+        if freshness_window.freshness_status == 'degraded':
+            print(
+                '   ⚠️  Continuing with degraded completeness because '
+                'FFBAYES_ALLOW_STALE_SEASON=true was explicitly set.'
             )
-        print(
-            '   ⚠️  Continuing with degraded completeness because older seasons are available'
-        )
+        else:
+            print(
+                '   ⚠️  Continuing with degraded completeness because older seasons are available'
+            )
     else:
         print('   ✅ All expected recent years available')
     return True

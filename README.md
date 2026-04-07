@@ -53,7 +53,7 @@ ffbayes draft-strategy --draft-position 10 --league-size 10 --risk-tolerance med
 
 ### Command Reference
 - `ffbayes collect`: downloads raw season data and refreshes the runtime season datasets.
-- `ffbayes validate`: checks the collected data for completeness and freshness.
+- `ffbayes validate`: checks the collected data for completeness and freshness, and fails closed if the latest expected season is missing unless you explicitly opt into degraded execution.
 - `ffbayes preprocess`: builds the analysis-ready combined dataset used by downstream models.
 - `ffbayes pre-draft`: runs the full pre-draft workflow, including collection, validation, preprocessing, VOR, hybrid modeling, draft-board generation, backtesting, and visualizations.
 - `ffbayes draft-strategy`: generates the draft board workbook, dashboard payload, HTML fallback, and compatibility JSON for the current league settings.
@@ -67,6 +67,8 @@ The module-level commands still work too, but the top-level CLI is the supported
 
 The collection step uses `nflreadpy` through a thin adapter that converts Polars frames to pandas before they reach the rest of the pipeline, so the collector output schema stays the same. The collector refreshes season files on each run instead of reusing older CSV output, and the latest-season freshness check is schema-aware rather than depending on backend-specific error text.
 
+Freshness policy: the supported `pre_draft` workflow now fails closed by default when the latest expected season is missing. If you intentionally want a degraded analysis window, set `FFBAYES_ALLOW_STALE_SEASON=true` for that run and expect the resulting manifests, dashboard payload, and Pages staging provenance to report the degraded state explicitly.
+
 The split pipeline runs collection in summary mode, so it shows the yearly collection summary without printing per-row progress. If you want the more verbose progress output, run `ffbayes collect` directly.
 
 Maintenance note: if nflverse changes the underlying Python loaders again, keep the adaptation logic inside `src/ffbayes/data_pipeline/nflverse_backend.py` so the rest of the pipeline stays pandas-first.
@@ -79,10 +81,11 @@ Maintenance note: if nflverse changes the underlying Python loaders again, keep 
 - Convenience dashboard shortcut (runtime): `~/ProjectsRuntime/ffbayes/dashboard/index.html`
 - Live dashboard: [nicholas-camarda.github.io/ffbayes](https://nicholas-camarda.github.io/ffbayes/) serving the staged dashboard from `site/index.html`
 - Decision backtest: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
+- Pages publish provenance: `site/publish_provenance.json` after `ffbayes publish-pages`
 
 ### Optional Publishing
 - `ffbayes publish --year <year>` copies selected runtime artifacts into the cloud mirror for long-term storage.
-- `ffbayes publish-pages --year <year>` stages the current dashboard HTML and payload into `site/` for GitHub Pages.
+- `ffbayes publish-pages --year <year>` stages the current dashboard HTML and payload into `site/` for GitHub Pages and records publish-time provenance for the staged dashboard.
 
 ## Dashboard Paths
 
@@ -104,6 +107,7 @@ Maintenance note: if nflverse changes the underlying Python loaders again, keep 
 - Use `dashboard/index.html` or `~/ProjectsRuntime/ffbayes/dashboard/index.html` for the live draft helper
 - Follow the pick-by-pick recommendations in the workbook
 - Use backup options if primary targets are gone
+- Review the dashboard's `Decision evidence` and `Freshness and provenance` panels before treating the board as trustworthy
 
 ### Step 5: After the Draft
 The supported CLI surface now stops at the pre-draft command center. Keep the runtime artifacts if you want a local audit trail, or mirror the supported pre-draft outputs with `ffbayes publish`.
@@ -203,6 +207,11 @@ The current pipeline steps are:
 - Dashboard payload: `dashboard_payload_<year>.json` for the local interactive dashboard
 - HTML fallback: `draft_board_<year>.html` for browser access without a notebook or app shell
 - Decision backtest: `draft_decision_backtest_<year_range>.json` comparing draft strategies on the same targets
+
+### Trust Surfaces
+- Decision evidence panel: the dashboard now summarizes internal holdout backtest evidence, season-level deltas, and interpretation limits as a dedicated decision-support surface
+- Freshness and provenance: runtime manifests and staged Pages payloads expose freshness status, missing years, and whether a degraded override was explicitly used
+- Publish-time provenance: `ffbayes publish-pages` records when the staged Pages site was generated and from which dashboard artifacts it was built
 
 ### How the Draft Score Works
 

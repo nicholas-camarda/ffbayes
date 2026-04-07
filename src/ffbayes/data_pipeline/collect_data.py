@@ -984,7 +984,9 @@ def main(args=None):
         )
 
     freshness_window = resolve_analysis_window(
-        found_years, reference_year=CURRENT_YEAR, allow_stale=True
+        found_years,
+        reference_year=CURRENT_YEAR,
+        allow_stale=args.allow_stale_season,
     )
     manifest = build_collection_manifest(
         years, successful_years, source_manifest=freshness_window.to_dict()

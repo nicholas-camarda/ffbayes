@@ -3,7 +3,7 @@
 .cursor
 .vscode
 .DS_Store
-._*
+.*
 .history/
 .idea/
 

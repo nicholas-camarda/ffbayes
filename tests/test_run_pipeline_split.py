@@ -12,24 +12,18 @@ def _load_step_map(config_name: str) -> dict[str, dict]:
     return {step['name']: step for step in config['steps']}
 
 
-def test_pipeline_configs_explicitly_allow_stale_season():
+def test_pipeline_configs_fail_closed_by_default():
     pre_steps = _load_step_map('pipeline_pre_draft.json')
 
-    assert pre_steps['data_collection']['args'] == '--allow-stale-season'
     assert (
         pre_steps['data_collection']['env']['FFBAYES_PROCESS_DATASET_PROGRESS']
         == 'summary'
     )
-    assert pre_steps['data_validation']['env']['FFBAYES_ALLOW_STALE_SEASON'] == 'true'
-    assert pre_steps['data_preprocessing']['env']['FFBAYES_ALLOW_STALE_SEASON'] == 'true'
-    assert (
-        pre_steps['create_unified_dataset']['env']['FFBAYES_ALLOW_STALE_SEASON']
-        == 'true'
-    )
-    assert (
-        pre_steps['draft_strategy_comparison']['env']['FFBAYES_ALLOW_STALE_SEASON']
-        == 'true'
-    )
+    assert 'args' not in pre_steps['data_collection']
+    assert 'env' not in pre_steps['data_validation']
+    assert 'env' not in pre_steps['data_preprocessing']
+    assert 'env' not in pre_steps['create_unified_dataset']
+    assert 'env' not in pre_steps['draft_strategy_comparison']
 
     config_root = Path(__file__).resolve().parents[1] / 'config'
     assert not (config_root / 'pipeline_post_draft.json').exists()

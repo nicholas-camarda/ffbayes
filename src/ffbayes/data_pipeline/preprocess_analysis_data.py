@@ -32,6 +32,7 @@ def create_analysis_dataset(path_to_data_directory):
         build_freshness_manifest,
         get_analysis_years,
         resolve_analysis_window,
+        stale_data_override_enabled,
         write_freshness_manifest,
     )
     from ffbayes.utils.path_constants import RAW_DATA_DIR, SEASON_DATASETS_DIR
@@ -44,7 +45,7 @@ def create_analysis_dataset(path_to_data_directory):
 
     current_year = datetime.now().year
     target_years = get_analysis_years(current_year)
-    allow_stale = os.getenv('FFBAYES_ALLOW_STALE_SEASON', 'false').lower() == 'true'
+    allow_stale = stale_data_override_enabled()
 
     # Filter files to only include the last 5 years
     filtered_files = []
@@ -65,7 +66,7 @@ def create_analysis_dataset(path_to_data_directory):
             for file in filtered_files
         ],
         reference_year=current_year,
-        allow_stale=True,
+        allow_stale=allow_stale,
     )
     freshness_manifest = build_freshness_manifest(
         freshness_window,
@@ -81,15 +82,13 @@ def create_analysis_dataset(path_to_data_directory):
         f'Using {len(filtered_files)} season files for last 5 years: {[os.path.basename(f) for f in filtered_files]}'
     )
     print(f'Target years: {target_years}')
-
-    if (
-        not allow_stale
-        and freshness_window.latest_expected_year is not None
-        and freshness_window.latest_expected_year not in freshness_window.found_years
-    ):
-        raise RuntimeError(
-            f'Missing latest expected season {freshness_window.latest_expected_year}. '
-            'Re-run with FFBAYES_ALLOW_STALE_SEASON=true only if you explicitly want a degraded window.'
+    if freshness_window.warnings:
+        for warning in freshness_window.warnings:
+            print(f'⚠️  {warning}')
+    if freshness_window.freshness_status == 'degraded':
+        print(
+            '⚠️  Proceeding with a degraded preprocessing window because '
+            'FFBAYES_ALLOW_STALE_SEASON=true was explicitly set.'
         )
 
     data_temp = pd.concat((pd.read_csv(f) for f in filtered_files), ignore_index=True)
