@@ -105,6 +105,35 @@ def test_refresh_dashboard_command_forwards_extra_arguments(monkeypatch):
     ]
 
 
+def test_refresh_dashboard_check_command_forwards_extra_arguments(monkeypatch):
+    captured = {}
+
+    def fake_import(module_name):
+        captured['module_name'] = module_name
+
+        def fake_main():
+            captured['argv'] = sys.argv[:]
+            return 0
+
+        return SimpleNamespace(main=fake_main)
+
+    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
+
+    exit_code = cli.main(
+        ['refresh-dashboard', '--year', '2026', '--check', '--json']
+    )
+
+    assert exit_code == 0
+    assert captured['module_name'] == 'ffbayes.refresh_dashboard'
+    assert captured['argv'] == [
+        'ffbayes.refresh_dashboard',
+        '--year',
+        '2026',
+        '--check',
+        '--json',
+    ]
+
+
 def test_refresh_dashboard_help_is_forwarded_to_module(monkeypatch):
     captured = {}
 

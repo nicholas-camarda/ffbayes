@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -21,13 +23,146 @@ from ffbayes.utils.path_constants import (
     get_dashboard_payload_path,
 )
 
+REQUIRED_PAYLOAD_KEYS = ('generated_at', 'league_settings', 'decision_table')
+
+
+def _validate_dashboard_payload(
+    payload: dict[str, Any], payload_path: Path
+) -> dict[str, Any]:
+    missing = [
+        key for key in REQUIRED_PAYLOAD_KEYS if key not in payload or payload.get(key) is None
+    ]
+    if missing:
+        raise ValueError(
+            f'Dashboard payload at {payload_path} is missing required keys: '
+            f'{", ".join(missing)}'
+        )
+    if not isinstance(payload.get('decision_table'), list):
+        raise ValueError(
+            f'Dashboard payload at {payload_path} has a non-list `decision_table`.'
+        )
+    if not isinstance(payload.get('league_settings'), dict):
+        raise ValueError(
+            f'Dashboard payload at {payload_path} has an invalid `league_settings` object.'
+        )
+    return payload
+
+
+def load_dashboard_payload(payload_path: Path | str) -> dict[str, Any]:
+    """Load and validate a dashboard payload."""
+    resolved_payload = Path(payload_path)
+    if not resolved_payload.exists():
+        raise FileNotFoundError(
+            f'Dashboard payload not found at {resolved_payload}. '
+            'Run `ffbayes draft-strategy` first.'
+        )
+    payload = json.loads(resolved_payload.read_text(encoding='utf-8'))
+    if not isinstance(payload, dict):
+        raise ValueError(
+            f'Dashboard payload at {resolved_payload} must be a JSON object.'
+        )
+    return _validate_dashboard_payload(payload, resolved_payload)
+
+
+def _generated_label_from_payload(payload: dict[str, Any]) -> str:
+    generated_at = payload.get('generated_at')
+    if generated_at:
+        try:
+            return datetime.fromisoformat(str(generated_at)).strftime('%Y-%m-%d %H:%M')
+        except Exception:
+            pass
+    return datetime.now().strftime('%Y-%m-%d %H:%M')
+
+
+def _render_dashboard_html_text(
+    payload: dict[str, Any],
+    output_html: Path,
+    year: int,
+) -> str:
+    league_settings = LeagueSettings.from_mapping(
+        {'league_settings': payload.get('league_settings', {})}
+    )
+    with tempfile.TemporaryDirectory(prefix='ffbayes-refresh-dashboard-') as tmpdir:
+        temp_path = Path(tmpdir) / output_html.name
+        export_dashboard_html(
+            pd.DataFrame(payload.get('decision_table', [])),
+            pd.DataFrame(payload.get('recommendation_summary', [])),
+            temp_path,
+            league_settings,
+            backtest=payload.get('backtest', {}),
+            source_freshness=pd.DataFrame(payload.get('source_freshness', [])),
+            dashboard_payload=payload,
+            generated_label=_generated_label_from_payload(payload),
+        )
+        return temp_path.read_text(encoding='utf-8')
+
+
+def check_dashboard_freshness(
+    year: int | None = None,
+    payload_path: Path | str | None = None,
+    output_html: Path | str | None = None,
+) -> dict[str, Any]:
+    """Check whether a dashboard HTML target matches regeneration from payload."""
+    resolved_year = year or datetime.now().year
+    resolved_payload = (
+        Path(payload_path)
+        if payload_path is not None
+        else get_dashboard_payload_path(resolved_year)
+    )
+    payload = load_dashboard_payload(resolved_payload)
+    resolved_output_html = (
+        Path(output_html)
+        if output_html is not None
+        else get_dashboard_html_path(resolved_year)
+    )
+
+    result: dict[str, Any] = {
+        'status': 'fresh',
+        'checked_paths': [str(resolved_output_html)],
+        'stale_paths': [],
+        'source_payload_path': str(resolved_payload),
+        'target_html_path': str(resolved_output_html),
+        'generated_at': payload.get('generated_at'),
+        'authoritative_paths': {
+            'payload': str(resolved_payload),
+            'target_html': str(resolved_output_html),
+        },
+        'mutated': False,
+    }
+
+    if not resolved_output_html.exists():
+        result['status'] = 'missing_target'
+        result['stale_paths'] = [str(resolved_output_html)]
+        return result
+
+    expected_html = _render_dashboard_html_text(
+        payload,
+        resolved_output_html,
+        resolved_year,
+    )
+    current_html = resolved_output_html.read_text(encoding='utf-8')
+    if current_html != expected_html:
+        result['status'] = 'stale'
+        result['stale_paths'] = [str(resolved_output_html)]
+    return result
+
+
+def _to_jsonable(value: Any) -> Any:
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _to_jsonable(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_to_jsonable(item) for item in value]
+    return value
+
 
 def refresh_runtime_dashboard(
     year: int | None = None,
     payload_path: Path | str | None = None,
     output_html: Path | str | None = None,
     stage_pages: bool = False,
-) -> dict[str, Path]:
+) -> dict[str, Any]:
     """Rebuild dashboard HTML from the current runtime payload only."""
     resolved_year = year or datetime.now().year
     resolved_payload = (
@@ -35,13 +170,7 @@ def refresh_runtime_dashboard(
         if payload_path is not None
         else get_dashboard_payload_path(resolved_year)
     )
-    if not resolved_payload.exists():
-        raise FileNotFoundError(
-            f'Dashboard payload not found at {resolved_payload}. '
-            'Run `ffbayes draft-strategy` first.'
-        )
-
-    payload = json.loads(resolved_payload.read_text(encoding='utf-8'))
+    payload = load_dashboard_payload(resolved_payload)
     league_settings = LeagueSettings.from_mapping(
         {'league_settings': payload.get('league_settings', {})}
     )
@@ -59,11 +188,16 @@ def refresh_runtime_dashboard(
         backtest=payload.get('backtest', {}),
         source_freshness=pd.DataFrame(payload.get('source_freshness', [])),
         dashboard_payload=payload,
+        generated_label=_generated_label_from_payload(payload),
     )
 
-    result: dict[str, Path] = {
+    result: dict[str, Any] = {
+        'status': 'refreshed',
         'source_payload_path': resolved_payload,
         'html_path': resolved_output_html,
+        'checked_paths': [str(resolved_output_html)],
+        'stale_paths': [],
+        'mutated': True,
     }
     result.update(
         _stage_runtime_dashboard_shortcuts(
@@ -78,9 +212,14 @@ def refresh_runtime_dashboard(
             source_payload=resolved_payload,
         )
         result.update(staged)
+        result['status'] = 'refreshed'
         result['staged_payload_path'] = staged['payload_path']
         result['staged_index_path'] = staged['index_path']
         result['staged_provenance_path'] = staged['provenance_path']
+        result['checked_paths'].extend(
+            [str(staged['index_path']), str(staged['payload_path'])]
+        )
+        result['stale_paths'] = [str(path) for path in staged.get('stale_paths', [])]
 
     return result
 
@@ -108,6 +247,16 @@ def build_parser() -> argparse.ArgumentParser:
         action='store_true',
         help='Also restage the GitHub Pages site from the refreshed HTML and payload',
     )
+    parser.add_argument(
+        '--check',
+        action='store_true',
+        help='Check whether the target HTML matches regeneration from the current payload without mutating files',
+    )
+    parser.add_argument(
+        '--json',
+        action='store_true',
+        help='Emit machine-readable JSON output',
+    )
     return parser
 
 
@@ -115,21 +264,59 @@ def main() -> int:
     """Entry point for lightweight dashboard refreshes."""
     parser = build_parser()
     args = parser.parse_args()
-    result = refresh_runtime_dashboard(
-        year=args.year,
-        payload_path=args.payload_path,
-        output_html=args.output_html,
-        stage_pages=args.stage_pages,
-    )
-    print(f'✅ Refreshed dashboard HTML at {result["html_path"]}')
-    print(f'   source payload: {result["source_payload_path"]}')
-    if 'runtime_dashboard_index' in result:
-        print(f'   runtime dashboard: {result["runtime_dashboard_index"]}')
-    if 'repo_dashboard_index' in result:
-        print(f'   repo dashboard: {result["repo_dashboard_index"]}')
-    if 'index_path' in result:
-        print(f'   staged pages: {result["staged_index_path"]}')
-    return 0
+    if args.check and args.stage_pages:
+        parser.error('--check cannot be combined with --stage-pages')
+
+    try:
+        if args.check:
+            result = check_dashboard_freshness(
+                year=args.year,
+                payload_path=args.payload_path,
+                output_html=args.output_html,
+            )
+            if args.json:
+                print(json.dumps(result, indent=2))
+            else:
+                symbol = '✅' if result['status'] == 'fresh' else '⚠️'
+                print(
+                    f'{symbol} Dashboard check status: {result["status"]}\n'
+                    f'   source payload: {result["source_payload_path"]}\n'
+                    f'   target html: {result["target_html_path"]}'
+                )
+                if result['stale_paths']:
+                    print('   stale paths:')
+                    for path in result['stale_paths']:
+                        print(f'   - {path}')
+            return 0 if result['status'] == 'fresh' else 1
+
+        result = refresh_runtime_dashboard(
+            year=args.year,
+            payload_path=args.payload_path,
+            output_html=args.output_html,
+            stage_pages=args.stage_pages,
+        )
+        if args.json:
+            print(json.dumps(_to_jsonable(result), indent=2))
+        else:
+            print(f'✅ Refreshed dashboard HTML at {result["html_path"]}')
+            print(f'   source payload: {result["source_payload_path"]}')
+            print(f'   checked paths: {", ".join(result["checked_paths"])}')
+            if result['stale_paths']:
+                print(f'   stale paths replaced: {", ".join(result["stale_paths"])}')
+            if 'runtime_dashboard_index' in result:
+                print(f'   runtime dashboard: {result["runtime_dashboard_index"]}')
+            if 'repo_dashboard_index' in result:
+                print(f'   repo dashboard: {result["repo_dashboard_index"]}')
+            if 'staged_index_path' in result:
+                print(f'   staged pages: {result["staged_index_path"]}')
+        return 0
+    except (FileNotFoundError, ValueError) as exc:
+        error_payload = {'status': 'error', 'error': str(exc), 'mutated': False}
+        if args.json:
+            print(json.dumps(error_payload, indent=2))
+        else:
+            print(f'Error: {exc}')
+        return 1
 
 
 if __name__ == '__main__':

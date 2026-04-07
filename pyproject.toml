@@ -53,6 +53,7 @@ ffbayes-draft-strategy = "ffbayes.draft_strategy.draft_decision_strategy:main"
 ffbayes-draft-backtest = "ffbayes.analysis.draft_decision_backtest:main"
 ffbayes-publish = "ffbayes.publish_artifacts:main"
 ffbayes-publish-pages = "ffbayes.publish_pages:main"
+ffbayes-refresh-dashboard = "ffbayes.refresh_dashboard:main"
 ffbayes-compare-strategies = "ffbayes.analysis.draft_strategy_comparison:main"
 ffbayes-bayesian-vor = "ffbayes.analysis.bayesian_vor_comparison:main"
 

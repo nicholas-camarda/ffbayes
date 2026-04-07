@@ -8,6 +8,7 @@ import json
 import shutil
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from ffbayes.utils.path_constants import (
     get_dashboard_html_path,
@@ -17,6 +18,18 @@ from ffbayes.utils.path_constants import (
 
 PAYLOAD_ASSIGNMENT_PREFIX = 'window.FFBAYES_DASHBOARD = '
 PAYLOAD_ASSIGNMENT_SUFFIX = ';\n\n    (() => {'
+
+
+def _normalized_json_text(payload: dict[str, Any]) -> str:
+    normalized = json.loads(json.dumps(payload, default=str))
+    if (
+        isinstance(normalized, dict)
+        and isinstance(normalized.get('publish_provenance'), dict)
+    ):
+        normalized['publish_provenance']['published_at'] = '<normalized>'
+    if isinstance(normalized, dict) and normalized.get('published_at') is not None:
+        normalized['published_at'] = '<normalized>'
+    return json.dumps(normalized, sort_keys=True, indent=2)
 
 
 def _build_publish_provenance(
@@ -86,9 +99,9 @@ def stage_pages_site(
         )
 
     index_path = resolved_output_dir / 'index.html'
-    if resolved_html.resolve() != index_path.resolve():
-        shutil.copy2(resolved_html, index_path)
-
+    existing_index_text = (
+        index_path.read_text(encoding='utf-8') if index_path.exists() else None
+    )
     payload_target = resolved_output_dir / 'dashboard_payload.json'
     provenance_target = resolved_output_dir / 'publish_provenance.json'
     resolved_payload = (
@@ -105,35 +118,57 @@ def stage_pages_site(
             resolved_html,
             resolved_payload,
         )
-        payload_target.write_text(
-            json.dumps(payload_data, default=str, indent=2),
-            encoding='utf-8',
-        )
-        provenance_target.write_text(
-            json.dumps(payload_data['publish_provenance'], default=str, indent=2),
-            encoding='utf-8',
+        staged_payload_text = json.dumps(payload_data, default=str, indent=2)
+        staged_provenance_text = json.dumps(
+            payload_data['publish_provenance'], default=str, indent=2
         )
     elif payload_target.exists():
         payload_target.unlink()
         if provenance_target.exists():
             provenance_target.unlink()
+        staged_payload_text = None
+        staged_provenance_text = None
+    else:
+        staged_payload_text = None
+        staged_provenance_text = None
+
+    staged_index_text = resolved_html.read_text(encoding='utf-8')
 
     if payload_data is not None:
-        html_text = index_path.read_text(encoding='utf-8')
-        index_path.write_text(
-            _inject_dashboard_payload_into_html(html_text, payload_data),
-            encoding='utf-8',
-        )
+        staged_index_text = _inject_dashboard_payload_into_html(staged_index_text, payload_data)
+
+    stale_paths: list[Path] = []
+    if existing_index_text is not None and existing_index_text != staged_index_text:
+        stale_paths.append(index_path)
+    index_path.write_text(staged_index_text, encoding='utf-8')
+
+    if staged_payload_text is not None:
+        if payload_target.exists():
+            existing_payload = payload_target.read_text(encoding='utf-8')
+            if _normalized_json_text(json.loads(existing_payload)) != _normalized_json_text(payload_data):
+                stale_paths.append(payload_target)
+        payload_target.write_text(staged_payload_text, encoding='utf-8')
+        if provenance_target.exists():
+            existing_provenance = json.loads(
+                provenance_target.read_text(encoding='utf-8')
+            )
+            if _normalized_json_text(existing_provenance) != _normalized_json_text(
+                payload_data['publish_provenance']
+            ):
+                stale_paths.append(provenance_target)
+        provenance_target.write_text(staged_provenance_text, encoding='utf-8')
 
     nojekyll_path = resolved_output_dir / '.nojekyll'
     nojekyll_path.write_text('\n', encoding='utf-8')
 
     return {
+        'status': 'staged',
         'site_dir': resolved_output_dir,
         'index_path': index_path,
         'payload_path': payload_target,
         'provenance_path': provenance_target,
         'nojekyll_path': nojekyll_path,
+        'stale_paths': list(dict.fromkeys(stale_paths)),
     }
 
 
@@ -179,6 +214,10 @@ def main() -> int:
         print(f'   payload: {result["payload_path"]}')
     if result['provenance_path'].exists():
         print(f'   provenance: {result["provenance_path"]}')
+    if result['stale_paths']:
+        print('   replaced stale paths:')
+        for path in result['stale_paths']:
+            print(f'   - {path}')
     return 0
 
 

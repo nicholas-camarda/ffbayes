@@ -3022,6 +3022,7 @@ def export_dashboard_html(
     backtest: dict[str, Any] | None = None,
     source_freshness: pd.DataFrame | None = None,
     dashboard_payload: dict[str, Any] | None = None,
+    generated_label: str | None = None,
 ) -> Path:
     """Write a local interactive HTML dashboard."""
     output_path = Path(output_path)
@@ -3041,7 +3042,18 @@ def export_dashboard_html(
         context=DraftContext(current_pick_number=league_settings.draft_position),
     )
     payload_json = json.dumps(payload, default=str)
-    generated_label = datetime.now().strftime('%Y-%m-%d %H:%M')
+    payload_generated_at = payload.get('generated_at')
+    resolved_generated_label = generated_label
+    if resolved_generated_label is None:
+        try:
+            if payload_generated_at:
+                resolved_generated_label = datetime.fromisoformat(
+                    str(payload_generated_at)
+                ).strftime('%Y-%m-%d %H:%M')
+        except Exception:
+            resolved_generated_label = None
+    if resolved_generated_label is None:
+        resolved_generated_label = datetime.now().strftime('%Y-%m-%d %H:%M')
     html = """
 <!DOCTYPE html>
 <html lang="en">
@@ -5250,7 +5262,7 @@ def export_dashboard_html(
 </html>
 """
     html = html.replace('__PAYLOAD_JSON__', payload_json).replace(
-        '__GENERATED_LABEL__', generated_label
+        '__GENERATED_LABEL__', resolved_generated_label
     )
 
     output_path.write_text(html, encoding='utf-8')
