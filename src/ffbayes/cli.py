@@ -112,6 +112,11 @@ COMMANDS: tuple[CommandSpec, ...] = (
         module='ffbayes.publish_pages',
         help_text='Stage the live dashboard for GitHub Pages.',
     ),
+    CommandSpec(
+        name='refresh-dashboard',
+        module='ffbayes.refresh_dashboard',
+        help_text='Regenerate dashboard HTML from the current runtime payload.',
+    ),
 )
 
 _COMMAND_BY_NAME = {spec.name: spec for spec in COMMANDS}
@@ -141,6 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
             '  ffbayes preprocess\n'
             '  ffbayes split\n'
             '  ffbayes draft-strategy --draft-position 10\n'
+            '  ffbayes refresh-dashboard --year 2025 --stage-pages\n'
             '  ffbayes publish --year 2025\n\n'
             '  ffbayes publish-pages --year 2025\n\n'
             'Any extra arguments after the command are forwarded to the existing '
@@ -153,6 +159,7 @@ def build_parser() -> argparse.ArgumentParser:
     for spec in COMMANDS:
         subparsers.add_parser(
             spec.name,
+            add_help=False,
             help=spec.help_text,
             aliases=list(spec.aliases),
             formatter_class=argparse.RawDescriptionHelpFormatter,

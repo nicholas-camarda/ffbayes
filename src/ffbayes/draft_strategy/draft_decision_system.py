@@ -3112,11 +3112,10 @@ def export_dashboard_html(
       gap: 16px;
     }
     .topbar, .panel {
-      background: var(--panel);
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.92));
       border: 1px solid var(--border);
       border-radius: 22px;
       box-shadow: var(--shadow);
-      backdrop-filter: blur(12px);
     }
     .topbar {
       padding: 20px 22px;

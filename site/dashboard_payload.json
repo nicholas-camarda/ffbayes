@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-04T18:35:49",
+  "generated_at": "2026-04-07T14:50:06",
   "league_settings": {
     "league_size": 10,
     "draft_position": 10,
@@ -110440,11 +110440,418 @@
     {
       "source_name": "snake-draft_ppr-0.5_vor_top-120_2026.csv",
       "source_updated_at": "2026-04-02 18:17:19.493081093",
-      "freshness_days": 2,
+      "freshness_days": 4,
       "row_count": 522,
       "missing_rate": 0.7241379310344828
     }
   ],
+  "analysis_provenance": {
+    "generated_at": "2026-04-07T14:48:05",
+    "overall_freshness": {
+      "status": "mixed",
+      "override_used": true,
+      "warnings": [],
+      "available_sources": [
+        "backtest_inputs",
+        "board_inputs",
+        "collection_inputs",
+        "preprocess_inputs",
+        "validation_inputs"
+      ]
+    },
+    "sources": {
+      "collection_inputs": {
+        "label": "collection_inputs",
+        "source_name": "collection_inputs",
+        "source_path": null,
+        "generated_at": null,
+        "status": "unknown",
+        "is_fresh": false,
+        "override_used": false,
+        "latest_expected_year": null,
+        "latest_found_year": null,
+        "missing_years": [],
+        "warnings": [],
+        "found_years": []
+      },
+      "validation_inputs": {
+        "label": "validation_inputs",
+        "source_name": "validate_data",
+        "source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/data/raw/season_datasets",
+        "generated_at": "2026-04-02T14:17:09",
+        "status": "fresh",
+        "is_fresh": true,
+        "override_used": true,
+        "latest_expected_year": 2025,
+        "latest_found_year": 2025,
+        "missing_years": [],
+        "warnings": [],
+        "found_years": [
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ]
+      },
+      "preprocess_inputs": {
+        "label": "preprocess_inputs",
+        "source_name": "season_datasets",
+        "source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/data/raw/season_datasets",
+        "generated_at": "2026-04-02T14:17:10",
+        "status": "fresh",
+        "is_fresh": true,
+        "override_used": true,
+        "latest_expected_year": 2025,
+        "latest_found_year": 2025,
+        "missing_years": [],
+        "warnings": [],
+        "found_years": [
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ]
+      },
+      "board_inputs": {
+        "label": "board_inputs",
+        "source_name": "combined_datasets",
+        "source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/data/processed/combined_datasets/2021-2025season_modern.csv",
+        "generated_at": "2026-04-02T14:17:24",
+        "status": "fresh",
+        "is_fresh": true,
+        "override_used": true,
+        "latest_expected_year": 2025,
+        "latest_found_year": 2025,
+        "missing_years": [],
+        "warnings": [],
+        "found_years": [
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ]
+      },
+      "backtest_inputs": {
+        "label": "backtest_inputs",
+        "source_name": "draft_backtest",
+        "source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/data/raw/season_datasets",
+        "generated_at": "2026-04-07T14:48:04",
+        "status": "fresh",
+        "is_fresh": true,
+        "override_used": false,
+        "latest_expected_year": 2025,
+        "latest_found_year": 2025,
+        "missing_years": [],
+        "warnings": [],
+        "found_years": [
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ]
+      }
+    },
+    "board_inputs": {
+      "label": "board_inputs",
+      "source_name": "combined_datasets",
+      "source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/data/processed/combined_datasets/2021-2025season_modern.csv",
+      "generated_at": "2026-04-02T14:17:24",
+      "status": "fresh",
+      "is_fresh": true,
+      "override_used": true,
+      "latest_expected_year": 2025,
+      "latest_found_year": 2025,
+      "missing_years": [],
+      "warnings": [],
+      "found_years": [
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ]
+    },
+    "backtest_inputs": {
+      "label": "backtest_inputs",
+      "source_name": "draft_backtest",
+      "source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/data/raw/season_datasets",
+      "generated_at": "2026-04-07T14:48:04",
+      "status": "fresh",
+      "is_fresh": true,
+      "override_used": false,
+      "latest_expected_year": 2025,
+      "latest_found_year": 2025,
+      "missing_years": [],
+      "warnings": [],
+      "found_years": [
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ]
+    }
+  },
+  "decision_evidence": {
+    "available": true,
+    "status": "available",
+    "headline": "Contextual draft score outperforms the simple VOR proxy in backtests.",
+    "reason_unavailable": null,
+    "evaluation_scope": {
+      "forecast_target": "held_out_season_fantasy_points",
+      "decision_target": "snake_draft_lineup_points",
+      "primary_objective": "starter_lineup_points",
+      "wait_policy": "conservative",
+      "draft_score_label": "posterior_contextual_policy",
+      "eligible_positions": [
+        "QB",
+        "RB",
+        "WR",
+        "TE",
+        "DST",
+        "K"
+      ],
+      "eligible_player_universe": {
+        "raw_player_count": 195364,
+        "eligible_player_count": 72852,
+        "removed_blank_name_count": 220,
+        "removed_unknown_name_count": 0,
+        "removed_non_fantasy_position_count": 122512,
+        "eligible_positions": [
+          "QB",
+          "RB",
+          "WR",
+          "TE",
+          "DST",
+          "K"
+        ]
+      }
+    },
+    "freshness": {
+      "label": "backtest_inputs",
+      "source_name": "draft_backtest",
+      "source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/data/raw/season_datasets",
+      "generated_at": "2026-04-07T14:48:04",
+      "status": "fresh",
+      "is_fresh": true,
+      "override_used": false,
+      "latest_expected_year": 2025,
+      "latest_found_year": 2025,
+      "missing_years": [],
+      "warnings": [],
+      "found_years": [
+        2021,
+        2022,
+        2023,
+        2024,
+        2025
+      ]
+    },
+    "strategy_summary": [
+      {
+        "strategy": "draft_score",
+        "mean_lineup_points": 101.93671943496247,
+        "median_lineup_points": 108.43545665634674,
+        "season_count": 3
+      },
+      {
+        "strategy": "market",
+        "mean_lineup_points": 87.37591910331383,
+        "median_lineup_points": 83.2495056022409,
+        "season_count": 3
+      },
+      {
+        "strategy": "historical_vor_proxy",
+        "mean_lineup_points": 82.25429377774502,
+        "median_lineup_points": 84.10162549756747,
+        "season_count": 3
+      },
+      {
+        "strategy": "consensus",
+        "mean_lineup_points": 41.52395537864268,
+        "median_lineup_points": 38.74494736842105,
+        "season_count": 3
+      }
+    ],
+    "season_rows": [
+      {
+        "holdout_year": 2023,
+        "draft_score_lineup_points": 86.83251012145749,
+        "historical_vor_proxy_lineup_points": 84.10162549756747,
+        "delta_lineup_points": 2.73088462389002,
+        "winner": "draft_score"
+      },
+      {
+        "holdout_year": 2024,
+        "draft_score_lineup_points": 110.54219152708318,
+        "historical_vor_proxy_lineup_points": 89.74802054154995,
+        "delta_lineup_points": 20.794170985533228,
+        "winner": "draft_score"
+      },
+      {
+        "holdout_year": 2025,
+        "draft_score_lineup_points": 108.43545665634674,
+        "historical_vor_proxy_lineup_points": 72.91323529411764,
+        "delta_lineup_points": 35.522221362229104,
+        "winner": "draft_score"
+      }
+    ],
+    "top_disagreements": [
+      {
+        "player_name": "Joe Flacco",
+        "position": "QB",
+        "draft_rank": 156,
+        "simple_vor_rank": 355,
+        "rank_gap_vs_vor": 199,
+        "draft_score": 0.26621453641415493,
+        "replacement_delta": -153.8,
+        "availability_at_pick": 1.0,
+        "why_flags": "market_discount|upside_play"
+      },
+      {
+        "player_name": "Spencer Rattler",
+        "position": "QB",
+        "draft_rank": 126,
+        "simple_vor_rank": 306,
+        "rank_gap_vs_vor": 180,
+        "draft_score": 0.5382390396859013,
+        "replacement_delta": -122.0,
+        "availability_at_pick": 1.0,
+        "why_flags": "market_discount|upside_play"
+      },
+      {
+        "player_name": "Dontayvion Wicks",
+        "position": "WR",
+        "draft_rank": 212,
+        "simple_vor_rank": 303,
+        "rank_gap_vs_vor": 91,
+        "draft_score": -0.09199468176829467,
+        "replacement_delta": -119.15,
+        "availability_at_pick": 1.0,
+        "why_flags": "market_discount|upside_play"
+      },
+      {
+        "player_name": "Isaac TeSlaa",
+        "position": "WR",
+        "draft_rank": 209,
+        "simple_vor_rank": 299,
+        "rank_gap_vs_vor": 90,
+        "draft_score": -0.0693411984705704,
+        "replacement_delta": -116.65,
+        "availability_at_pick": 1.0,
+        "why_flags": "market_discount|upside_play"
+      },
+      {
+        "player_name": "Adonai Mitchell",
+        "position": "WR",
+        "draft_rank": 211,
+        "simple_vor_rank": 301,
+        "rank_gap_vs_vor": 90,
+        "draft_score": -0.07644840840592798,
+        "replacement_delta": -117.5,
+        "availability_at_pick": 1.0,
+        "why_flags": "market_discount|upside_play"
+      },
+      {
+        "player_name": "Christian Watson",
+        "position": "WR",
+        "draft_rank": 217,
+        "simple_vor_rank": 307,
+        "rank_gap_vs_vor": 90,
+        "draft_score": -0.11603426829243045,
+        "replacement_delta": -122.0,
+        "availability_at_pick": 1.0,
+        "why_flags": "market_discount|upside_play"
+      },
+      {
+        "player_name": "Jamari Thrash",
+        "position": "WR",
+        "draft_rank": 215,
+        "simple_vor_rank": 304,
+        "rank_gap_vs_vor": 89,
+        "draft_score": -0.10544467265707991,
+        "replacement_delta": -120.7,
+        "availability_at_pick": 1.0,
+        "why_flags": "market_discount|upside_play"
+      },
+      {
+        "player_name": "KaVontae Turpin",
+        "position": "WR",
+        "draft_rank": 220,
+        "simple_vor_rank": 309,
+        "rank_gap_vs_vor": 89,
+        "draft_score": -0.12147101055904852,
+        "replacement_delta": -122.60000000000001,
+        "availability_at_pick": 1.0,
+        "why_flags": "market_discount|upside_play"
+      },
+      {
+        "player_name": "Malik Washington",
+        "position": "WR",
+        "draft_rank": 223,
+        "simple_vor_rank": 312,
+        "rank_gap_vs_vor": 89,
+        "draft_score": -0.13761206347395247,
+        "replacement_delta": -124.25,
+        "availability_at_pick": 1.0,
+        "why_flags": "market_discount|upside_play"
+      },
+      {
+        "player_name": "Dont'e Thornton Jr.",
+        "position": "WR",
+        "draft_rank": 225,
+        "simple_vor_rank": 314,
+        "rank_gap_vs_vor": 89,
+        "draft_score": -0.1447190728685287,
+        "replacement_delta": -125.10000000000001,
+        "availability_at_pick": 1.0,
+        "why_flags": "market_discount|upside_play"
+      },
+      {
+        "player_name": "Jalen Nailor",
+        "position": "WR",
+        "draft_rank": 229,
+        "simple_vor_rank": 315,
+        "rank_gap_vs_vor": 86,
+        "draft_score": -0.16844733458961872,
+        "replacement_delta": -127.85000000000001,
+        "availability_at_pick": 1.0,
+        "why_flags": "market_discount|upside_play"
+      },
+      {
+        "player_name": "Devaughn Vele",
+        "position": "WR",
+        "draft_rank": 233,
+        "simple_vor_rank": 318,
+        "rank_gap_vs_vor": 85,
+        "draft_score": -0.18158606498764546,
+        "replacement_delta": -129.3,
+        "availability_at_pick": 1.0,
+        "why_flags": "market_discount|upside_play"
+      }
+    ],
+    "winner": "draft_score",
+    "delta_mean_lineup_points": 19.68242565721745,
+    "season_count": 3,
+    "holdout_years": [
+      2023,
+      2024,
+      2025
+    ],
+    "limitations": [
+      "This comparison is based on internal historical holdout seasons, not a live external validation set.",
+      "The dashboard keeps the contextual draft score as a decision policy layered on posterior projections, not a pure posterior rank list.",
+      "Treat internal holdout backtests as directional decision evidence, not external validation."
+    ],
+    "interpretation_guidance": [
+      "Use this panel to judge whether the board has internal evidence, not to treat it as externally validated truth.",
+      "Freshness state applies to the evidence source, so degraded freshness weakens confidence even when a winner is shown."
+    ]
+  },
   "backtest": {
     "model_type": "draft_decision_backtest",
     "evaluation_scope": {
@@ -111410,16 +111817,23 @@
   "publish_provenance": {
     "schema_version": "publish_provenance_v1",
     "season_year": 2026,
-    "published_at": "2026-04-07T13:06:29",
-    "dashboard_generated_at": "2026-04-04T18:35:49",
+    "published_at": "2026-04-07T14:59:42",
+    "dashboard_generated_at": "2026-04-07T14:50:06",
     "source_html": "draft_board_2026.html",
     "source_payload": "dashboard_payload_2026.json",
     "analysis_freshness": {
-      "status": "unknown",
-      "override_used": false,
-      "warnings": []
+      "status": "mixed",
+      "override_used": true,
+      "warnings": [],
+      "available_sources": [
+        "backtest_inputs",
+        "board_inputs",
+        "collection_inputs",
+        "preprocess_inputs",
+        "validation_inputs"
+      ]
     },
-    "override_used": false,
+    "override_used": true,
     "warnings": []
   }
 }
