@@ -65,10 +65,7 @@ REPO_DASHBOARD_DIR = BASE_DIR / 'dashboard'
 SIDE_PROJECTS_ROOT_DIR = get_cloud_root()
 CLOUD_RAW_DATA_DIR = get_cloud_root() / 'data' / 'raw'
 CLOUD_PROCESSED_DATA_DIR = get_cloud_root() / 'data' / 'processed'
-CLOUD_RESULTS_DIR = get_cloud_root() / 'results'
-CLOUD_PLOTS_DIR = get_cloud_root() / 'plots'
-CLOUD_DASHBOARD_DIR = get_cloud_root() / 'dashboard'
-CLOUD_DOCS_IMAGES_DIR = get_cloud_root() / 'docs' / 'images'
+CLOUD_ANALYSIS_DIR = get_cloud_root() / 'Analysis'
 PAGES_SITE_DIR = BASE_DIR / 'site'
 SRC_DIR = BASE_DIR / 'src'
 CONFIG_DIR = BASE_DIR / 'config'
@@ -142,24 +139,6 @@ def get_results_dir(year: int = None) -> Path:
     return path
 
 
-def get_cloud_dashboard_dir(year: int = None) -> Path:
-    """Get published dashboard directory for a specific year."""
-    if year is None:
-        from datetime import datetime
-
-        year = datetime.now().year
-    path = CLOUD_DASHBOARD_DIR / str(year)
-    ensure_dir_exists(path)
-    return path
-
-
-def get_cloud_pre_draft_dashboard_dir(year: int = None) -> Path:
-    """Get published pre-draft dashboard directory."""
-    path = get_cloud_dashboard_dir(year) / 'pre_draft'
-    ensure_dir_exists(path)
-    return path
-
-
 def get_pre_draft_dir(year: int = None) -> Path:
     """Get the canonical pre-draft output directory."""
     return get_pre_draft_artifacts_dir(year)
@@ -168,24 +147,6 @@ def get_pre_draft_dir(year: int = None) -> Path:
 def get_pre_draft_analysis_dir(year: int = None) -> Path:
     """Get pre-draft analysis directory (for features CSVs, etc.)."""
     path = get_pre_draft_dir(year) / 'analysis'
-    ensure_dir_exists(path)
-    return path
-
-
-def get_cloud_results_dir(year: int = None) -> Path:
-    """Get published results directory for a specific year."""
-    if year is None:
-        from datetime import datetime
-
-        year = datetime.now().year
-    path = CLOUD_RESULTS_DIR / str(year)
-    ensure_dir_exists(path)
-    return path
-
-
-def get_cloud_pre_draft_dir(year: int = None) -> Path:
-    """Get published pre-draft results directory."""
-    path = get_cloud_results_dir(year) / 'pre_draft'
     ensure_dir_exists(path)
     return path
 
@@ -322,30 +283,39 @@ def get_pre_draft_plots_dir(year: int = None) -> Path:
     return get_pre_draft_diagnostics_dir(year)
 
 
-def get_cloud_plots_dir(year: int = None) -> Path:
-    """Get published plots directory for a specific year."""
-    if year is None:
+def get_cloud_analysis_root() -> Path:
+    """Get the cloud root for dated analysis snapshots."""
+    ensure_dir_exists(CLOUD_ANALYSIS_DIR)
+    return CLOUD_ANALYSIS_DIR
+
+
+def get_cloud_analysis_snapshot_dir(snapshot_id: str | None = None) -> Path:
+    """Get the dated cloud snapshot directory for a publish event."""
+    if snapshot_id is None:
         from datetime import datetime
 
-        year = datetime.now().year
-    path = CLOUD_PLOTS_DIR / str(year)
+        snapshot_id = datetime.now().strftime('%Y-%m-%d')
+    path = get_cloud_analysis_root() / snapshot_id
     ensure_dir_exists(path)
     return path
 
 
-def get_cloud_pre_draft_plots_dir(year: int = None) -> Path:
-    """Get published pre-draft plots directory."""
-    path = get_cloud_plots_dir(year) / 'pre_draft'
+def get_cloud_data_dir() -> Path:
+    """Get the cloud root for stable published data."""
+    path = get_cloud_root() / 'data'
     ensure_dir_exists(path)
     return path
 
 
 # Team files
 def get_teams_dir() -> Path:
-    """Get teams directory."""
-    path = RAW_DATA_DIR / 'my_ff_teams'
-    ensure_dir_exists(path)
-    return path
+    """Return the deprecated legacy team-file directory.
+
+    Legacy analyses still call this helper, but new workflows should prefer
+    explicit `--team-file` inputs or finalized draft artifacts instead of an
+    implicit team-file home.
+    """
+    return RAW_DATA_DIR / 'my_ff_teams'
 
 
 def get_logs_dir() -> Path:
@@ -374,14 +344,8 @@ def get_raw_combined_datasets_dir() -> Path:
     return RAW_COMBINED_DATASETS_DIR
 
 
-def get_cloud_docs_images_dir() -> Path:
-    """Get cloud-published documentation image directory."""
-    ensure_dir_exists(CLOUD_DOCS_IMAGES_DIR)
-    return CLOUD_DOCS_IMAGES_DIR
-
-
 def get_default_team_file() -> Path:
-    """Get default team file path."""
+    """Return the deprecated legacy default team file path."""
     from datetime import datetime
 
     current_year = datetime.now().year
@@ -529,8 +493,6 @@ def create_all_required_directories(year: int = None) -> None:
     ensure_dir_exists(get_draft_strategy_comparison_dir(year))
     ensure_dir_exists(get_validation_dir(year))
 
-    # Team directory
-    ensure_dir_exists(get_teams_dir())
     ensure_dir_exists(get_misc_datasets_dir())
 
     print(f'✅ All required directories created for year {year}')

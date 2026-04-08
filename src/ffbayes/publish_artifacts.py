@@ -21,7 +21,11 @@ def main() -> int:
 
     results = manage_visualizations(args.year, phase='pre_draft')
     print(
-        f'✅ Published {len(results["copied_files"])} files for {args.year} (pre_draft)'
+        '✅ Published '
+        f'{len(results["synced_data_files"])} stable data files and '
+        f'{len(results["published_snapshot_files"])} analysis snapshot files '
+        f'for {args.year} (pre_draft)\n'
+        f'   Snapshot: {results["snapshot_dir"]}'
     )
     return 0
 

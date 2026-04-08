@@ -1,4 +1,5 @@
 import importlib
+from datetime import datetime
 
 from ffbayes.utils.visualization_manager import manage_visualizations
 
@@ -69,6 +70,43 @@ def test_manage_visualizations_publishes_selected_phase(tmp_path, monkeypatch):
         runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'artifacts'
     )
     pre_draft_artifact_dir.mkdir(parents=True, exist_ok=True)
+    (runtime_root / 'data' / 'raw' / 'season_datasets').mkdir(parents=True, exist_ok=True)
+    (runtime_root / 'data' / 'raw' / 'season_datasets' / '2025season.csv').write_text(
+        'Name,Season\nPatrick Mahomes,2025\n', encoding='utf-8'
+    )
+    (runtime_root / 'data' / 'raw' / 'collection_manifest.json').write_text(
+        '{"ok": true}', encoding='utf-8'
+    )
+    (runtime_root / 'data' / 'processed' / 'combined_datasets').mkdir(
+        parents=True, exist_ok=True
+    )
+    (
+        runtime_root
+        / 'data'
+        / 'processed'
+        / 'combined_datasets'
+        / '2021-2025season_modern.csv'
+    ).write_text('Name,Season\nPatrick Mahomes,2025\n', encoding='utf-8')
+    (runtime_root / 'data' / 'processed' / 'snake_draft_datasets').mkdir(
+        parents=True, exist_ok=True
+    )
+    (
+        runtime_root
+        / 'data'
+        / 'processed'
+        / 'snake_draft_datasets'
+        / 'snake-draft_ppr-0.5.csv'
+    ).write_text('Name,VOR\nPatrick Mahomes,10\n', encoding='utf-8')
+    (runtime_root / 'data' / 'processed' / 'unified_dataset').mkdir(
+        parents=True, exist_ok=True
+    )
+    (
+        runtime_root / 'data' / 'processed' / 'unified_dataset' / 'unified_dataset.csv'
+    ).write_text('Name,Season\nPatrick Mahomes,2025\n', encoding='utf-8')
+    (
+        runtime_root / 'data' / 'processed' / 'unified_dataset' / 'unified_dataset.json'
+    ).write_text('{"rows": 1}', encoding='utf-8')
+
     (pre_draft_artifact_dir / 'vor_strategy' / 'example.json').parent.mkdir(
         parents=True, exist_ok=True
     )
@@ -80,6 +118,9 @@ def test_manage_visualizations_publishes_selected_phase(tmp_path, monkeypatch):
     )
     (pre_draft_artifact_dir / 'draft_strategy' / f'dashboard_payload_{current_year}.json').write_text(
         '{"ok": true}', encoding='utf-8'
+    )
+    (pre_draft_artifact_dir / 'draft_strategy' / f'draft_board_{current_year}.html').write_text(
+        '<html><body>dashboard</body></html>', encoding='utf-8'
     )
 
     pre_draft_plot_dir = (
@@ -99,51 +140,45 @@ def test_manage_visualizations_publishes_selected_phase(tmp_path, monkeypatch):
 
     assert result['readme_updated'] is False
     assert result['phase'] == 'pre_draft'
-    assert len(result['copied_files']) >= 4
+    assert len(result['copied_files']) >= 8
 
+    snapshot_dir = cloud_root / 'Analysis' / datetime.now().strftime('%Y-%m-%d')
+    assert result['snapshot_dir'] == str(snapshot_dir)
+
+    assert (cloud_root / 'data' / 'raw' / 'season_datasets' / '2025season.csv').exists()
     assert (
-        cloud_root
-        / 'results'
-        / str(current_year)
-        / 'pre_draft'
-        / 'vor_strategy'
-        / 'example.json'
+        cloud_root / 'data' / 'raw' / 'manifests' / f'collection_manifest_{current_year}.json'
     ).exists()
     assert (
         cloud_root
-        / 'plots'
-        / str(current_year)
-        / 'pre_draft'
-        / 'visualizations'
-        / 'chart.png'
+        / 'data'
+        / 'processed'
+        / 'combined_datasets'
+        / '2021-2025season_modern.csv'
     ).exists()
     assert (
-        cloud_root
-        / 'dashboard'
-        / str(current_year)
-        / 'pre_draft'
-        / 'dashboard_payload.json'
+        cloud_root / 'data' / 'processed' / 'unified_dataset' / f'unified_dataset_{current_year}.csv'
     ).exists()
     assert (
-        cloud_root
-        / 'dashboard'
-        / str(current_year)
-        / 'pre_draft'
-        / f'dashboard_payload_{current_year}.json'
+        cloud_root / 'data' / 'processed' / 'unified_dataset' / f'unified_dataset_{current_year}.json'
     ).exists()
+    assert (snapshot_dir / 'vor_strategy' / 'example.json').exists()
+    assert (snapshot_dir / 'diagnostics' / 'visualizations' / 'chart.png').exists()
+    assert (snapshot_dir / 'dashboard' / 'dashboard_payload.json').exists()
+    assert (snapshot_dir / 'dashboard' / 'index.html').exists()
     assert not (
-        cloud_root
+        snapshot_dir
         / 'dashboard'
-        / str(current_year)
-        / 'pre_draft'
         / 'notes.txt'
     ).exists()
     assert not (
-        cloud_root
+        snapshot_dir
         / 'dashboard'
-        / str(current_year)
-        / 'pre_draft'
         / f'draft_board_{current_year}.xlsx'
     ).exists()
-    assert (cloud_root / 'docs' / 'images' / 'pre_draft_chart.png').exists()
+    assert not (snapshot_dir / 'data').exists()
+    assert not (snapshot_dir / 'runs').exists()
+    assert not (cloud_root / 'results').exists()
+    assert not (cloud_root / 'plots').exists()
+    assert not (cloud_root / 'docs').exists()
     assert not (tmp_path / 'workspace' / 'docs' / 'images').exists()

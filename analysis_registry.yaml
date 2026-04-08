@@ -1,0 +1,12 @@
+project_type: sideproject
+runtime_home: ~/ProjectsRuntime/ffbayes
+cloud_home: ~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes
+publish_root_name: Analysis
+publish_layout: split-data-flat-analysis-v1
+publish_denylist:
+  - datasets/**
+  - dashboard/dashboard_payload_*.json
+  - dashboard/draft_board_*.html
+  - runs/**/pre_draft/artifacts/draft_strategy/draft_board_*.json
+  - runs/**/pre_draft/artifacts/draft_strategy/finalized_drafts/*_test.*
+  - data/processed/unified_dataset/unified_dataset.xlsx

@@ -67,3 +67,20 @@ def test_get_cloud_root_defaults_to_side_projects(monkeypatch):
     )
 
     assert path_constants.get_cloud_root() == expected
+
+
+def test_cloud_publish_paths_use_top_level_data_and_dated_analysis(monkeypatch, tmp_path):
+    monkeypatch.delenv('FFBAYES_CLOUD_ROOT', raising=False)
+    monkeypatch.setattr(
+        path_constants,
+        'CLOUD_ANALYSIS_DIR',
+        tmp_path / 'cloud' / 'Analysis',
+        raising=False,
+    )
+    monkeypatch.setattr(path_constants, 'BASE_DIR', tmp_path / 'project', raising=False)
+
+    snapshot_dir = path_constants.get_cloud_analysis_snapshot_dir('2026-04-08')
+    data_dir = path_constants.get_cloud_data_dir()
+
+    assert snapshot_dir == tmp_path / 'cloud' / 'Analysis' / '2026-04-08'
+    assert data_dir == path_constants.get_cloud_root() / 'data'

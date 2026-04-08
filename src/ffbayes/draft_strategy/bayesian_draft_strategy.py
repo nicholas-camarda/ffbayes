@@ -1174,11 +1174,13 @@ def generate_team_file_for_monte_carlo(draft_strategy: Dict[str, Any], output_di
     # CRITICAL: In production mode, require real team file from draft
     # Only in QUICK_TEST mode allow fallback to test team file
     
-    # First check for real team file (from actual draft)
-    from ffbayes.utils.path_constants import get_default_team_file, get_teams_dir
-    real_team_file = get_teams_dir() / f'drafted_team_{draft_year}.tsv'
-    
-    if real_team_file.exists():
+    # First check for an explicit real team file (from actual draft)
+    from ffbayes.utils.path_constants import get_default_team_file
+
+    explicit_team_file = os.getenv('TEAM_FILE')
+    real_team_file = Path(explicit_team_file) if explicit_team_file else None
+
+    if real_team_file is not None and real_team_file.exists():
         # Use real team from actual draft
         team_file_path = real_team_file
         print(f"✅ Using real draft team file: {team_file_path}")
@@ -1196,10 +1198,9 @@ def generate_team_file_for_monte_carlo(draft_strategy: Dict[str, Any], output_di
     else:
         # Production mode: fail if no real team file exists
         raise FileNotFoundError(
-            f"Real team file not found: {real_team_file}. "
-            "Production pipeline requires actual draft team file. "
-            "No draft has occurred yet or team file is missing. "
-            "Run the draft first or check team file location."
+            'Real team file not provided. '
+            'Set TEAM_FILE to the drafted roster TSV before Monte Carlo validation. '
+            'Legacy implicit my_ff_teams defaults are no longer supported.'
         )
     
     # Copy the team file into the canonical Monte Carlo results directory for validation

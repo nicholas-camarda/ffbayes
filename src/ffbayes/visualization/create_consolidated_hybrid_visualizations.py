@@ -478,15 +478,6 @@ class ConsolidatedHybridVisualizer:
         fig.savefig(chart_path, dpi=300, bbox_inches='tight')
         print(f"✅ Saved: {chart_path}")
         
-        # Also save to the published cloud docs tree
-        from ffbayes.utils.path_constants import get_cloud_docs_images_dir
-
-        docs_dir = get_cloud_docs_images_dir() / 'hybrid_visualizations'
-        docs_dir.mkdir(parents=True, exist_ok=True)
-        docs_path = docs_dir / 'vor_validation_chart.png'
-        fig.savefig(docs_path, dpi=300, bbox_inches='tight')
-        print(f"✅ Saved to docs: {docs_path}")
-        
         plt.close(fig)
         
     def save_visualizations(self):
@@ -504,20 +495,10 @@ class ConsolidatedHybridVisualizer:
         fig.savefig(essential_path, dpi=300, bbox_inches='tight')
         print(f"✅ Saved: {essential_path}")
         
-        # Also save to the published cloud docs tree
-        from ffbayes.utils.path_constants import get_cloud_docs_images_dir
-
-        docs_dir = get_cloud_docs_images_dir() / 'hybrid_visualizations'
-        docs_dir.mkdir(parents=True, exist_ok=True)
-        docs_path = docs_dir / 'essential_insights_chart.png'
-        fig.savefig(docs_path, dpi=300, bbox_inches='tight')
-        print(f"✅ Saved to docs: {docs_path}")
-        
         plt.close(fig)
         
         print("🎉 Essential visualization creation completed!")
         print(f"📁 Results saved to: {output_dir}")
-        print("📚 Also saved to docs for static documentation")
         print("✨ Comprehensive uncertainty analysis completed!")
 
 

@@ -9,7 +9,7 @@ A fantasy football analytics system that combines Monte Carlo simulations, Bayes
 - This is the GitHub Pages view of the dashboard for repo browsers.
 - Local draft users should run `ffbayes draft-strategy` and open the generated `dashboard/index.html` shortcut instead.
 - The local dashboard shortcut is created by `ffbayes draft-strategy`; it will not exist in a fresh clone until that command runs.
-- Local runtime outputs live under `~/ProjectsRuntime/ffbayes/` by default.
+- Runtime outputs are written under the configured runtime root.
 - If you need a different runtime root, set `FFBAYES_RUNTIME_ROOT` explicitly before running the CLI.
 
 ## Quick Start
@@ -76,25 +76,35 @@ The split pipeline runs collection in summary mode, so it shows the yearly colle
 Maintenance note: if nflverse changes the underlying Python loaders again, keep the adaptation logic inside `src/ffbayes/data_pipeline/nflverse_backend.py` so the rest of the pipeline stays pandas-first.
 
 ### Outputs
-- Draft board workbook: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
-- Dashboard payload: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
-- HTML dashboard: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
-- Canonical finalized draft bundle folder: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/finalized_drafts/`
+- Draft board workbook: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
+- Dashboard payload: `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
+- HTML dashboard: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
+- Canonical finalized draft bundle folder: `runs/<year>/pre_draft/artifacts/draft_strategy/finalized_drafts/`
 - Convenience dashboard shortcut (repo root): `dashboard/index.html`
-- Convenience dashboard shortcut (runtime): `~/ProjectsRuntime/ffbayes/dashboard/index.html`
+- Convenience dashboard shortcut (runtime): `dashboard/index.html` under the configured runtime root
 - Live dashboard: [nicholas-camarda.github.io/ffbayes](https://nicholas-camarda.github.io/ffbayes/) serving the staged dashboard from `site/index.html`
-- Decision backtest: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
-- Draft retrospective JSON: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_retrospective_<year>.json`
-- Draft retrospective HTML: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_retrospective_<year>.html`
+- Decision backtest: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
+- Draft retrospective JSON: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_retrospective_<year>.json`
+- Draft retrospective HTML: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_retrospective_<year>.html`
 - Pages publish provenance: `site/publish_provenance.json` after `ffbayes publish-pages`
 
 ### Optional Publishing
-- `ffbayes publish --year <year>` copies selected runtime artifacts into the cloud mirror for long-term storage.
+- `ffbayes publish --year <year>` syncs stable datasets into cloud `data/` and publishes a dated flat analysis snapshot under `Analysis/<date>/`.
 - `ffbayes refresh-dashboard --year <year>` refreshes the runtime dashboard HTML from the current payload when template code changes but the payload is still authoritative.
 - `ffbayes refresh-dashboard --check --json --payload-path <payload> --output-html <html>` reports whether a dashboard HTML target is fresh or stale relative to regeneration from the specified payload.
 - `ffbayes publish-pages --year <year>` stages the current dashboard HTML and payload into `site/` for GitHub Pages and records publish-time provenance for the staged dashboard.
 - `ffbayes draft-retrospective --import-finalized <downloaded-files...> --ingest-only --year <year>` copies browser-downloaded finalized draft artifacts into the canonical runtime `finalized_drafts/` folder without rerunning draft modeling.
-- `ffbayes draft-retrospective --year <year> --outcomes-path <unified_dataset.csv>` auto-discovers imported finalized draft JSON artifacts from the canonical runtime folder and writes runtime-local JSON and HTML retrospective artifacts.
+- `ffbayes draft-retrospective --year <year> --outcomes-path <path-to-unified-dataset.csv>` auto-discovers imported finalized draft JSON artifacts from the canonical runtime folder and writes runtime-local JSON and HTML retrospective artifacts.
+
+### Advanced CLI Flags
+- Global: `ffbayes --version` prints the installed package version.
+- `ffbayes draft-strategy --all-slots` generates artifacts for every draft position instead of only the configured slot.
+- `ffbayes refresh-dashboard --stage-pages` refreshes the runtime dashboard HTML and immediately restages `site/` from the refreshed payload.
+- `ffbayes publish-pages --source-html <html> --source-payload <payload> --output-dir <dir>` stages Pages from explicit source artifacts or an alternate site directory instead of the default year-scoped runtime files.
+- `ffbayes draft-retrospective --move-imported` moves downloaded finalized artifacts into `finalized_drafts/` instead of copying them.
+- `ffbayes draft-retrospective --output-json <path> --output-html <path> --skip-html` overrides retrospective artifact destinations or writes JSON only.
+- `ffbayes compare-strategies --vor-file <csv> --bayesian-file <json> --scenario-glob <pattern>` compares explicit strategy files or batches scenario JSONs.
+- `ffbayes pipeline --phase draft|validate|full --team-file <tsv>` limits the fallback pipeline phase or injects a team roster file for validation.
 
 ## Dashboard Paths
 
@@ -107,14 +117,14 @@ Maintenance note: if nflverse changes the underlying Python loaders again, keep 
 ### Local Users (Repo Cloned)
 
 - Run `ffbayes draft-strategy ...` and then open the repo-root shortcut: `dashboard/index.html`
-- Also available is the shallow, stable runtime dashboard: `~/ProjectsRuntime/ffbayes/dashboard/index.html`
+- Also available is the shallow, stable runtime dashboard shortcut under the configured runtime root at `dashboard/index.html`
 - The local dashboard shortcut is generated by `ffbayes draft-strategy`; it will not exist in a fresh clone until that command runs.
 - If the dashboard template changes but the runtime payload is still current, run `ffbayes refresh-dashboard --year <year>` instead of rerunning the full draft strategy.
 - If you want the GitHub Pages version, stage it with `ffbayes publish-pages --year <year>` and then open `site/index.html`.
 
 ### Step 4: Use During Draft
-- Open `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
-- Use `dashboard/index.html` or `~/ProjectsRuntime/ffbayes/dashboard/index.html` for the live draft helper
+- Open `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
+- Use `dashboard/index.html` in the repo root or the matching `dashboard/index.html` shortcut under the configured runtime root for the live draft helper
 - Follow the pick-by-pick recommendations in the workbook
 - Use backup options if primary targets are gone
 - Review the dashboard's `Decision evidence` and `Freshness and provenance` panels before treating the board as trustworthy
@@ -133,7 +143,7 @@ ffbayes draft-retrospective \
 2. The imported bundle will live under:
 
 ```text
-~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/finalized_drafts/
+runs/<year>/pre_draft/artifacts/draft_strategy/finalized_drafts/
 ```
 
 3. Once the drafted season's outcome data is available in the unified dataset, run:
@@ -173,7 +183,7 @@ Compared with models that depend heavily on historical player-level volume, FFBa
 ## Output Organization
 
 ### Pre-Draft Outputs
-Runtime working tree: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/`
+Runtime working tree: `runs/<year>/pre_draft/` under the configured runtime root
 
 - `artifacts/vor_strategy/` - VOR rankings and draft guide outputs
 - `artifacts/draft_strategy/` - Draft board workbook, dashboard payload, HTML dashboard, and decision backtest
@@ -181,15 +191,15 @@ Runtime working tree: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/`
 - `diagnostics/` - Rendered plots and diagnostics (strategy comparison, slot sensitivity, etc.)
 - Repo-local `site/` - GitHub Pages dashboard root copied from the canonical HTML artifact
 
-Published mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results/<year>/pre_draft/` after `ffbayes publish`
+Published cloud snapshot: `Analysis/<date>/` under the configured synced project home after `ffbayes publish`
+Published stable data: `data/` under the configured synced project home after `ffbayes publish`
 
 ### Visualizations
-Runtime plots: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/diagnostics/`
+Runtime plots: `runs/<year>/pre_draft/diagnostics/` under the configured runtime root
 
 - `pre_draft/` - Strategy comparison, draft-score diagnostics, freshness views, and slot sensitivity
 
-Published plots: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/plots/<year>/pre_draft/` after `ffbayes publish`
-Published preview images: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/docs/images/` after `ffbayes publish`
+Published diagnostics live inside the dated cloud snapshot at `Analysis/<date>/diagnostics/`
 
 ---
 
@@ -315,7 +325,7 @@ ffbayes pre-draft
 
 ### Other Common Commands
 ```bash
-ffbayes collect --years 2021,2022,2023 --allow-stale-season
+ffbayes collect
 ffbayes preprocess
 ffbayes draft-strategy --draft-position 10 --league-size 10 --risk-tolerance medium
 ffbayes draft-backtest
@@ -338,13 +348,13 @@ ffbayes publish-pages --year 2025
 
 #### "Pipeline failed with errors"
 - Problem: a critical step failed
-- Solution: check logs in `~/ProjectsRuntime/ffbayes/logs/` for detailed error information
+- Solution: check the configured runtime `logs/` directory for detailed error information
 - Verify draft-board inputs and league settings before rerunning the pre-draft workflow
 
 #### "Missing required columns"
 - Problem: the team file has incorrect column names
 - Solution: use `Name`, `Position`, `Team` columns, or `POS`, `PLAYER`, `BYE` for the legacy format
-- Default path: `~/ProjectsRuntime/ffbayes/data/raw/my_ff_teams/drafted_team_<year>.tsv`
+- Explicit input required: pass `--team-file <path>` or set `TEAM_FILE`; legacy implicit `my_ff_teams` defaults are deprecated
 
 ### Team File Format
 Your team file should have these columns:

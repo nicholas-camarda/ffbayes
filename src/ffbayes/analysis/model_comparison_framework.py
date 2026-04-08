@@ -243,8 +243,10 @@ class ModelComparisonFramework:
 
     def _load_team_names(self) -> List[str]:
         """Load drafted team names (standardized columns) for aggregation."""
-        from ffbayes.utils.path_constants import get_teams_dir
-        team_path = get_teams_dir() / f"drafted_team_{datetime.now().year}.tsv"
+        team_file = os.getenv('TEAM_FILE')
+        if not team_file:
+            return []
+        team_path = Path(team_file)
         if not team_path.exists():
             return []
         df = pd.read_csv(team_path, sep='\t')

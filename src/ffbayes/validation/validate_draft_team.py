@@ -5,18 +5,26 @@ This script validates the drafted team file before any downstream analysis.
 """
 
 import os
+import argparse
 from datetime import datetime
 
 import pandas as pd
 
 
-def validate_draft_team():
+def validate_draft_team(team_file: str | None = None):
     """Validate that a draft team exists and is properly formatted."""
     print("🔍 Validating draft team...")
-    
-    current_year = datetime.now().year
-    from ffbayes.utils.path_constants import get_teams_dir
-    team_file = str(get_teams_dir() / f"drafted_team_{current_year}.tsv")
+
+    if team_file is None:
+        team_file = os.getenv('TEAM_FILE')
+
+    if not team_file:
+        current_year = datetime.now().year
+        raise FileNotFoundError(
+            '❌ Draft team file not provided.\n'
+            '💡 Provide `--team-file <path>` or set the `TEAM_FILE` environment variable.\n'
+            f'📝 Legacy implicit defaults like drafted_team_{current_year}.tsv are no longer assumed.'
+        )
     
     # Check if team file exists
     if not os.path.exists(team_file):
@@ -126,9 +134,8 @@ def validate_draft_team():
             log_path = get_validation_dir(current_year) / "name_validation_log.csv"
             resolver.save_resolution_log(resolution_log, str(log_path))
             
-            # Don't save duplicate team file - Monte Carlo can use the original my_ff_teams file directly
-
-            # No need to save a duplicate team file - Monte Carlo can use the original my_ff_teams file directly
+            # Keep the validated path external; downstream analyses should use the
+            # explicit team-file contract rather than a duplicated implicit copy.
             
         except Exception as e:
             print(f"⚠️  Warning: Name validation failed: {e}")
@@ -147,20 +154,28 @@ def validate_draft_team():
 
 def main():
     """Main validation function."""
+    parser = argparse.ArgumentParser(description='Validate a drafted team roster TSV')
+    parser.add_argument(
+        '--team-file',
+        type=str,
+        help='Path to TSV team file. Required unless TEAM_FILE is set.',
+    )
+    args = parser.parse_args()
+
     print("=" * 60)
     print("Draft Team Validation")
     print("=" * 60)
     
     try:
-        validate_draft_team()
+        validate_draft_team(team_file=args.team_file)
         print("\n🎉 Validation successful! Ready for downstream analysis.")
     except Exception as e:
         print(f"\n❌ Validation failed: {e}")
         print("\n💡 To fix this:")
         print("   1. Complete your fantasy football draft")
-        print("   2. Fill in your drafted players in your team file")
+        print("   2. Save your drafted players to a TSV team file")
         print("   3. Ensure columns are: POS, PLAYER, BYE (your format)")
-        print("   4. Run this validation again")
+        print("   4. Run this validation again with --team-file <path>")
         raise
 
 

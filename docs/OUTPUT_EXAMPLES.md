@@ -2,7 +2,7 @@
 
 This document shows real examples of the outputs you'll receive from FFBayes.
 
-Example paths below point at the runtime tree (`~/ProjectsRuntime/ffbayes/...`). Published copies are mirrored into `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/...` only after you run `ffbayes publish`.
+Example paths below point at the runtime tree under the configured runtime root. Published copies land in cloud `data/` plus a dated `Analysis/<date>/` snapshot only after you run `ffbayes publish`.
 
 ## 🎯 **Pre-Draft Pipeline Outputs**
 
@@ -11,7 +11,7 @@ Example paths below point at the runtime tree (`~/ProjectsRuntime/ffbayes/...`).
 When you run `ffbayes pre-draft`, you receive:
 
 #### **1. 📊 Draft Cheatsheet (Excel)**
-**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
+**File**: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
 
 | Pick | Primary Targets | Backup Options | Position Priority | Strategy | Risk Level |
 |------|----------------|----------------|-------------------|----------|------------|
@@ -21,7 +21,7 @@ When you run `ffbayes pre-draft`, you receive:
 | 31 | Travis Kelce, Mark Andrews, Kyle Pitts | Darren Waller, T.J. Hockenson, Dallas Goedert | TE > WR > RB | TE premium, elite option | Medium |
 
 #### **2. 📋 Player Rankings (Excel)**
-**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/vor_strategy/snake-draft_ppr-0.5_vor_top-120_<year>.csv`
+**File**: `runs/<year>/pre_draft/artifacts/vor_strategy/snake-draft_ppr-0.5_vor_top-120_<year>.csv`
 
 | Rank | Name | Position | Projected Points | Uncertainty | Tier | VOR Rank |
 |------|------|----------|------------------|-------------|------|----------|
@@ -33,11 +33,10 @@ When you run `ffbayes pre-draft`, you receive:
 
 #### **3. 📝 Strategy Summary (Text)**
 **Files**:
-- `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.json`
-- `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
-- `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
-- `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
-
+- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.json`
+- `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
+- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
+- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
 ```
 ============================================================
 FANTASY FOOTBALL DRAFT STRATEGY - POSITION 10
@@ -65,7 +64,7 @@ Pick 31: Travis Kelce | Mark Andrews
 ```
 
 #### **4. 📈 Strategy Comparison Visualizations**
-**Files**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/diagnostics/`
+**Files**: `runs/<year>/pre_draft/diagnostics/`
 
 - **ADP vs Draft Score**: Shows market disagreement versus canonical draft score
 - **Position Distribution Analysis**: Visualizes positional scarcity and cliff points
@@ -82,7 +81,7 @@ Pick 31: Travis Kelce | Mark Andrews
 These are not part of the split runner. If you want them, run the module entry points directly (for example `ffbayes agg`, `ffbayes mc`, `ffbayes compare`, `ffbayes viz`).
 
 #### **1. 🎯 Team Aggregation Analysis**
-**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/team_aggregation/team_analysis_results.json`
+**File**: `runs/<year>/pre_draft/artifacts/team_aggregation/team_analysis_results.json`
 
 ```json
 {
@@ -120,7 +119,7 @@ These are not part of the split runner. If you want them, run the module entry p
 ```
 
 #### **2. 📊 Monte Carlo Season Projections**
-**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/montecarlo_results/mc_projections_<year>_trained_on_2021-2025.tsv`
+**File**: `runs/<year>/pre_draft/artifacts/montecarlo_results/mc_projections_<year>_trained_on_2021-2025.tsv`
 
 | Player | Position | Mean | Std | Min | Max | 10th % | 90th % |
 |--------|----------|------|-----|-----|-----|---------|---------|
@@ -130,7 +129,7 @@ These are not part of the split runner. If you want them, run the module entry p
 | Travis Kelce | TE | 14.8 | 5.2 | 9.6 | 20.0 | 12.2 | 17.4 |
 
 #### **3. 🔍 Model Comparison Results**
-**File**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts/model_evaluation/mc_validation_results.json`
+**File**: `runs/<year>/pre_draft/artifacts/model_evaluation/mc_validation_results.json`
 
 ```json
 {
@@ -151,7 +150,7 @@ These are not part of the split runner. If you want them, run the module entry p
 ```
 
 #### **4. 📈 Visualizations**
-**Files**: `~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/diagnostics/`
+**Files**: `runs/<year>/pre_draft/diagnostics/`
 
 - **Team Score Distribution**: Weekly score expectations
 - **Position Analysis**: How each position contributes
@@ -269,16 +268,16 @@ Edit `config/user_config.json`:
 ### **Running Individual Components**
 ```bash
 # Just get VOR rankings
-python -m ffbayes.draft_strategy.traditional_vor_draft
+ffbayes bayesian-vor
 
 # Just analyze your team
-python -m ffbayes.analysis.montecarlo_historical_ff
+ffbayes compare-strategies
 
 # Just create visualizations
-python -m ffbayes.visualization.create_pre_draft_visualizations
+ffbayes refresh-dashboard --year <year>
 
 # Mirror selected runtime outputs into cloud storage
-python -m ffbayes.publish_artifacts --year <year>
+ffbayes publish --year <year>
 ```
 
 ---

@@ -792,7 +792,8 @@ def main():
         parser.add_argument('--team-file', type=str, help='Path to team roster file')
         args, _ = parser.parse_known_args()
         
-        # Determine team file path - use test file for testing, production file for real drafts
+        # Determine team file path - use test file for testing, otherwise require
+        # an explicit contract instead of a legacy implicit runtime location.
         if args.team_file:
             team_file = args.team_file
             print(f"   Using team file from command line: {team_file}")
@@ -805,11 +806,11 @@ def main():
             team_file = str(get_default_team_file())
             print(f"   QUICK_TEST mode - using standard test team: {team_file}")
         else:
-            # Production mode - look for user's actual draft picks
-            current_year = datetime.now().year
-            from ffbayes.utils.path_constants import get_teams_dir
-            team_file = str(get_teams_dir() / f'drafted_team_{current_year}.tsv')
-            print(f"   Production mode - looking for user draft picks: {team_file}")
+            raise FileNotFoundError(
+                'Team roster file not provided. '
+                'Pass --team-file <path> or set TEAM_FILE. '
+                'Legacy implicit my_ff_teams defaults are no longer supported.'
+            )
         
         if not os.path.exists(team_file):
             raise FileNotFoundError(
