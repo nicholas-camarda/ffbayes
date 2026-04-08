@@ -1,13 +1,13 @@
 {
   "schema_version": "publish_provenance_v1",
   "season_year": 2026,
-  "published_at": "2026-04-07T16:06:03",
-  "dashboard_generated_at": "2026-04-07T14:50:06",
+  "published_at": "2026-04-08T14:50:04",
+  "dashboard_generated_at": "2026-04-08T14:43:34",
   "source_html": "draft_board_2026.html",
   "source_payload": "dashboard_payload_2026.json",
   "analysis_freshness": {
     "status": "mixed",
-    "override_used": true,
+    "override_used": false,
     "warnings": [],
     "available_sources": [
       "backtest_inputs",
@@ -17,6 +17,11 @@
       "validation_inputs"
     ]
   },
-  "override_used": true,
-  "warnings": []
+  "override_used": false,
+  "warnings": [],
+  "surface_sync": {
+    "status": "synchronized",
+    "detail": "The staged HTML and staged payload were written together during publish-pages.",
+    "html_bootstrap": "inline_payload_embedded"
+  }
 }
