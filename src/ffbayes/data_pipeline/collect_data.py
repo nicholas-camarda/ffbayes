@@ -116,11 +116,13 @@ def _summarize_csv_file(file_path: Path) -> dict:
 def build_collection_manifest(
     requested_years,
     successful_years,
-    runtime_season_dir: Path = SEASON_DATASETS_DIR,
-    runtime_combined_dir: Path = COMBINED_DATASETS_DIR,
+    runtime_season_dir: Path | None = None,
+    runtime_combined_dir: Path | None = None,
     source_manifest: dict | None = None,
 ) -> dict:
     """Build a provenance manifest for the collection step."""
+    runtime_season_dir = runtime_season_dir or SEASON_DATASETS_DIR
+    runtime_combined_dir = runtime_combined_dir or COMBINED_DATASETS_DIR
     runtime_season_files = sorted(runtime_season_dir.glob('*season.csv'))
     runtime_combined_file = runtime_combined_dir / 'combined_data.csv'
 
@@ -145,16 +147,26 @@ def build_collection_manifest(
 
 def write_collection_manifest(
     manifest: dict,
-    runtime_manifest_path: Path = RAW_DATA_DIR / 'collection_manifest.json',
-    freshness_manifest_path: Path = RAW_DATA_DIR / 'freshness_manifest.json',
+    runtime_manifest_path: Path | None = None,
+    freshness_manifest_path: Path | None = None,
+    freshness_manifest: dict | None = None,
 ) -> tuple[Path, Path]:
     """Write collection and freshness manifests to runtime raw locations."""
+    runtime_manifest_path = runtime_manifest_path or RAW_DATA_DIR / 'collection_manifest.json'
+    freshness_manifest_path = (
+        freshness_manifest_path or RAW_DATA_DIR / 'freshness_manifest.json'
+    )
     runtime_manifest_path.parent.mkdir(parents=True, exist_ok=True)
     freshness_manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
-    payload = json.dumps(manifest, indent=2, sort_keys=True)
-    runtime_manifest_path.write_text(payload + '\n', encoding='utf-8')
-    freshness_manifest_path.write_text(payload + '\n', encoding='utf-8')
+    runtime_payload = json.dumps(manifest, indent=2, sort_keys=True)
+    freshness_payload = json.dumps(
+        freshness_manifest if freshness_manifest is not None else manifest,
+        indent=2,
+        sort_keys=True,
+    )
+    runtime_manifest_path.write_text(runtime_payload + '\n', encoding='utf-8')
+    freshness_manifest_path.write_text(freshness_payload + '\n', encoding='utf-8')
     return runtime_manifest_path, freshness_manifest_path
 
 
@@ -988,10 +1000,19 @@ def main(args=None):
         reference_year=CURRENT_YEAR,
         allow_stale=args.allow_stale_season,
     )
+    freshness_manifest = build_freshness_manifest(
+        freshness_window,
+        source_name='season_datasets',
+        source_path=SEASON_DATASETS_DIR,
+        found_files=sorted(SEASON_DATASETS_DIR.glob('*season.csv')),
+    )
     manifest = build_collection_manifest(
         years, successful_years, source_manifest=freshness_window.to_dict()
     )
-    runtime_manifest_path, freshness_manifest_path = write_collection_manifest(manifest)
+    runtime_manifest_path, freshness_manifest_path = write_collection_manifest(
+        manifest,
+        freshness_manifest=freshness_manifest,
+    )
     logger.info(f'Collection manifest saved to: {runtime_manifest_path}')
     logger.info(f'Freshness manifest saved to: {freshness_manifest_path}')
 

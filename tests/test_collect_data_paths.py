@@ -42,19 +42,25 @@ def test_collection_manifest_captures_runtime_outputs_only(tmp_path):
         source_manifest={'status': 'fresh'},
     )
 
+    freshness_manifest = {
+        'source_name': 'season_datasets',
+        'freshness': {'status': 'fresh', 'override_used': False},
+        'analysis_window': {'freshness_status': 'fresh', 'latest_expected_year': 2025},
+    }
+
     written_runtime_path, written_freshness_path = write_collection_manifest(
         manifest,
         runtime_manifest_path=runtime_manifest_path,
         freshness_manifest_path=freshness_manifest_path,
+        freshness_manifest=freshness_manifest,
     )
 
     assert written_runtime_path == runtime_manifest_path
     assert written_freshness_path == freshness_manifest_path
     assert runtime_manifest_path.exists()
     assert freshness_manifest_path.exists()
-    assert json.loads(runtime_manifest_path.read_text(encoding='utf-8')) == json.loads(
-        freshness_manifest_path.read_text(encoding='utf-8')
-    )
+    assert json.loads(runtime_manifest_path.read_text(encoding='utf-8')) == manifest
+    assert json.loads(freshness_manifest_path.read_text(encoding='utf-8')) == freshness_manifest
     assert manifest['requested_years'] == [2025, 2024]
     assert manifest['successful_years'] == [2025]
     assert manifest['runtime']['season_files'][0]['rows'] == 1
@@ -264,6 +270,14 @@ def test_collect_main_combines_only_real_season_files(
     assert (season_dir / '2024season.csv').exists()
     assert not (season_dir / '2025season.csv').exists()
     assert (combined_dir / 'combined_data.csv').exists()
+    freshness_manifest = json.loads(
+        (raw_dir / 'freshness_manifest.json').read_text(encoding='utf-8')
+    )
+    collection_manifest = json.loads(
+        (raw_dir / 'collection_manifest.json').read_text(encoding='utf-8')
+    )
+    assert freshness_manifest['freshness']['status'] == 'degraded'
+    assert collection_manifest['source_manifest']['freshness_status'] == 'degraded'
 
 
 def test_collect_nfl_data_refreshes_existing_files_with_backend_only_monkeypatch(

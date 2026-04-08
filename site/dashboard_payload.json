@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-08T14:43:34",
+  "generated_at": "2026-04-08T15:03:30",
   "league_settings": {
     "league_size": 10,
     "draft_position": 10,
@@ -110446,9 +110446,9 @@
     }
   ],
   "analysis_provenance": {
-    "generated_at": "2026-04-08T14:43:07",
+    "generated_at": "2026-04-08T15:02:57",
     "overall_freshness": {
-      "status": "mixed",
+      "status": "fresh",
       "override_used": false,
       "warnings": [],
       "available_sources": [
@@ -110462,17 +110462,23 @@
     "sources": {
       "collection_inputs": {
         "label": "collection_inputs",
-        "source_name": "collection_inputs",
-        "source_path": null,
-        "generated_at": null,
-        "status": "unknown",
-        "is_fresh": false,
+        "source_name": "season_datasets",
+        "source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/data/raw/season_datasets",
+        "generated_at": "2026-04-08T15:01:47",
+        "status": "fresh",
+        "is_fresh": true,
         "override_used": false,
-        "latest_expected_year": null,
-        "latest_found_year": null,
+        "latest_expected_year": 2025,
+        "latest_found_year": 2025,
         "missing_years": [],
         "warnings": [],
-        "found_years": []
+        "found_years": [
+          2021,
+          2022,
+          2023,
+          2024,
+          2025
+        ]
       },
       "validation_inputs": {
         "label": "validation_inputs",
@@ -110538,7 +110544,7 @@
         "label": "backtest_inputs",
         "source_name": "draft_backtest",
         "source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/data/raw/season_datasets",
-        "generated_at": "2026-04-08T14:43:07",
+        "generated_at": "2026-04-08T15:02:57",
         "status": "fresh",
         "is_fresh": true,
         "override_used": false,
@@ -110579,7 +110585,7 @@
       "label": "backtest_inputs",
       "source_name": "draft_backtest",
       "source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/data/raw/season_datasets",
-      "generated_at": "2026-04-08T14:43:07",
+      "generated_at": "2026-04-08T15:02:57",
       "status": "fresh",
       "is_fresh": true,
       "override_used": false,
@@ -110635,7 +110641,7 @@
       "label": "backtest_inputs",
       "source_name": "draft_backtest",
       "source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/data/raw/season_datasets",
-      "generated_at": "2026-04-08T14:43:07",
+      "generated_at": "2026-04-08T15:02:57",
       "status": "fresh",
       "is_fresh": true,
       "override_used": false,
@@ -111817,12 +111823,12 @@
   "publish_provenance": {
     "schema_version": "publish_provenance_v1",
     "season_year": 2026,
-    "published_at": "2026-04-08T14:50:04",
-    "dashboard_generated_at": "2026-04-08T14:43:34",
+    "published_at": "2026-04-08T15:03:40",
+    "dashboard_generated_at": "2026-04-08T15:03:30",
     "source_html": "draft_board_2026.html",
     "source_payload": "dashboard_payload_2026.json",
     "analysis_freshness": {
-      "status": "mixed",
+      "status": "fresh",
       "override_used": false,
       "warnings": [],
       "available_sources": [

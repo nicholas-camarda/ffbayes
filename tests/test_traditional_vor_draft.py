@@ -111,3 +111,28 @@ def test_normalize_player_frame_handles_duplicate_projection_aliases():
     assert normalized.loc[0, 'player_name'] == 'Alpha Player'
     assert normalized.loc[0, 'position'] == 'RB'
     assert normalized.loc[0, 'proj_points_mean'] == 245.0
+
+
+def test_summarize_freshness_manifest_supports_collection_source_manifest_shape():
+    manifest = {
+        'requested_years': [2021, 2022, 2023, 2024, 2025],
+        'successful_years': [2021, 2022, 2023, 2024, 2025],
+        'source_manifest': {
+            'freshness_status': 'fresh',
+            'override_used': False,
+            'latest_expected_year': 2025,
+            'latest_found_year': 2025,
+            'found_years': [2021, 2022, 2023, 2024, 2025],
+            'warnings': [],
+            'is_fresh': True,
+        },
+    }
+
+    summary = dds._summarize_freshness_manifest(manifest, 'collection_inputs')
+
+    assert summary is not None
+    assert summary['status'] == 'fresh'
+    assert summary['override_used'] is False
+    assert summary['latest_expected_year'] == 2025
+    assert summary['latest_found_year'] == 2025
+    assert summary['found_years'] == [2021, 2022, 2023, 2024, 2025]

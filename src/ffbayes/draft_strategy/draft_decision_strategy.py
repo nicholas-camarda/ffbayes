@@ -469,10 +469,21 @@ def _summarize_freshness_manifest(
 ) -> dict[str, Any] | None:
     if not isinstance(manifest, dict):
         return None
+    source_manifest = manifest.get('source_manifest') or {}
     freshness = manifest.get('freshness') or {}
-    analysis_window = manifest.get('analysis_window') or {}
-    warnings = freshness.get('warnings') or manifest.get('warnings') or []
-    missing_years = freshness.get('missing_years') or manifest.get('missing_years') or []
+    analysis_window = manifest.get('analysis_window') or source_manifest or {}
+    warnings = (
+        freshness.get('warnings')
+        or analysis_window.get('warnings')
+        or manifest.get('warnings')
+        or []
+    )
+    missing_years = (
+        freshness.get('missing_years')
+        or analysis_window.get('missing_years')
+        or manifest.get('missing_years')
+        or []
+    )
     status = (
         freshness.get('status')
         or manifest.get('freshness_status')
@@ -489,8 +500,12 @@ def _summarize_freshness_manifest(
     )
     return {
         'label': label,
-        'source_name': manifest.get('source_name', label),
-        'source_path': manifest.get('source_path'),
+        'source_name': manifest.get(
+            'source_name', analysis_window.get('source_name', label)
+        ),
+        'source_path': manifest.get(
+            'source_path', analysis_window.get('source_path')
+        ),
         'generated_at': manifest.get('generated_at'),
         'status': status,
         'is_fresh': bool(

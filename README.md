@@ -2,157 +2,270 @@
 
 A fantasy football analytics system that combines Monte Carlo simulations, Bayesian uncertainty modeling, and draft-utility decision modeling to generate draft-board recommendations.
 
-## Dashboard Paths
+## End-to-End Usage
 
-### [Open the live draft dashboard](https://nicholas-camarda.github.io/ffbayes/)
+This repo has one supported draft workflow:
 
-- This is the GitHub Pages view of the dashboard for repo browsers.
-- Local draft users should run `ffbayes draft-strategy` and open the generated `dashboard/index.html` shortcut instead.
-- The local dashboard shortcut is created by `ffbayes draft-strategy`; it will not exist in a fresh clone until that command runs.
-- Runtime outputs are written under the configured runtime root.
-- If you need a different runtime root, set `FFBAYES_RUNTIME_ROOT` explicitly before running the CLI.
+1. Run the pre-draft pipeline.
+2. Open the local dashboard shortcut.
+3. Use the dashboard and workbook during the draft.
+4. Optionally stage `site/` for GitHub Pages.
+5. Import the finalized draft bundle after the draft.
+6. Run the retrospective once real outcomes are available.
+
+If you remember only one thing, it is this:
+
+```bash
+ffbayes pre-draft
+```
+
+That is the supported command that refreshes the full pre-draft analysis stack and produces the live draft artifacts.
 
 ## Quick Start
 
-### Step 1: Setup
+### 1. Set Up the Environment
+
 ```bash
-# Clone
 git clone https://github.com/nicholas-camarda/ffbayes.git
 cd ffbayes
 
-# Create/activate conda environment (first time only)
 conda env create -f environment.yml
 conda activate ffbayes
-
-# Install
 pip install -e .
 ```
 
-### Step 2: Configure Your League
-Edit `config/user_config.json` to set your preferences:
+All supported Python commands should run inside the `ffbayes` conda environment.
+
+### 2. Configure Your League
+
+Edit `config/user_config.json`:
 
 ```json
 {
   "league_settings": {
-    "draft_position": 10,      // Your draft position (1-16)
-    "league_size": 10,         // League size (8, 10, 12, 14, 16)
-    "scoring_type": "PPR",     // Scoring type
-    "ppr_value": 0.5,         // Points per reception
-    "risk_tolerance": "medium" // low/medium/high
+    "draft_position": 10,
+    "league_size": 10,
+    "scoring_type": "PPR",
+    "ppr_value": 0.5,
+    "risk_tolerance": "medium"
   }
 }
 ```
 
-### Step 3: Run the Draft Helper
-The unified CLI exposes the current commands through `ffbayes` and `ffbayes-cli`.
+You can also override some settings from the CLI, for example:
 
 ```bash
-# Draft-day workflow
 ffbayes draft-strategy --draft-position 10 --league-size 10 --risk-tolerance medium
 ```
 
-### Command Reference
-- `ffbayes collect`: downloads raw season data and refreshes the runtime season datasets.
-- `ffbayes validate`: checks the collected data for completeness and freshness, and fails closed if the latest expected season is missing unless you explicitly opt into degraded execution.
-- `ffbayes preprocess`: builds the analysis-ready combined dataset used by downstream models.
-- `ffbayes pre-draft`: runs the full pre-draft workflow, including collection, validation, preprocessing, VOR, hybrid modeling, draft-board generation, and historical backtesting.
-- `ffbayes draft-strategy`: generates the draft board workbook, dashboard payload, HTML fallback, and compatibility JSON for the current league settings.
-- `ffbayes refresh-dashboard`: regenerates dashboard HTML from an existing payload without rerunning draft modeling, and supports `--check --json` for machine-readable drift validation.
-- `ffbayes draft-backtest`: backtests draft decision strategies against historical season data.
-- `ffbayes draft-retrospective`: imports browser-downloaded finalized draft bundles into a canonical runtime folder and evaluates finalized draft JSON exports against realized season outcomes when those outcomes are available.
-- `ffbayes bayesian-vor`: compares the Bayesian outputs with traditional VOR rankings.
-- `ffbayes split`: runs the supported split pipeline directly if you want to bypass the convenience shortcuts.
-- `ffbayes pipeline`: runs the full end-to-end pipeline in one command.
+### 3. Run the Pre-Draft Pipeline
 
-The module-level commands still work too, but the top-level CLI is the supported entry point.
+```bash
+ffbayes pre-draft
+```
 
-The collection step uses `nflreadpy` through a thin adapter that converts Polars frames to pandas before they reach the rest of the pipeline, so the collector output schema stays the same. The collector refreshes season files on each run instead of reusing older CSV output, and the latest-season freshness check is schema-aware rather than depending on backend-specific error text.
+`ffbayes pre-draft` is the main entry point for preparing the board. It runs the supported pre-draft workflow:
 
-Freshness policy: the supported `pre_draft` workflow now fails closed by default when the latest expected season is missing. If you intentionally want a degraded analysis window, set `FFBAYES_ALLOW_STALE_SEASON=true` for that run and expect the resulting manifests, dashboard payload, and Pages staging provenance to report the degraded state explicitly.
+- collect raw season data
+- validate freshness and completeness
+- preprocess the analysis-ready dataset
+- build VOR and hybrid model artifacts
+- generate the draft board, dashboard payload, and dashboard HTML
+- run the draft decision backtest used by the decision-evidence surface
 
-The split pipeline runs collection in summary mode, so it shows the yearly collection summary without printing per-row progress. If you want the more verbose progress output, run `ffbayes collect` directly.
+Freshness policy:
 
-Maintenance note: if nflverse changes the underlying Python loaders again, keep the adaptation logic inside `src/ffbayes/data_pipeline/nflverse_backend.py` so the rest of the pipeline stays pandas-first.
+- By default, the workflow fails closed if the latest expected season is missing.
+- If you intentionally want a degraded run, set `FFBAYES_ALLOW_STALE_SEASON=true` for that invocation.
+- When degraded execution is allowed, the manifests and dashboard provenance should say so explicitly.
 
-### Outputs
-- Draft board workbook: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
-- Dashboard payload: `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
-- HTML dashboard: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
-- Canonical finalized draft bundle folder: `runs/<year>/pre_draft/artifacts/draft_strategy/finalized_drafts/`
-- Convenience dashboard shortcut (repo root): `dashboard/index.html`
-- Convenience dashboard shortcut (runtime): `dashboard/index.html` under the configured runtime root
-- Live dashboard: [nicholas-camarda.github.io/ffbayes](https://nicholas-camarda.github.io/ffbayes/) serving the staged dashboard from `site/index.html`
-- Decision backtest: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
-- Draft retrospective JSON: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_retrospective_<year>.json`
-- Draft retrospective HTML: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_retrospective_<year>.html`
-- Pages publish provenance: `site/publish_provenance.json` after `ffbayes publish-pages`
+### 4. Open the Right Dashboard
 
-### Optional Publishing
-- `ffbayes publish --year <year>` syncs stable datasets into cloud `data/` and publishes a dated flat analysis snapshot under `Analysis/<date>/`.
-- `ffbayes refresh-dashboard --year <year>` refreshes the runtime dashboard HTML from the current payload when template code changes but the payload is still authoritative.
-- `ffbayes refresh-dashboard --check --json --payload-path <payload> --output-html <html>` reports whether a dashboard HTML target is fresh or stale relative to regeneration from the specified payload.
-- `ffbayes publish-pages --year <year>` stages the current dashboard HTML and payload into `site/` for GitHub Pages and records publish-time provenance for the staged dashboard.
-- `ffbayes draft-retrospective --import-finalized <downloaded-files...> --ingest-only --year <year>` copies browser-downloaded finalized draft artifacts into the canonical runtime `finalized_drafts/` folder without rerunning draft modeling.
-- `ffbayes draft-retrospective --year <year> --outcomes-path <path-to-unified-dataset.csv>` auto-discovers imported finalized draft JSON artifacts from the canonical runtime folder and writes runtime-local JSON and HTML retrospective artifacts.
+After `ffbayes pre-draft` or `ffbayes draft-strategy`, use the repo-local shortcut:
 
-### Advanced CLI Flags
-- Global: `ffbayes --version` prints the installed package version.
-- `ffbayes draft-strategy --all-slots` generates artifacts for every draft position instead of only the configured slot.
-- `ffbayes refresh-dashboard --stage-pages` refreshes the runtime dashboard HTML and immediately restages `site/` from the refreshed payload.
-- `ffbayes publish-pages --source-html <html> --source-payload <payload> --output-dir <dir>` stages Pages from explicit source artifacts or an alternate site directory instead of the default year-scoped runtime files.
-- `ffbayes draft-retrospective --move-imported` moves downloaded finalized artifacts into `finalized_drafts/` instead of copying them.
-- `ffbayes draft-retrospective --output-json <path> --output-html <path> --skip-html` overrides retrospective artifact destinations or writes JSON only.
-- `ffbayes pipeline --phase draft|validate|full --team-file <tsv>` limits the fallback pipeline phase or injects a team roster file for validation.
+- Local dashboard shortcut: `dashboard/index.html`
+- Paired local payload: `dashboard/dashboard_payload.json`
 
-## Dashboard Paths
+This is the supported local draft surface.
 
-### GitHub Repo Viewers (No Clone)
+Do not treat `site/index.html` as your draft-day local surface. `site/` is the staged GitHub Pages copy, not the authoritative working dashboard.
 
-- Open the live dashboard here: [nicholas-camarda.github.io/ffbayes](https://nicholas-camarda.github.io/ffbayes/)
-- The intended experience is the repo's **GitHub Pages** site, which serves the most recently staged `site/index.html`.
-- Pages only updates when someone runs `ffbayes publish-pages` and commits/pushes the updated `site/` directory to `master` (the workflow deploys `./site`).
+### 5. Use the Draft Artifacts During the Draft
 
-### Local Users (Repo Cloned)
+The main outputs are:
 
-- Run `ffbayes draft-strategy ...` and then open the repo-root shortcut: `dashboard/index.html`
-- Also available is the shallow, stable runtime dashboard shortcut under the configured runtime root at `dashboard/index.html`
-- The local dashboard shortcut is generated by `ffbayes draft-strategy`; it will not exist in a fresh clone until that command runs.
-- If the dashboard template changes but the runtime payload is still current, run `ffbayes refresh-dashboard --year <year>` instead of rerunning the full draft strategy.
-- If you want the GitHub Pages version, stage it with `ffbayes publish-pages --year <year>` and then open `site/index.html`.
+- Workbook: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
+- Canonical payload: `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
+- Canonical HTML: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
+- Repo-local shortcut: `dashboard/index.html`
 
-### Step 4: Use During Draft
-- Open `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
-- Use `dashboard/index.html` in the repo root or the matching `dashboard/index.html` shortcut under the configured runtime root for the live draft helper
-- Follow the pick-by-pick recommendations in the workbook
-- Use backup options if primary targets are gone
-- Review the dashboard's `Decision evidence` and `Freshness and provenance` panels before treating the board as trustworthy
-- When you click Finalize from the local dashboard, expect three downloaded artifacts: finalized JSON, locked HTML snapshot, and summary HTML
+During the draft:
 
-### Step 5: After the Draft
-1. Right after the draft, import the downloaded finalized bundle into the canonical runtime folder:
+- keep the local dashboard open
+- use the workbook for tabular review and backup planning
+- check the `Decision evidence` panel before over-trusting recommendations
+- check `Freshness and provenance` before assuming the board is current
+- when you click Finalize, keep the downloaded finalized bundle
+
+### 6. Publish the Dashboard Only If You Need GitHub Pages
+
+If you want the repo’s public Pages site updated, stage `site/` explicitly:
+
+```bash
+ffbayes publish-pages --year 2026
+```
+
+This copies the validated dashboard bundle into repo-tracked `site/` and writes publish provenance to `site/publish_provenance.json`.
+
+Important distinction:
+
+- `dashboard/index.html` is the local working shortcut
+- `site/index.html` is the staged Pages copy
+
+GitHub Pages only updates after the staged `site/` files are committed and pushed.
+
+### 7. Refresh HTML Without Rerunning the Models
+
+If the payload is still authoritative and only the dashboard template changed, regenerate HTML without rerunning the full analysis:
+
+```bash
+ffbayes refresh-dashboard --year 2026
+```
+
+If you want to restage Pages immediately after refreshing:
+
+```bash
+ffbayes refresh-dashboard --year 2026 --stage-pages
+```
+
+If you want to verify whether an HTML surface is stale relative to its payload:
+
+```bash
+ffbayes refresh-dashboard --check --json \
+  --payload /path/to/dashboard_payload.json \
+  --output-html /path/to/index.html
+```
+
+### 8. After the Draft: Import the Finalized Bundle
+
+The supported post-draft path is to import the finalized files downloaded from the local dashboard into the canonical runtime folder:
 
 ```bash
 ffbayes draft-retrospective \
-  --import-finalized ~/Downloads/ffbayes_finalized_*_<year>_* \
+  --import-finalized ~/Downloads/ffbayes_finalized_*_2026_* \
   --ingest-only \
-  --year <year>
+  --year 2026
 ```
 
-2. The imported bundle will live under:
+Those imported artifacts live under:
 
 ```text
 runs/<year>/pre_draft/artifacts/draft_strategy/finalized_drafts/
 ```
 
-3. Once the drafted season's outcome data is available in the unified dataset, run:
+### 9. Run the Retrospective When Outcomes Exist
+
+Once the season outcomes are available in the unified dataset:
 
 ```bash
-ffbayes draft-retrospective --year <year>
+ffbayes draft-retrospective --year 2026
 ```
 
-That second command auto-discovers the imported finalized draft JSON from the canonical runtime folder and writes the retrospective JSON and HTML artifacts next to the rest of the draft-strategy outputs.
+That command auto-discovers the imported finalized JSON and writes retrospective JSON and HTML next to the other draft-strategy artifacts.
 
-If you want a one-shot path instead of separate ingest and analysis steps, you can still point directly at downloaded files with `--finalized-json`, but the canonical import workflow above is the supported path because it gives the repo a deterministic source of truth.
+## Command Guide
+
+Use these commands by intent:
+
+- `ffbayes pre-draft`: full supported pre-draft workflow
+- `ffbayes draft-strategy`: regenerate the board and dashboard from current processed inputs and current league settings
+- `ffbayes refresh-dashboard`: rebuild HTML from an existing authoritative payload
+- `ffbayes publish-pages`: stage the current dashboard into repo-tracked `site/`
+- `ffbayes draft-retrospective`: import finalized draft bundles and later evaluate them against realized outcomes
+- `ffbayes collect`, `validate`, `preprocess`: lower-level pipeline steps for debugging or manual recovery
+
+The top-level `ffbayes` CLI is the supported interface. Module-level commands still exist, but the unified CLI is the intended operator surface.
+
+## Output Paths
+
+### Local and Runtime Artifacts
+
+- Draft board workbook: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
+- Dashboard payload: `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
+- HTML dashboard: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
+- Decision backtest: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
+- Finalized draft bundle folder: `runs/<year>/pre_draft/artifacts/draft_strategy/finalized_drafts/`
+- Repo-local dashboard shortcut: `dashboard/index.html`
+- Runtime dashboard shortcut: `dashboard/index.html` under the configured runtime root
+
+### Published Surfaces
+
+- GitHub Pages site: [nicholas-camarda.github.io/ffbayes](https://nicholas-camarda.github.io/ffbayes/)
+- Staged Pages root in the repo: `site/index.html`
+- Staged Pages payload in the repo: `site/dashboard_payload.json`
+- Pages publish provenance: `site/publish_provenance.json`
+
+### Runtime Root
+
+Runtime outputs are written under the configured runtime root.
+
+- Default runtime tree: `~/ProjectsRuntime/ffbayes`
+- Override only when you need to: `FFBAYES_RUNTIME_ROOT=/path/to/runtime`
+
+If you override the runtime root, do it before running the CLI so collection, manifests, dashboard artifacts, and post-draft imports all agree on the same path base.
+
+## Draft-Day Notes
+
+- Open `dashboard/index.html`, not `site/index.html`
+- Treat the local dashboard shortcut as the primary decision surface
+- Use the workbook as a companion artifact, not the source of freshness truth
+- Review freshness before relying on the board
+- Review evidence before treating the score ordering as gospel
+- Keep the finalized downloads after the draft so you can import them cleanly
+
+## Common Patterns
+
+### First-time setup and full run
+
+```bash
+conda activate ffbayes
+ffbayes pre-draft
+open dashboard/index.html
+```
+
+### League settings changed, but processed data is still current
+
+```bash
+conda activate ffbayes
+ffbayes draft-strategy --draft-position 10 --league-size 10 --risk-tolerance medium
+open dashboard/index.html
+```
+
+### Payload is current, HTML template changed
+
+```bash
+conda activate ffbayes
+ffbayes refresh-dashboard --year 2026
+open dashboard/index.html
+```
+
+### Update GitHub Pages after a fresh run
+
+```bash
+conda activate ffbayes
+ffbayes pre-draft
+ffbayes publish-pages --year 2026
+```
+
+### Import finalized draft files after the draft
+
+```bash
+conda activate ffbayes
+ffbayes draft-retrospective \
+  --import-finalized ~/Downloads/ffbayes_finalized_*_2026_* \
+  --ingest-only \
+  --year 2026
+```
 
 ---
 
