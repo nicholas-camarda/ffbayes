@@ -256,6 +256,31 @@ def get_draft_decision_backtest_path(year: int = None, year_range: str = None) -
     return get_draft_strategy_dir(year) / f'draft_decision_backtest_{suffix}.json'
 
 
+def get_draft_retrospective_json_path(year: int = None) -> Path:
+    """Get JSON path for the draft retrospective artifact."""
+    if year is None:
+        from datetime import datetime
+
+        year = datetime.now().year
+    return get_draft_strategy_dir(year) / f'draft_retrospective_{year}.json'
+
+
+def get_draft_retrospective_html_path(year: int = None) -> Path:
+    """Get HTML path for the draft retrospective artifact."""
+    if year is None:
+        from datetime import datetime
+
+        year = datetime.now().year
+    return get_draft_strategy_dir(year) / f'draft_retrospective_{year}.html'
+
+
+def get_finalized_drafts_dir(year: int = None) -> Path:
+    """Get canonical runtime directory for imported finalized draft bundles."""
+    path = get_draft_strategy_dir(year) / 'finalized_drafts'
+    ensure_dir_exists(path)
+    return path
+
+
 def get_draft_strategy_comparison_dir(year: int = None) -> Path:
     """Get draft strategy comparison directory."""
     path = get_pre_draft_diagnostics_dir(year) / 'draft_strategy_comparison'
@@ -499,6 +524,8 @@ def create_all_required_directories(year: int = None) -> None:
     ensure_dir_exists(get_hybrid_mc_dir(year))
     ensure_dir_exists(get_draft_strategy_dir(year))
     ensure_dir_exists(get_draft_model_outputs_dir(year))
+    ensure_dir_exists(get_finalized_drafts_dir(year))
+    ensure_dir_exists(get_draft_retrospective_json_path(year).parent)
     ensure_dir_exists(get_draft_strategy_comparison_dir(year))
     ensure_dir_exists(get_validation_dir(year))
 

@@ -134,6 +134,104 @@ def test_refresh_dashboard_check_command_forwards_extra_arguments(monkeypatch):
     ]
 
 
+def test_draft_retrospective_command_forwards_extra_arguments(monkeypatch):
+    captured = {}
+
+    def fake_import(module_name):
+        captured['module_name'] = module_name
+
+        def fake_main():
+            captured['argv'] = sys.argv[:]
+            return 0
+
+        return SimpleNamespace(main=fake_main)
+
+    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
+
+    exit_code = cli.main(
+        [
+            'draft-retrospective',
+            '--finalized-json',
+            'draft.json',
+            '--outcomes-path',
+            'outcomes.csv',
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured['module_name'] == 'ffbayes.analysis.draft_retrospective'
+    assert captured['argv'] == [
+        'ffbayes.analysis.draft_retrospective',
+        '--finalized-json',
+        'draft.json',
+        '--outcomes-path',
+        'outcomes.csv',
+    ]
+
+
+def test_draft_retrospective_import_command_forwards_extra_arguments(monkeypatch):
+    captured = {}
+
+    def fake_import(module_name):
+        captured['module_name'] = module_name
+
+        def fake_main():
+            captured['argv'] = sys.argv[:]
+            return 0
+
+        return SimpleNamespace(main=fake_main)
+
+    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
+
+    exit_code = cli.main(
+        [
+            'draft-retrospective',
+            '--import-finalized',
+            'draft.json',
+            'draft.html',
+            '--ingest-only',
+            '--year',
+            '2026',
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured['module_name'] == 'ffbayes.analysis.draft_retrospective'
+    assert captured['argv'] == [
+        'ffbayes.analysis.draft_retrospective',
+        '--import-finalized',
+        'draft.json',
+        'draft.html',
+        '--ingest-only',
+        '--year',
+        '2026',
+    ]
+
+
+def test_draft_retrospective_help_is_forwarded_to_module(monkeypatch):
+    captured = {}
+
+    def fake_import(module_name):
+        captured['module_name'] = module_name
+
+        def fake_main():
+            captured['argv'] = sys.argv[:]
+            raise SystemExit(0)
+
+        return SimpleNamespace(main=fake_main)
+
+    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
+
+    exit_code = cli.main(['draft-retrospective', '--help'])
+
+    assert exit_code == 0
+    assert captured['module_name'] == 'ffbayes.analysis.draft_retrospective'
+    assert captured['argv'] == [
+        'ffbayes.analysis.draft_retrospective',
+        '--help',
+    ]
+
+
 def test_refresh_dashboard_help_is_forwarded_to_module(monkeypatch):
     captured = {}
 

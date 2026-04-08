@@ -4869,6 +4869,7 @@ def export_dashboard_html(
           : null;
         return {
           schema_version: FINALIZED_SCHEMA_VERSION,
+          season_year: Number(draftYearLabel()),
           exported_at: new Date().toISOString(),
           source_payload_generated_at: data.generated_at || '',
           title: 'FFBayes Finalized Draft Snapshot',
@@ -5169,6 +5170,7 @@ def export_dashboard_html(
 
       function buildPickReceipt(row, boardState) {
         const topRecommendation = (boardState.pickNow && boardState.pickNow[0]) || null;
+        const topWaitCandidate = (boardState.canWait && boardState.canWait[0]) || null;
         return {
           pick_number: state.currentPickNumber,
           player_name: row.player_name,
@@ -5182,6 +5184,14 @@ def export_dashboard_html(
           upside_score: Number(row.upside_score || 0),
           top_recommendation: topRecommendation ? topRecommendation.player_name : '',
           recommended_draft_score: topRecommendation ? Number(topRecommendation.draft_score || 0) : null,
+          top_wait_candidate: topWaitCandidate ? {
+            player_name: topWaitCandidate.player_name,
+            position: topWaitCandidate.position,
+            wait_utility: Number(topWaitCandidate.wait_utility || 0),
+            availability_to_next_pick: Number(topWaitCandidate.availability_to_next_pick || 0),
+            expected_regret: Number(topWaitCandidate.expected_regret || 0),
+            draft_score: Number(topWaitCandidate.draft_score || 0),
+          } : null,
           followed_model: !!(topRecommendation && safeLower(topRecommendation.player_name) === safeLower(row.player_name)),
           decision_label: topRecommendation && safeLower(topRecommendation.player_name) === safeLower(row.player_name)
             ? 'Followed model'

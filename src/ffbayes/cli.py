@@ -93,6 +93,11 @@ COMMANDS: tuple[CommandSpec, ...] = (
         help_text='Backtest draft decision strategies.',
     ),
     CommandSpec(
+        name='draft-retrospective',
+        module='ffbayes.analysis.draft_retrospective',
+        help_text='Evaluate finalized drafts against realized season outcomes.',
+    ),
+    CommandSpec(
         name='compare-strategies',
         module='ffbayes.analysis.draft_strategy_comparison',
         help_text='Compare draft strategy variants.',
@@ -146,6 +151,8 @@ def build_parser() -> argparse.ArgumentParser:
             '  ffbayes preprocess\n'
             '  ffbayes split\n'
             '  ffbayes draft-strategy --draft-position 10\n'
+            '  ffbayes draft-retrospective --import-finalized ~/Downloads/ffbayes_finalized_*_2026_*\n'
+            '  ffbayes draft-retrospective --year 2026\n'
             '  ffbayes refresh-dashboard --year 2025 --stage-pages\n'
             '  ffbayes publish --year 2025\n\n'
             '  ffbayes publish-pages --year 2025\n\n'
