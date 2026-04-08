@@ -23,7 +23,7 @@ def test_pipeline_configs_fail_closed_by_default():
     assert 'env' not in pre_steps['data_validation']
     assert 'env' not in pre_steps['data_preprocessing']
     assert 'env' not in pre_steps['create_unified_dataset']
-    assert 'env' not in pre_steps['draft_strategy_comparison']
+    assert 'env' not in pre_steps['draft_decision_backtest']
 
     config_root = Path(__file__).resolve().parents[1] / 'config'
     assert not (config_root / 'pipeline_post_draft.json').exists()

@@ -242,13 +242,6 @@ def get_finalized_drafts_dir(year: int = None) -> Path:
     return path
 
 
-def get_draft_strategy_comparison_dir(year: int = None) -> Path:
-    """Get draft strategy comparison directory."""
-    path = get_pre_draft_diagnostics_dir(year) / 'draft_strategy_comparison'
-    ensure_dir_exists(path)
-    return path
-
-
 def get_validation_dir(year: int = None) -> Path:
     """Get directory for validation logs and diagnostics."""
     path = get_pre_draft_diagnostics_dir(year) / 'validation'
@@ -490,7 +483,6 @@ def create_all_required_directories(year: int = None) -> None:
     ensure_dir_exists(get_draft_model_outputs_dir(year))
     ensure_dir_exists(get_finalized_drafts_dir(year))
     ensure_dir_exists(get_draft_retrospective_json_path(year).parent)
-    ensure_dir_exists(get_draft_strategy_comparison_dir(year))
     ensure_dir_exists(get_validation_dir(year))
 
     ensure_dir_exists(get_misc_datasets_dir())

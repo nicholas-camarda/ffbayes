@@ -2,7 +2,7 @@
 """
 Build team aggregation results JSON from the latest Monte Carlo TSV output.
 Generates results/team_aggregation/team_aggregation_results_YYYYMMDD_HHMMSS.json
-compatible with create_team_aggregation_visualizations.py.
+for optional downstream inspection.
 """
 import json
 from datetime import datetime

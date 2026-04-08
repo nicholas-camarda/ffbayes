@@ -133,11 +133,16 @@ def test_refresh_runtime_dashboard_rebuilds_html_and_stages_pages(tmp_path, monk
     assert site_index.exists()
     assert site_payload.exists()
     assert site_provenance.exists()
+    assert not (runtime_root / 'dashboard' / 'draft_board_2026.html').exists()
+    assert not (runtime_root / 'dashboard' / 'dashboard_payload_2026.json').exists()
+    assert not (project_root / 'dashboard' / 'draft_board_2026.html').exists()
+    assert not (project_root / 'dashboard' / 'dashboard_payload_2026.json').exists()
     assert result['staged_index_path'] == site_index
     assert result['staged_payload_path'] == site_payload
     assert result['staged_provenance_path'] == site_provenance
     staged_payload = json.loads(site_payload.read_text(encoding='utf-8'))
     assert staged_payload['publish_provenance']['schema_version'] == 'publish_provenance_v1'
+    assert staged_payload['publish_provenance']['surface_sync']['status'] == 'synchronized'
 
 
 def test_check_dashboard_freshness_reports_fresh_and_stale(tmp_path, monkeypatch):
@@ -235,6 +240,68 @@ def test_check_dashboard_freshness_reports_fresh_and_stale(tmp_path, monkeypatch
     )
     assert stale['status'] == 'stale'
     assert stale['stale_paths'] == [str(html_path)]
+
+
+def test_check_dashboard_freshness_reports_stale_repo_shortcut_payload(tmp_path, monkeypatch):
+    import ffbayes.refresh_dashboard as refresh_dashboard
+
+    project_root = tmp_path / 'project'
+    runtime_root = tmp_path / 'runtime'
+    project_root.mkdir()
+    runtime_root.mkdir()
+    monkeypatch.setenv('FFBAYES_PROJECT_ROOT', str(project_root))
+    monkeypatch.setenv('FFBAYES_RUNTIME_ROOT', str(runtime_root))
+
+    payload_path = (
+        runtime_root
+        / 'runs'
+        / '2026'
+        / 'pre_draft'
+        / 'artifacts'
+        / 'draft_strategy'
+        / 'dashboard_payload_2026.json'
+    )
+    payload_path.parent.mkdir(parents=True, exist_ok=True)
+    payload_path.write_text(
+        json.dumps(
+            {
+                'generated_at': '2026-04-07T14:50:00',
+                'league_settings': {'league_size': 10, 'draft_position': 10},
+                'decision_table': [{'player_name': 'Test Player', 'position': 'RB'}],
+            }
+        ),
+        encoding='utf-8',
+    )
+    html_path = payload_path.with_name('draft_board_2026.html')
+    refresh_dashboard.refresh_runtime_dashboard(
+        year=2026,
+        payload_path=payload_path,
+        output_html=html_path,
+        stage_pages=False,
+    )
+
+    repo_payload = project_root / 'dashboard' / 'dashboard_payload.json'
+    repo_payload.write_text(
+        json.dumps(
+            {
+                'generated_at': '2020-01-01T00:00:00',
+                'league_settings': {'league_size': 99, 'draft_position': 1},
+                'decision_table': [],
+            }
+        ),
+        encoding='utf-8',
+    )
+
+    result = refresh_dashboard.check_dashboard_freshness(
+        year=2026,
+        payload_path=payload_path,
+        output_html=project_root / 'dashboard' / 'index.html',
+    )
+
+    assert result['surface_kind'] == 'repo_shortcut'
+    assert result['status'] == 'stale'
+    assert result['target_payload_path'] == str(repo_payload)
+    assert result['stale_paths'] == [str(repo_payload)]
 
 
 def test_check_dashboard_freshness_reports_missing_target(tmp_path, monkeypatch):

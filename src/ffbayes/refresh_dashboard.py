@@ -74,6 +74,53 @@ def _generated_label_from_payload(payload: dict[str, Any]) -> str:
     return datetime.now().strftime('%Y-%m-%d %H:%M')
 
 
+def _normalized_json_text(payload: Any) -> str:
+    return json.dumps(
+        json.loads(json.dumps(payload, default=str)),
+        sort_keys=True,
+        indent=2,
+    )
+
+
+def _infer_surface_kind(output_html: Path, source_payload: Path) -> str:
+    from ffbayes.utils.path_constants import get_project_root, get_runtime_root
+
+    try:
+        project_root = get_project_root().resolve()
+    except Exception:
+        project_root = None
+    try:
+        runtime_root = get_runtime_root().resolve()
+    except Exception:
+        runtime_root = None
+
+    resolved_html = output_html.resolve()
+    resolved_payload = source_payload.resolve()
+    if resolved_html.parent == resolved_payload.parent:
+        return 'canonical_runtime'
+    if project_root is not None and resolved_html.parent == (project_root / 'dashboard'):
+        return 'repo_shortcut'
+    if runtime_root is not None and resolved_html.parent == (runtime_root / 'dashboard'):
+        return 'runtime_shortcut'
+    if project_root is not None and resolved_html.parent == (project_root / 'site'):
+        return 'staged_site'
+    return 'derived_surface'
+
+
+def _paired_payload_path(
+    output_html: Path,
+    year: int,
+    authoritative_payload: Path,
+) -> Path:
+    if output_html.parent == authoritative_payload.parent:
+        return authoritative_payload
+    if output_html.name == 'index.html':
+        return output_html.with_name('dashboard_payload.json')
+    if output_html.name == f'draft_board_{year}.html':
+        return output_html.with_name(f'dashboard_payload_{year}.json')
+    return output_html.with_name('dashboard_payload.json')
+
+
 def _render_dashboard_html_text(
     payload: dict[str, Any],
     output_html: Path,
@@ -122,7 +169,9 @@ def check_dashboard_freshness(
         'stale_paths': [],
         'source_payload_path': str(resolved_payload),
         'target_html_path': str(resolved_output_html),
+        'target_payload_path': None,
         'generated_at': payload.get('generated_at'),
+        'surface_kind': _infer_surface_kind(resolved_output_html, resolved_payload),
         'authoritative_paths': {
             'payload': str(resolved_payload),
             'target_html': str(resolved_output_html),
@@ -144,6 +193,27 @@ def check_dashboard_freshness(
     if current_html != expected_html:
         result['status'] = 'stale'
         result['stale_paths'] = [str(resolved_output_html)]
+
+    target_payload_path = _paired_payload_path(
+        resolved_output_html,
+        resolved_year,
+        resolved_payload,
+    )
+    result['target_payload_path'] = str(target_payload_path)
+    if target_payload_path.resolve() != resolved_payload.resolve():
+        result['checked_paths'].append(str(target_payload_path))
+        if not target_payload_path.exists():
+            result['status'] = 'stale'
+            result['stale_paths'] = list(
+                dict.fromkeys(result['stale_paths'] + [str(target_payload_path)])
+            )
+            return result
+        target_payload = json.loads(target_payload_path.read_text(encoding='utf-8'))
+        if _normalized_json_text(target_payload) != _normalized_json_text(payload):
+            result['status'] = 'stale'
+            result['stale_paths'] = list(
+                dict.fromkeys(result['stale_paths'] + [str(target_payload_path)])
+            )
     return result
 
 
@@ -280,9 +350,12 @@ def main() -> int:
                 symbol = '✅' if result['status'] == 'fresh' else '⚠️'
                 print(
                     f'{symbol} Dashboard check status: {result["status"]}\n'
+                    f'   surface: {result["surface_kind"]}\n'
                     f'   source payload: {result["source_payload_path"]}\n'
                     f'   target html: {result["target_html_path"]}'
                 )
+                if result.get('target_payload_path'):
+                    print(f'   target payload: {result["target_payload_path"]}')
                 if result['stale_paths']:
                     print('   stale paths:')
                     for path in result['stale_paths']:

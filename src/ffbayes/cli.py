@@ -78,11 +78,6 @@ COMMANDS: tuple[CommandSpec, ...] = (
         help_text='Compare candidate models.',
     ),
     CommandSpec(
-        name='viz',
-        module='ffbayes.visualization.create_team_aggregation_visualizations',
-        help_text='Generate team aggregation visualizations.',
-    ),
-    CommandSpec(
         name='draft-strategy',
         module='ffbayes.draft_strategy.draft_decision_strategy',
         help_text='Generate the live draft command center and workbook.',
@@ -96,11 +91,6 @@ COMMANDS: tuple[CommandSpec, ...] = (
         name='draft-retrospective',
         module='ffbayes.analysis.draft_retrospective',
         help_text='Evaluate finalized drafts against realized season outcomes.',
-    ),
-    CommandSpec(
-        name='compare-strategies',
-        module='ffbayes.analysis.draft_strategy_comparison',
-        help_text='Compare draft strategy variants.',
     ),
     CommandSpec(
         name='bayesian-vor',

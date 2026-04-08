@@ -63,14 +63,14 @@ Pick 31: Travis Kelce | Mark Andrews
          Priority: TE > WR > RB
 ```
 
-#### **4. 📈 Strategy Comparison Visualizations**
-**Files**: `runs/<year>/pre_draft/diagnostics/`
+#### **4. 🌐 Draft Dashboard Surfaces**
+**Files**:
+- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
+- `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
+- `dashboard/index.html` after `ffbayes draft-strategy`
+- `site/index.html` after `ffbayes publish-pages`
 
-- **ADP vs Draft Score**: Shows market disagreement versus canonical draft score
-- **Position Distribution Analysis**: Visualizes positional scarcity and cliff points
-- **Draft Position Strategy**: Pick-by-pick recommendations
-- **Uncertainty Analysis**: Risk assessment for each player
-- **Draft Summary Dashboard**: Comprehensive overview
+Use these as the supported visualization surfaces for draft-day decisions.
 
 ---
 
@@ -78,7 +78,7 @@ Pick 31: Travis Kelce | Mark Andrews
 
 ### **What You Get: Team Analysis & Season Projections**
 
-These are not part of the split runner. If you want them, run the module entry points directly (for example `ffbayes agg`, `ffbayes mc`, `ffbayes compare`, `ffbayes viz`).
+These are not part of the split runner. If you want them, run the supported analysis entry points directly (for example `ffbayes agg`, `ffbayes mc`, or `ffbayes compare`).
 
 #### **1. 🎯 Team Aggregation Analysis**
 **File**: `runs/<year>/pre_draft/artifacts/team_aggregation/team_analysis_results.json`
@@ -148,14 +148,6 @@ These are not part of the split runner. If you want them, run the module entry p
   }
 }
 ```
-
-#### **4. 📈 Visualizations**
-**Files**: `runs/<year>/pre_draft/diagnostics/`
-
-- **Team Score Distribution**: Weekly score expectations
-- **Position Analysis**: How each position contributes
-- **Uncertainty Analysis**: Risk vs. impact for each player
-- **Model Comparison**: Head-to-head performance on your team
 
 ---
 
@@ -269,9 +261,6 @@ Edit `config/user_config.json`:
 ```bash
 # Just get VOR rankings
 ffbayes bayesian-vor
-
-# Just analyze your team
-ffbayes compare-strategies
 
 # Just create visualizations
 ffbayes refresh-dashboard --year <year>

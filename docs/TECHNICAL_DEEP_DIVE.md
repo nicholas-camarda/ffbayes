@@ -334,7 +334,7 @@ data_collection → data_validation → data_preprocessing → vor_draft_strateg
        ↓                ↓                ↓                ↓
 create_unified_dataset → hybrid_mc_analysis → draft_decision_strategy
        ↓                ↓                ↓                ↓
-create_human_readable_strategy → draft_strategy_comparison → pre_draft_visualizations
+create_human_readable_strategy → draft_decision_backtest
 ```
 
 Publication is intentionally outside the pipeline graph. Use `python -m ffbayes.publish_artifacts --year <year>` (or `ffbayes publish --year <year>`) to sync stable cloud `data/` and publish a flat dated `Analysis/<date>/` snapshot from the runtime outputs.

@@ -3592,7 +3592,7 @@ def export_dashboard_html(
                 <tr>
                   <th>Player</th>
                   <th>Status</th>
-                  <th>Draft score</th>
+                  <th>Board value score</th>
                   <th>VOR proxy</th>
                   <th>Next-pick survival</th>
                   <th>Why now</th>
@@ -3698,14 +3698,6 @@ def export_dashboard_html(
                     <tbody id="freshness-table"></tbody>
                   </table>
                 </div>
-                <div class="board-table-wrap" style="max-height: 220px;">
-                  <table>
-                    <thead>
-                      <tr><th>Strategy</th><th>Mean lineup points</th><th>Seasons</th></tr>
-                    </thead>
-                    <tbody id="backtest-table"></tbody>
-                  </table>
-                </div>
               </div>
             </details>
           </div>
@@ -3781,6 +3773,35 @@ def export_dashboard_html(
       function formatSignedNumber(value) {
         const numeric = Number(value || 0);
         return `${numeric > 0 ? '+' : ''}${formatNumber(numeric)}`;
+      }
+
+      function explainFreshnessState(status, overrideUsed) {
+        const normalized = safeLower(status);
+        if (!normalized || normalized === 'fresh') {
+          return '';
+        }
+        if (normalized === 'mixed') {
+          return 'Some analysis inputs are current while others are degraded, so trust the board with extra caution.';
+        }
+        if (normalized === 'stale') {
+          return 'The rendered dashboard surface is out of sync with its paired payload or expected source artifacts.';
+        }
+        if (normalized === 'degraded') {
+          return 'The board was generated with degraded inputs, so some recommendation support may be weaker than usual.';
+        }
+        if (overrideUsed) {
+          return 'A freshness override was used to force a degraded analysis window.';
+        }
+        return `Freshness status is ${status}.`;
+      }
+
+      function renderFreshnessNotice(freshness) {
+        const warnings = Array.isArray(freshness && freshness.warnings) ? freshness.warnings : [];
+        if (warnings.length) {
+          return `<div class="notice">${warnings.join(' ')}</div>`;
+        }
+        const explanation = explainFreshnessState(freshness && freshness.status, freshness && freshness.override_used);
+        return explanation ? `<div class="notice">${explanation} Detailed warning text is unavailable in this payload.</div>` : '';
       }
 
       function downloadTextFile(filename, text, mimeType) {
@@ -4380,7 +4401,7 @@ def export_dashboard_html(
         document.getElementById('primary-card').innerHTML = primary ? `
           <div class="pill-row">
             <span class="pill">${primary.position}</span>
-            <span class="pill">Draft score ${formatNumber(primary.draft_score)}</span>
+            <span class="pill">Board value ${formatNumber(primary.draft_score)}</span>
             <span class="pill">Simple VOR rank ${primary.simple_vor_rank}</span>
           </div>
           <div class="hero-name">${primary.player_name}</div>
@@ -4408,7 +4429,7 @@ def export_dashboard_html(
               <div class="item-title">${row.player_name} <span class="tiny">• ${row.position}</span></div>
               <span class="status-badge ${row.status}">${row.status}</span>
             </div>
-            <div class="item-meta">Score ${formatNumber(row.draft_score)} • Survival ${formatPercent(row.availability_to_next_pick)} • Regret ${formatNumber(row.expected_regret)}</div>
+            <div class="item-meta">Board value ${formatNumber(row.draft_score)} • Survival ${formatPercent(row.availability_to_next_pick)} • Regret ${formatNumber(row.expected_regret)}</div>
             <div class="tiny">${buildPlayerSummary(row)}</div>
           </div>
         `).join('');
@@ -4559,7 +4580,7 @@ def export_dashboard_html(
             <div class="summary-box">${buildPlayerSummary(row)}</div>
           </div>
           <div class="metric-grid">
-            <div class="metric"><span class="label">Draft score</span><span class="value">${formatNumber(row.draft_score)}</span></div>
+            <div class="metric"><span class="label">Board value score</span><span class="value">${formatNumber(row.draft_score)}</span></div>
             <div class="metric"><span class="label">Simple VOR proxy</span><span class="value">${formatNumber(row.simple_vor_proxy)}</span></div>
             <div class="metric"><span class="label">Availability to next pick</span><span class="value">${formatPercent(row.availability_to_next_pick)}</span></div>
             <div class="metric"><span class="label">Expected regret</span><span class="value">${formatNumber(row.expected_regret)}</span></div>
@@ -4633,6 +4654,7 @@ def export_dashboard_html(
             <div class="metric"><span class="label">Winner</span><span class="value">${decisionEvidence.winner || 'n/a'}</span></div>
             <div class="metric"><span class="label">Mean lineup delta</span><span class="value">${formatNumber(decisionEvidence.delta_mean_lineup_points)}</span></div>
           </div>
+          ${renderFreshnessNotice(decisionEvidence.freshness || {})}
           <div class="board-table-wrap" style="max-height: 220px;">
             <table>
               <thead>
@@ -4652,7 +4674,7 @@ def export_dashboard_html(
           <div class="board-table-wrap" style="max-height: 220px;">
             <table>
               <thead>
-                <tr><th>Year</th><th>Draft score</th><th>Simple VOR</th><th>Delta</th></tr>
+                <tr><th>Year</th><th>Board value score</th><th>Simple VOR proxy</th><th>Delta</th></tr>
               </thead>
               <tbody>
                 ${(decisionEvidence.season_rows || []).map((row) => `
@@ -4721,10 +4743,14 @@ def export_dashboard_html(
             : 'Publish provenance will appear after `ffbayes publish-pages` stages this dashboard.'}</div>
           <div class="tiny">Dashboard generated: ${formatTimestamp(data.generated_at)}</div>
           <div class="tiny">Analysis freshness: ${(analysisFreshness.status || 'unknown')}${analysisFreshness.override_used ? ' (explicit override used)' : ''}</div>
+          <div class="tiny">Staged surface sync: ${(publishProvenance.surface_sync && publishProvenance.surface_sync.status) || (publishProvenance.published_at ? 'status detail unavailable' : 'local-only')}</div>
           ${(publishProvenance.dashboard_generated_at || publishProvenance.source_payload)
             ? `<div class="tiny">Staged payload: ${publishProvenance.source_payload || 'dashboard_payload.json'} • generated ${formatTimestamp(publishProvenance.dashboard_generated_at)}</div>`
             : ''}
-          ${(analysisFreshness.warnings || []).length ? `<div class="notice">${analysisFreshness.warnings.join(' ')}</div>` : ''}
+          ${renderFreshnessNotice(analysisFreshness)}
+          ${(publishProvenance.surface_sync && publishProvenance.surface_sync.detail)
+            ? `<div class="tiny">${publishProvenance.surface_sync.detail}</div>`
+            : ''}
         `;
         document.getElementById('support-metrics').innerHTML = [
           ['Evidence status', decisionEvidence.status || 'unavailable'],
@@ -4749,13 +4775,6 @@ def export_dashboard_html(
             <td>${row.latest_expected_year ?? '-'} / ${row.latest_found_year ?? '-'}</td>
           </tr>
         `).join('') || '<tr><td colspan="4" class="empty">No freshness rows available.</td></tr>';
-        document.getElementById('backtest-table').innerHTML = backtestRows.map((row) => `
-          <tr>
-            <td>${row.strategy}</td>
-            <td>${formatNumber(row.mean_lineup_points)}</td>
-            <td>${row.season_count ?? 'n/a'}</td>
-          </tr>
-        `).join('') || '<tr><td colspan="3" class="empty">No backtest rows available.</td></tr>';
       }
 
       function getDraftedRows(boardState) {
@@ -5008,7 +5027,7 @@ def export_dashboard_html(
             <strong>${escapeHtml(selectedPlayer.player_name || '')}</strong><br />
             ${escapeHtml(selectedPlayer.position || '')}${selectedPlayer.team ? ` • ${escapeHtml(selectedPlayer.team)}` : ''}<br />
             Draft rank ${escapeHtml(String(selectedPlayer.draft_rank || 'n/a'))} • ADP ${escapeHtml(formatNumber(selectedPlayer.adp || 0))}<br />
-            Draft score ${escapeHtml(formatNumber(selectedPlayer.draft_score || 0))} • Simple VOR ${escapeHtml(formatNumber(selectedPlayer.simple_vor_proxy || 0))}<br />
+            Board value score ${escapeHtml(formatNumber(selectedPlayer.draft_score || 0))} • Simple VOR proxy ${escapeHtml(formatNumber(selectedPlayer.simple_vor_proxy || 0))}<br />
             Fragility ${escapeHtml(formatPercent(selectedPlayer.fragility_score || 0))} • Upside ${escapeHtml(formatPercent(selectedPlayer.upside_score || 0))}
           </div>
         ` : '<div class="empty">No drafted player available.</div>'}
@@ -5100,7 +5119,7 @@ def export_dashboard_html(
     <section class="panel">
       <h2 style="margin-top:0;">Pick-by-Pick Receipts</h2>
       <table>
-        <thead><tr><th>Pick</th><th>Player</th><th>Top recommendation</th><th>Decision</th><th>Draft score</th></tr></thead>
+        <thead><tr><th>Pick</th><th>Player</th><th>Top recommendation</th><th>Decision</th><th>Board value score</th></tr></thead>
         <tbody>${tableRowsHtml(payload.pick_receipts || [], [{ key: 'pick_number' }, { key: 'player_name' }, { key: 'top_recommendation' }, { key: 'decision_label' }, { key: 'draft_score' }])}</tbody>
       </table>
     </section>
@@ -5357,6 +5376,11 @@ def _stage_runtime_dashboard_shortcuts(
         dashboard_dir = runtime_root / 'dashboard'
         dashboard_dir.mkdir(parents=True, exist_ok=True)
 
+        for legacy_path in list(dashboard_dir.glob('draft_board_*.html')) + list(
+            dashboard_dir.glob('dashboard_payload_*.json')
+        ):
+            legacy_path.unlink(missing_ok=True)
+
         index_path = dashboard_dir / 'index.html'
         if html_path.exists() and html_path.resolve() != index_path.resolve():
             shutil.copy2(html_path, index_path)
@@ -5364,14 +5388,6 @@ def _stage_runtime_dashboard_shortcuts(
         payload_target = dashboard_dir / 'dashboard_payload.json'
         if payload_path.exists() and payload_path.resolve() != payload_target.resolve():
             shutil.copy2(payload_path, payload_target)
-
-        year_html = dashboard_dir / f'draft_board_{year}.html'
-        if html_path.exists() and html_path.resolve() != year_html.resolve():
-            shutil.copy2(html_path, year_html)
-
-        year_payload = dashboard_dir / f'dashboard_payload_{year}.json'
-        if payload_path.exists() and payload_path.resolve() != year_payload.resolve():
-            shutil.copy2(payload_path, year_payload)
 
         shortcuts.update(
             {
@@ -5388,6 +5404,11 @@ def _stage_runtime_dashboard_shortcuts(
         repo_dashboard_dir = project_root / 'dashboard'
         repo_dashboard_dir.mkdir(parents=True, exist_ok=True)
 
+        for legacy_path in list(repo_dashboard_dir.glob('draft_board_*.html')) + list(
+            repo_dashboard_dir.glob('dashboard_payload_*.json')
+        ):
+            legacy_path.unlink(missing_ok=True)
+
         repo_index = repo_dashboard_dir / 'index.html'
         if html_path.exists() and html_path.resolve() != repo_index.resolve():
             shutil.copy2(html_path, repo_index)
@@ -5395,14 +5416,6 @@ def _stage_runtime_dashboard_shortcuts(
         repo_payload = repo_dashboard_dir / 'dashboard_payload.json'
         if payload_path.exists() and payload_path.resolve() != repo_payload.resolve():
             shutil.copy2(payload_path, repo_payload)
-
-        repo_year_html = repo_dashboard_dir / f'draft_board_{year}.html'
-        if html_path.exists() and html_path.resolve() != repo_year_html.resolve():
-            shutil.copy2(html_path, repo_year_html)
-
-        repo_year_payload = repo_dashboard_dir / f'dashboard_payload_{year}.json'
-        if payload_path.exists() and payload_path.resolve() != repo_year_payload.resolve():
-            shutil.copy2(payload_path, repo_year_payload)
 
         shortcuts.update(
             {

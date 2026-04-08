@@ -55,6 +55,11 @@ def _build_publish_provenance(
         'analysis_freshness': analysis_freshness,
         'override_used': bool(analysis_freshness.get('override_used', False)),
         'warnings': warnings,
+        'surface_sync': {
+            'status': 'synchronized',
+            'detail': 'The staged HTML and staged payload were written together during publish-pages.',
+            'html_bootstrap': 'inline_payload_embedded',
+        },
     }
 
 

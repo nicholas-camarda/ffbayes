@@ -38,6 +38,8 @@ window.FFBAYES_DASHBOARD = {"dashboard": true};
     provenance = json.loads((output_dir / 'publish_provenance.json').read_text(encoding='utf-8'))
     assert payload['publish_provenance']['schema_version'] == 'publish_provenance_v1'
     assert provenance['schema_version'] == 'publish_provenance_v1'
+    assert provenance['surface_sync']['status'] == 'synchronized'
+    assert provenance['surface_sync']['html_bootstrap'] == 'inline_payload_embedded'
     assert 'publish_provenance' in (output_dir / 'index.html').read_text(encoding='utf-8')
     assert not (output_dir / 'draft_board_2026.html').exists()
 

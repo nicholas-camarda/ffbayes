@@ -166,7 +166,6 @@ def validate_step_outputs(step_name):
         COMBINED_DATASETS_DIR,
         SEASON_DATASETS_DIR,
         SNAKE_DRAFT_DATASETS_DIR,
-        get_draft_strategy_comparison_dir,
         get_draft_strategy_dir,
         get_hybrid_mc_dir,
         get_monte_carlo_dir,
@@ -206,11 +205,8 @@ def validate_step_outputs(step_name):
                 / 'model_comparison_results_*.json'
             )
         ],
-        'Draft Strategy Comparison': [
-            str(
-                get_draft_strategy_comparison_dir(current_year)
-                / 'draft_strategy_comparison_report_*.txt'
-            )
+        'Draft Decision Backtest': [
+            str(get_draft_strategy_dir(current_year) / 'draft_decision_backtest_*.json')
         ],
     }
 

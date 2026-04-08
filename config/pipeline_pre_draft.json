@@ -87,26 +87,14 @@
       "parallel_group": "strategy"
     },
     {
-      "name": "draft_strategy_comparison",
+      "name": "draft_decision_backtest",
       "script": "ffbayes.analysis.draft_decision_backtest",
-      "description": "Backtest market, VOR, consensus, and draft-score strategies",
+      "description": "Backtest market, VOR, consensus, and board-value strategies",
       "timeout": 300,
       "retry_count": 2,
       "dependencies": [
         "vor_draft_strategy",
         "draft_decision_strategy"
-      ],
-      "critical": false,
-      "parallel_group": "analysis"
-    },
-    {
-      "name": "pre_draft_visualizations",
-      "script": "ffbayes.visualization.create_pre_draft_visualizations",
-      "description": "Generate comprehensive pre-draft visualizations for draft strategy",
-      "timeout": 180,
-      "retry_count": 2,
-      "dependencies": [
-        "draft_strategy_comparison"
       ],
       "critical": false,
       "parallel_group": "analysis"

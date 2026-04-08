@@ -55,12 +55,11 @@ ffbayes draft-strategy --draft-position 10 --league-size 10 --risk-tolerance med
 - `ffbayes collect`: downloads raw season data and refreshes the runtime season datasets.
 - `ffbayes validate`: checks the collected data for completeness and freshness, and fails closed if the latest expected season is missing unless you explicitly opt into degraded execution.
 - `ffbayes preprocess`: builds the analysis-ready combined dataset used by downstream models.
-- `ffbayes pre-draft`: runs the full pre-draft workflow, including collection, validation, preprocessing, VOR, hybrid modeling, draft-board generation, backtesting, and visualizations.
+- `ffbayes pre-draft`: runs the full pre-draft workflow, including collection, validation, preprocessing, VOR, hybrid modeling, draft-board generation, and historical backtesting.
 - `ffbayes draft-strategy`: generates the draft board workbook, dashboard payload, HTML fallback, and compatibility JSON for the current league settings.
 - `ffbayes refresh-dashboard`: regenerates dashboard HTML from an existing payload without rerunning draft modeling, and supports `--check --json` for machine-readable drift validation.
 - `ffbayes draft-backtest`: backtests draft decision strategies against historical season data.
 - `ffbayes draft-retrospective`: imports browser-downloaded finalized draft bundles into a canonical runtime folder and evaluates finalized draft JSON exports against realized season outcomes when those outcomes are available.
-- `ffbayes compare-strategies`: compares draft strategy variants and summarizes how they differ.
 - `ffbayes bayesian-vor`: compares the Bayesian outputs with traditional VOR rankings.
 - `ffbayes split`: runs the supported split pipeline directly if you want to bypass the convenience shortcuts.
 - `ffbayes pipeline`: runs the full end-to-end pipeline in one command.
@@ -103,7 +102,6 @@ Maintenance note: if nflverse changes the underlying Python loaders again, keep 
 - `ffbayes publish-pages --source-html <html> --source-payload <payload> --output-dir <dir>` stages Pages from explicit source artifacts or an alternate site directory instead of the default year-scoped runtime files.
 - `ffbayes draft-retrospective --move-imported` moves downloaded finalized artifacts into `finalized_drafts/` instead of copying them.
 - `ffbayes draft-retrospective --output-json <path> --output-html <path> --skip-html` overrides retrospective artifact destinations or writes JSON only.
-- `ffbayes compare-strategies --vor-file <csv> --bayesian-file <json> --scenario-glob <pattern>` compares explicit strategy files or batches scenario JSONs.
 - `ffbayes pipeline --phase draft|validate|full --team-file <tsv>` limits the fallback pipeline phase or injects a team roster file for validation.
 
 ## Dashboard Paths
@@ -188,18 +186,14 @@ Runtime working tree: `runs/<year>/pre_draft/` under the configured runtime root
 - `artifacts/vor_strategy/` - VOR rankings and draft guide outputs
 - `artifacts/draft_strategy/` - Draft board workbook, dashboard payload, HTML dashboard, and decision backtest
 - `artifacts/hybrid_mc_bayesian/` - Monte Carlo + Bayesian model outputs
-- `diagnostics/` - Rendered plots and diagnostics (strategy comparison, slot sensitivity, etc.)
+- `diagnostics/` - Supplemental diagnostics that do not replace the canonical dashboard artifacts
 - Repo-local `site/` - GitHub Pages dashboard root copied from the canonical HTML artifact
 
 Published cloud snapshot: `Analysis/<date>/` under the configured synced project home after `ffbayes publish`
 Published stable data: `data/` under the configured synced project home after `ffbayes publish`
 
 ### Visualizations
-Runtime plots: `runs/<year>/pre_draft/diagnostics/` under the configured runtime root
-
-- `pre_draft/` - Strategy comparison, draft-score diagnostics, freshness views, and slot sensitivity
-
-Published diagnostics live inside the dated cloud snapshot at `Analysis/<date>/diagnostics/`
+The supported visualization product is the live draft dashboard plus its staged Pages copy. Supplemental diagnostics under `runs/<year>/pre_draft/diagnostics/` may exist, but they are not a separate supported decision surface.
 
 ---
 
@@ -239,8 +233,7 @@ The current pipeline steps are:
 5. Unified dataset creation
 6. Hybrid Monte Carlo + Bayesian analysis
 7. Draft decision strategy
-8. Draft strategy comparison
-9. Pre-draft visualizations
+8. Draft decision backtest
 
 ---
 
@@ -268,9 +261,9 @@ The current pipeline steps are:
 - `ffbayes draft-retrospective` owns the canonical runtime `finalized_drafts/` ingest path plus runtime-local post-draft evaluation artifacts, and it does not publish to `site/`.
 - The dedicated dashboard-sync validation workflow checks `site/` before deployment; `.github/workflows/pages.yml` remains deployment-focused.
 
-### How the Draft Score Works
+### How the Board Value Score Works
 
-The main decision number is a weighted utility score, not just a projection rank:
+The main board value number is the internal `draft_score` utility field, not just a projection rank:
 
 ```text
 draft_score =
@@ -293,7 +286,7 @@ Plain English:
 - `market_gap` catches players the market is underrating relative to the model.
 
 Interpretation guide:
-- High `draft_score` means "best overall draft decision now."
+- High board value score means "best overall draft decision now."
 - High `availability_at_pick` means "safe to wait."
 - High `upside_score` with high `fragility_score` means "boom-bust upside."
 - High `why_flags` density means the player is unusual enough to inspect manually.
@@ -329,7 +322,6 @@ ffbayes collect
 ffbayes preprocess
 ffbayes draft-strategy --draft-position 10 --league-size 10 --risk-tolerance medium
 ffbayes draft-backtest
-ffbayes compare-strategies
 ffbayes bayesian-vor
 ffbayes publish --year 2025
 ffbayes publish-pages --year 2025

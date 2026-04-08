@@ -765,8 +765,8 @@ def save_team_aggregation_results(
 
 
 # REMOVED: generate_team_aggregation_visualizations function
-# This was creating useless duplicate charts; visualization lives in
-# ffbayes.visualization.create_team_aggregation_visualizations.
+# The legacy standalone visualization surface was retired because it was not
+# part of the supported pipeline or dashboard product.
 
 
 def main():
