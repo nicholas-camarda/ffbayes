@@ -4036,6 +4036,15 @@ def export_dashboard_html(
 
       <div class="column">
         <section class="panel strong">
+          <details>
+            <summary>Positional Cliffs <span class="tiny" id="positional-cliffs-summary" style="margin-left: 8px;"></span></summary>
+            <div class="details-body">
+              <div class="visual-stack" id="positional-cliffs"></div>
+            </div>
+          </details>
+        </section>
+
+        <section class="panel strong">
           <div class="split">
             <div>
               <h2>Full Player Board</h2>
@@ -4091,17 +4100,6 @@ def export_dashboard_html(
             <span class="pill">Patience lane</span>
           </div>
           <div class="lane-list" id="wait-list"></div>
-        </section>
-
-        <section class="panel">
-          <div class="split">
-            <div>
-              <h2>Positional Cliffs</h2>
-              <p class="subtle">Scarcity map for the positions most relevant to the current recommendation flow.</p>
-            </div>
-            <span class="pill">Scarcity aid</span>
-          </div>
-          <div class="visual-stack" id="positional-cliffs"></div>
         </section>
       </div>
 
@@ -5252,13 +5250,20 @@ def export_dashboard_html(
 
       function renderPositionalCliffs(boardState) {
         const container = document.getElementById('positional-cliffs');
+        const summaryEl = document.getElementById('positional-cliffs-summary');
         const config = getWarRoomVisualsConfig().positional_cliffs;
         if (config.available === false) {
+          if (summaryEl) {
+            summaryEl.textContent = 'unavailable';
+          }
           container.innerHTML = `<div class="notice">${config.reason || 'Positional cliff data is unavailable for this payload.'}</div>`;
           return;
         }
         const groups = buildCliffGroups(boardState);
         if (!groups.length) {
+          if (summaryEl) {
+            summaryEl.textContent = 'no active cliffs';
+          }
           container.innerHTML = `<div class="notice">${config.reason || 'No current positional cliff data is available.'}</div>`;
           return;
         }
@@ -5266,6 +5271,16 @@ def export_dashboard_html(
         const visibleGroups = state.showAllCliffs
           ? groups
           : groups.filter((group) => defaultPositions.includes(group.position));
+        if (summaryEl) {
+          const summaryBits = visibleGroups.slice(0, 2).map((group) => {
+            const nextPlayer = group.players[group.strongestCliffIndex + 1];
+            if (group.strongestCliffIndex >= 0 && nextPlayer) {
+              return `${group.position}: after ${group.players[group.strongestCliffIndex].row.player_name}`;
+            }
+            return `${group.position}: flat`;
+          });
+          summaryEl.textContent = summaryBits.join(' · ');
+        }
         container.innerHTML = `
           <div class="summary-box">${config.question || 'Which positions are about to fall off if I wait?'}</div>
           ${config.status !== 'available' && config.reason ? `<div class="notice">${config.reason}</div>` : ''}

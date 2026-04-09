@@ -29,14 +29,14 @@ At the same time, the dashboard should not become a bloated analytics playground
    - Recompute everything client-side from the raw decision table. Rejected because the staged payload does not currently carry all live timing fields board-wide and because semantic drift between Python and JS would be harder to control.
 
 2. **Ship the visuals as one primary pair plus one secondary explainer.**
-   The primary additions should be the `wait-vs-pick` frontier and positional cliff map because they answer immediate draft-time questions. The contextual-versus-baseline comparison should appear as a secondary explainer tied to the selected player / evidence flow, not as a third large always-open chart.
+   The primary additions should be the `wait-vs-pick` timing ladder and positional tier-break strips because they answer immediate draft-time questions without forcing the operator to decode overlapping marks or annotation-heavy chips. The contextual-versus-baseline comparison should appear as a secondary explainer tied to the selected player / evidence flow, not as a third large always-open chart.
 
    Alternatives considered:
    - Ship all three as equally prominent panels. Rejected because that risks crowding the war room and weakening the recommendation lanes.
    - Delay the comparative explainer entirely. Rejected because disagreement interpretation is one of the dashboard’s strongest trust-building opportunities.
 
 3. **Use progressive disclosure inside the existing war-room layout.**
-   The timing frontier belongs near the `pick now` / `wait` recommendation lanes, the positional cliff map belongs near the board and position filters, and the comparative explainer should live first inside the selected-player inspector rather than as a persistent standalone panel. This keeps the visuals attached to the decisions they support while limiting bloat in the default dashboard state.
+   The timing ladder belongs near the `pick now` surface, the positional cliff view belongs directly above the player board as a collapsed-by-default panel with a one-line summary, and the comparative explainer should live first inside the selected-player inspector rather than as a persistent standalone panel. Queue and roster state should stay in the right column near the selected-player context rather than being buried below reference material. This keeps the visuals attached to the decisions they support while limiting bloat in the default dashboard state.
 
    Alternatives considered:
    - Add a dedicated “visualizations” tab. Rejected because it separates the plots from the live drafting action and invites low-value add-ons.
@@ -55,7 +55,7 @@ At the same time, the dashboard should not become a bloated analytics playground
    - Emit separate visualization JSON or image artifacts. Rejected because it would complicate lifecycle synchronization and revive the artifact-sprawl problem that the visualization cleanup just removed.
 
 6. **Render positional scarcity as tier-break strips, defaulted to recommendation-relevant positions.**
-   The positional scarcity view should present each relevant position as a compact ordered strip with one clearly emphasized strongest break by default, rather than as a chip cloud with inline text annotations. The view should still default to the positions most relevant to the active recommendation lanes or selected-player context, with an explicit way to inspect all positions. That keeps scarcity visible without turning the war room into a dense league-wide board atlas by default.
+   The positional scarcity view should present each relevant position as a compact ordered strip with one clearly emphasized strongest break by default, rather than as a chip cloud with inline text annotations. The view should live in a collapsed-by-default details panel immediately above the player board, with a concise summary visible when collapsed. It should still default to the positions most relevant to the active recommendation lanes or selected-player context, with an explicit way to inspect all positions. That keeps scarcity visible without turning the war room into a dense league-wide board atlas by default.
 
    Alternatives considered:
    - Show all positions by default. Rejected because it adds too much visual noise in the main draft flow and weakens the connection between the chart and the current decision.

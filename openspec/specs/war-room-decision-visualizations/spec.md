@@ -15,12 +15,12 @@ The live dashboard payload MUST expose a normalized `war_room_visuals` contract 
 - **WHEN** later model upgrades add or refine war-room visualization semantics
 - **THEN** the normalized payload contract MUST evolve through additive or explicitly versioned semantic fields rather than forcing existing dashboard surfaces to bind to volatile raw model internals
 
-### Requirement: War room dashboard SHALL render a timing frontier as a decision aid
-The live draft war room MUST render a compact `wait-vs-pick` timing visualization that helps operators compare immediate selection against waiting for the next pick window.
+### Requirement: War room dashboard SHALL render a timing ladder as a decision aid
+The live draft war room MUST render a compact `wait-vs-pick` timing visualization that helps operators compare immediate selection against waiting for the next pick window, without relying on overlapping scatter marks.
 
-#### Scenario: Frontier renders relevant current candidates
+#### Scenario: Timing ladder renders relevant current candidates
 - **WHEN** the dashboard loads a payload with timing visualization data
-- **THEN** it MUST render a timing-oriented decision view that distinguishes take-now and waitable candidates using survival, regret, or equivalent semantic timing values
+- **THEN** it MUST render a timing-oriented decision view that distinguishes take-now and waitable candidates using survival, regret, or equivalent semantic timing values in a readable per-candidate ladder or equivalent non-overlapping presentation
 
 #### Scenario: Frontier reacts to live board state
 - **WHEN** local dashboard state changes through `taken`, `mine`, queue, current pick, next pick, or scoring-preset updates
@@ -36,6 +36,10 @@ The live draft war room MUST render a positional cliff view that highlights wher
 #### Scenario: Cliff view uses ordered tier-break strips
 - **WHEN** the dashboard renders positional scarcity for the active draft state
 - **THEN** it MUST show each relevant position as an ordered player strip with a clearly emphasized primary break, rather than as a text-heavy annotation cluster
+
+#### Scenario: Cliff view is collapsed near the board by default
+- **WHEN** the dashboard first renders the positional cliff view
+- **THEN** it MUST appear in a collapsed-by-default panel directly above or adjacent to the player board, with a concise closed-state summary of the strongest current breaks
 
 #### Scenario: Cliff map supports board exploration
 - **WHEN** the operator filters positions or selects a player

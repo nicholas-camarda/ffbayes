@@ -18,6 +18,10 @@ New war-room visuals MUST preserve the usability of the existing dashboard by us
 - **WHEN** new visuals are integrated into the live dashboard
 - **THEN** they MUST preserve the usability of recommendation lanes, board controls, and the player table rather than crowding them out
 
+#### Scenario: Scarcity view stays close to the board without owning default space
+- **WHEN** positional scarcity is integrated into the war room
+- **THEN** it MUST stay near the player board while using a collapsed-by-default presentation so the board remains the primary default action surface
+
 #### Scenario: Secondary explanation remains collapsible
 - **WHEN** a visualization serves mainly as comparative explanation or trust support
 - **THEN** it MUST be attached to collapsible or inspector-linked UI instead of always-open top-level dashboard real estate
