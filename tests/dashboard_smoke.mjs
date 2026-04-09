@@ -276,6 +276,10 @@ async function runSmoke() {
     if ((await page.locator(selectors.cliffPlayers).count()) < 1) {
       throw new Error('Positional cliff map did not render any player chips');
     }
+    const frontierLegendText = (await page.locator(selectors.timingFrontier).textContent()) || '';
+    if (frontierLegendText.includes('watch')) {
+      throw new Error('Timing frontier fell back to a generic watch lane instead of explicit lane labels');
+    }
 
     const frontierCandidate = await page.locator(selectors.frontierPoints).nth(0).getAttribute('data-frontier-player');
     if (!frontierCandidate) {

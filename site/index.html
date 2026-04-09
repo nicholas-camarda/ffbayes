@@ -438,6 +438,33 @@
       color: rgba(226, 232, 240, 0.88);
       line-height: 1.35;
     }
+    .frontier-tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .frontier-tag {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      color: #dbeafe;
+    }
+    .frontier-tag.primary {
+      border-color: rgba(248, 113, 113, 0.38);
+      background: rgba(239, 68, 68, 0.12);
+      color: #fecaca;
+    }
+    .frontier-tag.selected {
+      border-color: rgba(56, 189, 248, 0.40);
+      background: rgba(56, 189, 248, 0.12);
+      color: #bae6fd;
+    }
     .frontier-legend {
       display: flex;
       flex-wrap: wrap;
@@ -1618,9 +1645,21 @@
 
         const recommendedNow = [...availableRows].filter((row) => row.policy_eligible).sort((a, b) => (Number(b.current_pick_utility) - Number(a.current_pick_utility)) || (Number(b.draft_score) - Number(a.draft_score)));
         const recommendedWait = [...availableRows].filter((row) => row.wait_signal === 'safe_to_wait' || row.wait_signal === 'late_round_stash_ok').sort((a, b) => (Number(b.wait_utility) - Number(a.wait_utility)) || (Number(b.availability_to_next_pick) - Number(a.availability_to_next_pick)));
-        const pickNow = recommendedNow.slice(0, 1);
-        const fallbacks = (recommendedNow.length ? recommendedNow : [...availableRows].sort((a, b) => (Number(b.current_pick_utility) - Number(a.current_pick_utility)) || (Number(b.draft_score) - Number(a.draft_score)))).slice(1, 6);
-        const canWait = (recommendedWait.length ? recommendedWait : [...availableRows].sort((a, b) => (Number(b.availability_to_next_pick) - Number(a.availability_to_next_pick)) || (Number(b.draft_score) - Number(a.draft_score)))).filter((row) => !pickNow.some((candidate) => safeLower(candidate.player_name) === safeLower(row.player_name))).slice(0, 5);
+        const pickNow = recommendedNow.slice(0, 1).map((row, index) => ({
+          ...row,
+          recommendation_lane: 'pick_now',
+          lane_rank: index + 1,
+        }));
+        const fallbacks = (recommendedNow.length ? recommendedNow : [...availableRows].sort((a, b) => (Number(b.current_pick_utility) - Number(a.current_pick_utility)) || (Number(b.draft_score) - Number(a.draft_score)))).slice(1, 6).map((row, index) => ({
+          ...row,
+          recommendation_lane: 'fallback',
+          lane_rank: index + 1,
+        }));
+        const canWait = (recommendedWait.length ? recommendedWait : [...availableRows].sort((a, b) => (Number(b.availability_to_next_pick) - Number(a.availability_to_next_pick)) || (Number(b.draft_score) - Number(a.draft_score)))).filter((row) => !pickNow.some((candidate) => safeLower(candidate.player_name) === safeLower(row.player_name))).slice(0, 5).map((row, index) => ({
+          ...row,
+          recommendation_lane: 'can_wait',
+          lane_rank: index + 1,
+        }));
 
         const selectedKey = safeLower(state.selectedPlayer);
         const selectedCandidate = rows.find((row) => safeLower(row.player_name) === selectedKey) || null;
@@ -1759,8 +1798,12 @@
           return;
         }
         const selectedKey = safeLower(state.selectedPlayer);
+        const primaryKey = safeLower(((boardState.pickNow || [])[0] || {}).player_name);
         container.innerHTML = `
-          <div class="summary-box">${model.question || 'Can I safely wait on this value, or do I need to pick now?'}</div>
+          <div class="summary-box">
+            ${model.question || 'Can I safely wait on this value, or do I need to pick now?'}
+            <div class="tiny" style="margin-top: 8px;">Red marks the current recommended pick. Blue outline marks the player currently selected for inspection.</div>
+          </div>
           ${model.status !== 'available' && model.reason ? `<div class="notice">${model.reason}</div>` : ''}
           <div class="frontier-chart">
             ${model.candidates.map((row) => `
@@ -1795,6 +1838,10 @@
                   <span>
                     <span class="frontier-list-name">${escapeHtml(row.player_name)} <span class="tiny">• ${escapeHtml(row.position)}</span></span>
                     <span class="frontier-list-meta">${escapeHtml(row.lane.replace('_', ' '))} • ${formatPercent(row.timing_survival)} survive • regret ${formatNumber(row.wait_regret)}</span>
+                    <span class="frontier-tag-row">
+                      ${safeLower(row.player_name) === primaryKey ? '<span class="frontier-tag primary">Recommended now</span>' : ''}
+                      ${safeLower(row.player_name) === selectedKey ? '<span class="frontier-tag selected">Selected below</span>' : ''}
+                    </span>
                   </span>
                 </span>
                 <span class="tiny">${escapeHtml(row.rationale)}</span>
