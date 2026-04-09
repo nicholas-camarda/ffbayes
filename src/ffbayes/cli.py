@@ -105,7 +105,13 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec(
         name='publish-pages',
         module='ffbayes.publish_pages',
-        help_text='Stage the live dashboard for GitHub Pages.',
+        help_text='Stage the existing live dashboard into GitHub Pages.',
+    ),
+    CommandSpec(
+        name='stage-dashboard',
+        module='ffbayes.stage_dashboard',
+        help_text='Refresh dashboard HTML and stage GitHub Pages in one step.',
+        aliases=('stage_dashboard',),
     ),
     CommandSpec(
         name='refresh-dashboard',
@@ -143,8 +149,9 @@ def build_parser() -> argparse.ArgumentParser:
             '  ffbayes draft-strategy --draft-position 10\n'
             '  ffbayes draft-retrospective --import-finalized ~/Downloads/ffbayes_finalized_*_2026_*\n'
             '  ffbayes draft-retrospective --year 2026\n'
-            '  ffbayes refresh-dashboard --year 2025 --stage-pages\n'
+            '  ffbayes stage-dashboard --year 2025\n'
             '  ffbayes publish --year 2025\n\n'
+            '  ffbayes refresh-dashboard --year 2025 --stage-pages\n'
             '  ffbayes publish-pages --year 2025\n\n'
             'Any extra arguments after the command are forwarded to the existing '
             'module-level CLI.'

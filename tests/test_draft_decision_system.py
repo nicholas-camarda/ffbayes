@@ -629,7 +629,7 @@ def test_exported_dashboard_html_includes_undo_redo_state_helpers():
 
         html = output_path.read_text(encoding='utf-8')
         assert 'id="provenance-panel"' in html
-        assert 'Publish provenance will appear after `ffbayes publish-pages` stages this dashboard.' in html
+        assert 'Publish provenance will appear after `ffbayes stage-dashboard` or `ffbayes publish-pages` stages this dashboard.' in html
         assert 'id="redo-button"' in html
         assert 'id="finalize-button"' in html
         assert 'redoHistory: []' in html

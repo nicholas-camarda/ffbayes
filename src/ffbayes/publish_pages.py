@@ -57,7 +57,7 @@ def _build_publish_provenance(
         'warnings': warnings,
         'surface_sync': {
             'status': 'synchronized',
-            'detail': 'The staged HTML and staged payload were written together during publish-pages.',
+            'detail': 'The staged HTML and staged payload were written together during dashboard staging.',
             'html_bootstrap': 'inline_payload_embedded',
         },
     }
@@ -180,7 +180,9 @@ def stage_pages_site(
 def build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser for the Pages staging helper."""
     parser = argparse.ArgumentParser(
-        description='Stage the live draft dashboard for GitHub Pages'
+        description=(
+            'Stage the live draft dashboard for GitHub Pages without rerendering it first'
+        )
     )
     parser.add_argument(
         '--year', type=int, default=datetime.now().year, help='Season year to stage'

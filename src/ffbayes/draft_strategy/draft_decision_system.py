@@ -5663,7 +5663,7 @@ def export_dashboard_html(
         document.getElementById('provenance-panel').innerHTML = `
           <div class="summary-box">${publishProvenance.published_at
             ? `Pages staged ${formatTimestamp(publishProvenance.published_at)} from ${publishProvenance.source_html || 'index.html'}.`
-            : 'Publish provenance will appear after `ffbayes publish-pages` stages this dashboard.'}</div>
+            : 'Publish provenance will appear after `ffbayes stage-dashboard` or `ffbayes publish-pages` stages this dashboard.'}</div>
           <div class="tiny">Dashboard generated: ${formatTimestamp(data.generated_at)}</div>
           <div class="tiny">Analysis freshness: ${(analysisFreshness.status || 'unknown')}${analysisFreshness.override_used ? ' (explicit override used)' : ''}</div>
           <div class="tiny">Staged surface sync: ${(publishProvenance.surface_sync && publishProvenance.surface_sync.status) || (publishProvenance.published_at ? 'status detail unavailable' : 'local-only')}</div>

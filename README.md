@@ -16,7 +16,7 @@ If you are trying to understand the product before reading the workflow docs, st
 1. Run the pre-draft pipeline.
 2. Open the local dashboard shortcut.
 3. Use the workbook and dashboard during the draft.
-4. Optionally stage `site/` for GitHub Pages.
+4. Use one command to refresh and stage the public dashboard when needed.
 5. Import the finalized draft bundle after the draft.
 6. Run the retrospective once realized outcomes are available.
 
@@ -115,15 +115,20 @@ During the draft:
 - if the current dashboard build includes war-room visuals, use them as decision aids, not as a separate model
 - when you click Finalize, keep the downloaded finalized bundle
 
-### 6. Stage GitHub Pages Only When Needed
+### 6. Refresh And Stage The Public Dashboard In One Step
 
-If you want the repo’s public Pages site updated, stage `site/` explicitly:
+If you want the repo’s public Pages site updated, use the one-step staging command:
 
 ```bash
-ffbayes publish-pages --year 2026
+ffbayes stage-dashboard --year 2026
 ```
 
-That command copies the validated dashboard bundle into repo-tracked `site/` and writes publish provenance to `site/publish_provenance.json`.
+That command:
+
+- rebuilds dashboard HTML from the authoritative payload
+- refreshes the repo-local shortcut surfaces
+- stages repo-tracked `site/`
+- writes publish provenance to `site/publish_provenance.json`
 
 Important distinction:
 
@@ -140,11 +145,13 @@ If the payload is still authoritative and only the dashboard template changed:
 ffbayes refresh-dashboard --year 2026
 ```
 
-To restage Pages at the same time:
+If you also want the public Pages copy updated, prefer:
 
 ```bash
-ffbayes refresh-dashboard --year 2026 --stage-pages
+ffbayes stage-dashboard --year 2026
 ```
+
+`ffbayes publish-pages --year 2026` still exists as a lower-level staging command, but it only copies the current runtime dashboard into `site/`. It does not rerender the dashboard first.
 
 To verify whether an HTML surface is stale relative to its payload:
 
@@ -187,8 +194,9 @@ Use these commands by intent:
 
 - `ffbayes pre-draft`: full pre-draft workflow
 - `ffbayes draft-strategy`: regenerate the board and dashboard from current processed inputs and league settings
+- `ffbayes stage-dashboard`: one-step refresh plus GitHub Pages staging for `site/`
 - `ffbayes refresh-dashboard`: rebuild HTML from an existing authoritative payload
-- `ffbayes publish-pages`: stage the current dashboard into repo-tracked `site/`
+- `ffbayes publish-pages`: lower-level staging helper that copies the current dashboard into repo-tracked `site/`
 - `ffbayes draft-retrospective`: import finalized draft bundles and later evaluate them against realized outcomes
 - `ffbayes collect`, `ffbayes validate`, `ffbayes preprocess`: lower-level debugging or recovery steps
 

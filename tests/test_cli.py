@@ -79,6 +79,31 @@ def test_publish_pages_command_forwards_extra_arguments(monkeypatch):
     ]
 
 
+def test_stage_dashboard_command_forwards_extra_arguments(monkeypatch):
+    captured = {}
+
+    def fake_import(module_name):
+        captured['module_name'] = module_name
+
+        def fake_main():
+            captured['argv'] = sys.argv[:]
+            return 0
+
+        return SimpleNamespace(main=fake_main)
+
+    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
+
+    exit_code = cli.main(['stage-dashboard', '--year', '2026'])
+
+    assert exit_code == 0
+    assert captured['module_name'] == 'ffbayes.stage_dashboard'
+    assert captured['argv'] == [
+        'ffbayes.stage_dashboard',
+        '--year',
+        '2026',
+    ]
+
+
 def test_refresh_dashboard_command_forwards_extra_arguments(monkeypatch):
     captured = {}
 
@@ -252,5 +277,29 @@ def test_refresh_dashboard_help_is_forwarded_to_module(monkeypatch):
     assert captured['module_name'] == 'ffbayes.refresh_dashboard'
     assert captured['argv'] == [
         'ffbayes.refresh_dashboard',
+        '--help',
+    ]
+
+
+def test_stage_dashboard_help_is_forwarded_to_module(monkeypatch):
+    captured = {}
+
+    def fake_import(module_name):
+        captured['module_name'] = module_name
+
+        def fake_main():
+            captured['argv'] = sys.argv[:]
+            raise SystemExit(0)
+
+        return SimpleNamespace(main=fake_main)
+
+    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
+
+    exit_code = cli.main(['stage-dashboard', '--help'])
+
+    assert exit_code == 0
+    assert captured['module_name'] == 'ffbayes.stage_dashboard'
+    assert captured['argv'] == [
+        'ffbayes.stage_dashboard',
         '--help',
     ]

@@ -9,6 +9,7 @@ import ffbayes.cli as cli
 from ffbayes.analysis.draft_retrospective import build_parser as build_retrospective_parser
 from ffbayes.publish_pages import build_parser as build_publish_pages_parser
 from ffbayes.refresh_dashboard import build_parser as build_refresh_dashboard_parser
+from ffbayes.stage_dashboard import build_parser as build_stage_dashboard_parser
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -66,6 +67,12 @@ COMMAND_SOURCE_ALLOWLIST = {
     'refresh-dashboard': {
         option
         for action in build_refresh_dashboard_parser()._actions
+        for option in action.option_strings
+        if option.startswith('--')
+    },
+    'stage-dashboard': {
+        option
+        for action in build_stage_dashboard_parser()._actions
         for option in action.option_strings
         if option.startswith('--')
     },

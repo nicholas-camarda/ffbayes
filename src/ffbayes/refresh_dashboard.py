@@ -297,7 +297,10 @@ def refresh_runtime_dashboard(
 def build_parser() -> argparse.ArgumentParser:
     """Build the command-line parser."""
     parser = argparse.ArgumentParser(
-        description='Regenerate dashboard HTML from the existing runtime payload'
+        description=(
+            'Regenerate dashboard HTML from the existing runtime payload. '
+            'Use `ffbayes stage-dashboard` when you also want to restage `site/`.'
+        )
     )
     parser.add_argument(
         '--year', type=int, default=datetime.now().year, help='Season year to refresh'
@@ -315,7 +318,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--stage-pages',
         action='store_true',
-        help='Also restage the GitHub Pages site from the refreshed HTML and payload',
+        help=(
+            'Also restage the GitHub Pages site from the refreshed HTML and payload. '
+            'For the normal one-step operator path, prefer `ffbayes stage-dashboard`.'
+        ),
     )
     parser.add_argument(
         '--check',

@@ -290,8 +290,8 @@ Supported workflow commands:
 ```bash
 ffbayes pre-draft
 ffbayes draft-strategy
+ffbayes stage-dashboard --year 2026
 ffbayes refresh-dashboard --year 2026
-ffbayes publish-pages --year 2026
 ffbayes draft-retrospective --year 2026
 ```
 
