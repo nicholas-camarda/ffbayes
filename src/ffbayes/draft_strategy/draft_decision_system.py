@@ -3657,77 +3657,56 @@ def export_dashboard_html(
       line-height: 1.5;
       font-size: 14px;
     }
-    .frontier-chart {
-      position: relative;
-      min-height: 220px;
+    .frontier-board {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
       border-radius: 16px;
       border: 1px solid rgba(148, 163, 184, 0.12);
-      background:
-        linear-gradient(180deg, rgba(248, 113, 113, 0.08), rgba(14, 165, 233, 0.05)),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
-      background-size: auto, 20% 100%, 100% 25%;
-      overflow: hidden;
+      background: linear-gradient(180deg, rgba(248, 113, 113, 0.05), rgba(14, 165, 233, 0.03));
     }
-    .frontier-axis {
-      display: flex;
-      justify-content: space-between;
+    .frontier-scale {
+      display: grid;
+      grid-template-columns: minmax(170px, 0.85fr) minmax(0, 1fr) minmax(0, 1fr);
       gap: 12px;
-      font-size: 11px;
+      align-items: center;
+      font-size: 10px;
       color: var(--muted);
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.06em;
     }
-    .frontier-point {
-      position: absolute;
-      transform: translate(-50%, -50%);
-      width: 24px;
-      height: 24px;
-      padding: 0;
-      border-radius: 999px;
-      border: 1px solid rgba(148, 163, 184, 0.18);
-      background: rgba(9, 16, 32, 0.94);
-      color: #eff6ff;
+    .frontier-scale span:last-child {
+      text-align: right;
+    }
+    .frontier-row {
+      display: grid;
+      grid-template-columns: minmax(170px, 0.85fr) minmax(0, 1fr) minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: rgba(255, 255, 255, 0.04);
       cursor: pointer;
-      box-shadow: 0 10px 24px rgba(2, 6, 23, 0.32);
+      text-align: left;
     }
-    .frontier-point.pick_now {
-      border-color: rgba(254, 202, 202, 0.85);
-      background: rgba(239, 68, 68, 0.95);
+    .frontier-row.is-selected {
+      border-color: rgba(56, 189, 248, 0.40);
+      background: rgba(56, 189, 248, 0.10);
     }
-    .frontier-point.fallback {
-      border-color: rgba(253, 230, 138, 0.85);
-      background: rgba(245, 158, 11, 0.95);
+    .frontier-row.pick_now {
+      box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.22);
     }
-    .frontier-point.can_wait {
-      border-color: rgba(167, 243, 208, 0.85);
-      background: rgba(16, 185, 129, 0.95);
-    }
-    .frontier-point.is-selected {
-      outline: 2px solid rgba(155, 220, 255, 0.80);
+    .frontier-row.can_wait {
+      box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.18);
     }
     .frontier-list {
       display: grid;
       gap: 8px;
     }
-    .frontier-list-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 10px 12px;
-      border-radius: 14px;
-      border: 1px solid rgba(148, 163, 184, 0.12);
-      background: rgba(255, 255, 255, 0.04);
-      cursor: pointer;
-    }
-    .frontier-list-item.is-selected {
-      border-color: rgba(56, 189, 248, 0.40);
-      background: rgba(56, 189, 248, 0.10);
-    }
     .frontier-list-head {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 10px;
       min-width: 0;
     }
@@ -3755,6 +3734,38 @@ def export_dashboard_html(
       font-size: 11px;
       color: rgba(226, 232, 240, 0.88);
       line-height: 1.35;
+    }
+    .frontier-meter {
+      display: grid;
+      gap: 6px;
+    }
+    .frontier-meter-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--muted);
+    }
+    .frontier-meter-head strong {
+      color: #e2e8f0;
+      font-weight: 600;
+    }
+    .frontier-meter-track {
+      height: 12px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(148, 163, 184, 0.16);
+    }
+    .frontier-meter-fill {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+    }
+    .frontier-meter-fill.regret {
+      background: linear-gradient(90deg, rgba(251, 113, 133, 0.88), rgba(239, 68, 68, 0.98));
+    }
+    .frontier-meter-fill.survival {
+      background: linear-gradient(90deg, rgba(45, 212, 191, 0.88), rgba(16, 185, 129, 0.98));
     }
     .frontier-tag-row {
       display: flex;
@@ -3817,38 +3828,61 @@ def export_dashboard_html(
       display: grid;
       gap: 10px;
     }
-    .cliff-player-row {
+    .cliff-strip {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 10px;
       align-items: center;
     }
-    .cliff-chip {
-      border-radius: 999px;
-      padding: 7px 10px;
+    .cliff-node {
+      min-width: 112px;
+      border-radius: 14px;
+      padding: 10px 12px;
       border: 1px solid rgba(148, 163, 184, 0.18);
       background: rgba(255, 255, 255, 0.05);
       color: #e2e8f0;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
     }
-    .cliff-chip.is-selected {
+    .cliff-node.is-selected {
       border-color: rgba(155, 220, 255, 0.85);
       background: rgba(56, 189, 248, 0.12);
     }
-    .cliff-chip.is-cliff-edge {
+    .cliff-node.is-primary {
+      border-color: rgba(248, 113, 113, 0.65);
+      background: rgba(239, 68, 68, 0.18);
+      color: #fee2e2;
+    }
+    .cliff-node.is-cliff-edge {
       border-color: rgba(245, 158, 11, 0.42);
       background: rgba(245, 158, 11, 0.12);
     }
-    .cliff-gap {
-      display: inline-flex;
-      align-items: center;
-      border-radius: 999px;
-      padding: 4px 8px;
-      border: 1px solid rgba(248, 113, 113, 0.26);
-      background: rgba(248, 113, 113, 0.10);
+    .cliff-break {
+      display: grid;
+      justify-items: center;
+      gap: 4px;
+      min-width: 88px;
       color: #fecaca;
       font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .cliff-break-line {
+      width: 3px;
+      height: 44px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, rgba(252, 165, 165, 0.98), rgba(251, 113, 133, 0.72));
+    }
+    .cliff-break-value {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    .cliff-strip-note {
+      font-size: 12px;
+      color: var(--muted);
     }
     .bar-stack {
       display: grid;
@@ -3998,52 +4032,9 @@ def export_dashboard_html(
           <p class="subtle">A compact timing view of who you need to take now versus who can plausibly survive to your next turn.</p>
           <div class="visual-stack" id="timing-frontier"></div>
         </section>
-
-        <section class="panel">
-          <div class="split">
-            <div>
-              <h2>Fallback Ladder</h2>
-              <p class="subtle">If the top target goes, pivot here.</p>
-            </div>
-            <span class="pill">Immediate pivots</span>
-          </div>
-          <div class="lane-list" id="fallback-list"></div>
-        </section>
-
-        <section class="panel">
-          <div class="split">
-            <div>
-              <h2>Can Wait</h2>
-              <p class="subtle">Strong values with the best shot to survive to your next turn.</p>
-            </div>
-            <span class="pill">Patience lane</span>
-          </div>
-          <div class="lane-list" id="wait-list"></div>
-        </section>
-
-        <section class="panel">
-          <h2>Queue & Roster</h2>
-          <p class="subtle">Keep a short watchlist and confirm your current build at a glance.</p>
-          <div class="mini-list" id="queue-list"></div>
-          <div class="details-stack" style="margin-top: 12px;">
-            <div class="roster-chip-row" id="my-roster"></div>
-            <div class="metric-grid" id="roster-need-grid"></div>
-          </div>
-        </section>
       </div>
 
       <div class="column">
-        <section class="panel">
-          <div class="split">
-            <div>
-              <h2>Positional Cliffs</h2>
-              <p class="subtle">Scarcity map for the positions most relevant to the current recommendation flow.</p>
-            </div>
-            <span class="pill">Scarcity aid</span>
-          </div>
-          <div class="visual-stack" id="positional-cliffs"></div>
-        </section>
-
         <section class="panel strong">
           <div class="split">
             <div>
@@ -4078,6 +4069,39 @@ def export_dashboard_html(
               <tbody id="board-table"></tbody>
             </table>
           </div>
+        </section>
+
+        <section class="panel">
+          <div class="split">
+            <div>
+              <h2>Fallback Ladder</h2>
+              <p class="subtle">If the top target goes, pivot here.</p>
+            </div>
+            <span class="pill">Immediate pivots</span>
+          </div>
+          <div class="lane-list" id="fallback-list"></div>
+        </section>
+
+        <section class="panel">
+          <div class="split">
+            <div>
+              <h2>Can Wait</h2>
+              <p class="subtle">Strong values with the best shot to survive to your next turn.</p>
+            </div>
+            <span class="pill">Patience lane</span>
+          </div>
+          <div class="lane-list" id="wait-list"></div>
+        </section>
+
+        <section class="panel">
+          <div class="split">
+            <div>
+              <h2>Positional Cliffs</h2>
+              <p class="subtle">Scarcity map for the positions most relevant to the current recommendation flow.</p>
+            </div>
+            <span class="pill">Scarcity aid</span>
+          </div>
+          <div class="visual-stack" id="positional-cliffs"></div>
         </section>
       </div>
 
@@ -4137,6 +4161,16 @@ def export_dashboard_html(
             <div class="field full">
               <div class="notice" id="preset-notice"></div>
             </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Queue & Roster</h2>
+          <p class="subtle">Keep a short watchlist and confirm your current build at a glance.</p>
+          <div class="mini-list" id="queue-list"></div>
+          <div class="details-stack" style="margin-top: 12px;">
+            <div class="roster-chip-row" id="my-roster"></div>
+            <div class="metric-grid" id="roster-need-grid"></div>
           </div>
         </section>
 
@@ -4386,8 +4420,8 @@ def export_dashboard_html(
           reason: config.reason || '',
           candidates: candidates.map((row) => ({
             ...row,
-            x: clamp01(row.timing_survival),
-            y: normalizeRegret(row.wait_regret),
+            survival_percent: clamp01(row.timing_survival),
+            regret_percent: normalizeRegret(row.wait_regret),
           })),
         };
       }
@@ -4416,9 +4450,12 @@ def export_dashboard_html(
             isCliffEdge: Number(diffs[index] || 0) >= Number(threshold || 0) && Number(diffs[index] || 0) > 0,
           }));
           const strongest = [...players].sort((a, b) => (Number(b.cliffDistance) - Number(a.cliffDistance)))[0] || null;
+          const strongestIndex = strongest ? players.findIndex((player) => player.row.player_name === strongest.row.player_name) : -1;
           return {
             position,
             cliffStrength: Number((strongest && strongest.cliffDistance) || 0),
+            strongestCliffIndex: strongestIndex,
+            strongestCliffDistance: Number((strongest && strongest.cliffDistance) || 0),
             players,
           };
         }).sort((a, b) => Number(b.cliffStrength) - Number(a.cliffStrength));
@@ -5120,62 +5157,52 @@ def export_dashboard_html(
         container.innerHTML = `
           <div class="summary-box">
             ${model.question || 'Can I safely wait on this value, or do I need to pick now?'}
-            <div class="tiny" style="margin-top: 8px;">Red marks the current recommended pick. Blue outline marks the player currently selected for inspection.</div>
+            <div class="tiny" style="margin-top: 8px;">Rows compare pass regret and next-pick survival directly. Red-tagged rows are take-now pressure; green-tagged rows are safer to wait on.</div>
           </div>
           ${model.status !== 'available' && model.reason ? `<div class="notice">${model.reason}</div>` : ''}
-          <div class="frontier-chart">
+          <div class="frontier-board">
+            <div class="frontier-scale">
+              <span>Candidate</span>
+              <span>Higher regret if you pass</span>
+              <span>More likely to survive</span>
+            </div>
             ${model.candidates.map((row) => `
               <button
                 type="button"
-                class="frontier-point ${row.lane} ${safeLower(row.player_name) === selectedKey ? 'is-selected' : ''}"
-                style="left: ${Math.max(10, Math.min(92, row.x * 100))}%; top: ${Math.max(12, Math.min(88, (1 - row.y) * 100))}%;"
+                class="frontier-row ${row.lane} ${safeLower(row.player_name) === selectedKey ? 'is-selected' : ''}"
                 data-frontier-player="${escapeHtml(row.player_name)}"
-                title="${escapeHtml(`${row.player_name} • ${row.position} • survival ${formatPercent(row.timing_survival)} • regret ${formatNumber(row.wait_regret)}`)}"
-              >
-              </button>
-            `).join('')}
-          </div>
-          <div class="frontier-axis">
-            <span>Higher regret if you pass</span>
-            <span>More likely to survive</span>
-          </div>
-          <div class="frontier-legend">
-            <span class="legend-pill"><span class="legend-dot" style="background: rgba(239, 68, 68, 0.95);"></span>Pick now pressure</span>
-            <span class="legend-pill"><span class="legend-dot" style="background: rgba(245, 158, 11, 0.95);"></span>Fallback pivot</span>
-            <span class="legend-pill"><span class="legend-dot" style="background: rgba(16, 185, 129, 0.95);"></span>Can wait</span>
-          </div>
-          <div class="frontier-list">
-            ${model.candidates.map((row) => `
-              <button
-                type="button"
-                class="frontier-list-item ${safeLower(row.player_name) === selectedKey ? 'is-selected' : ''}"
-                data-frontier-select="${escapeHtml(row.player_name)}"
               >
                 <span class="frontier-list-head">
                   <span class="frontier-swatch ${row.lane}"></span>
                   <span>
                     <span class="frontier-list-name">${escapeHtml(row.player_name)} <span class="tiny">• ${escapeHtml(row.position)}</span></span>
-                    <span class="frontier-list-meta">${escapeHtml(row.lane.replace('_', ' '))} • ${formatPercent(row.timing_survival)} survive • regret ${formatNumber(row.wait_regret)}</span>
+                    <span class="frontier-list-meta">${escapeHtml(row.rationale)}</span>
                     <span class="frontier-tag-row">
                       ${safeLower(row.player_name) === primaryKey ? '<span class="frontier-tag primary">Recommended now</span>' : ''}
                       ${safeLower(row.player_name) === selectedKey ? '<span class="frontier-tag selected">Selected below</span>' : ''}
                     </span>
                   </span>
                 </span>
-                <span class="tiny">${escapeHtml(row.rationale)}</span>
+                <span class="frontier-meter">
+                  <span class="frontier-meter-head"><span>Pass regret</span><strong>${formatNumber(row.wait_regret)}</strong></span>
+                  <span class="frontier-meter-track"><span class="frontier-meter-fill regret" style="width: ${Math.max(8, Math.round(row.regret_percent * 100))}%;"></span></span>
+                </span>
+                <span class="frontier-meter">
+                  <span class="frontier-meter-head"><span>Survival</span><strong>${formatPercent(row.timing_survival)}</strong></span>
+                  <span class="frontier-meter-track"><span class="frontier-meter-fill survival" style="width: ${Math.max(8, Math.round(row.survival_percent * 100))}%;"></span></span>
+                </span>
               </button>
             `).join('')}
+          </div>
+          <div class="frontier-legend">
+            <span class="legend-pill"><span class="legend-dot" style="background: rgba(239, 68, 68, 0.95);"></span>Pick now pressure</span>
+            <span class="legend-pill"><span class="legend-dot" style="background: rgba(245, 158, 11, 0.95);"></span>Fallback pivot</span>
+            <span class="legend-pill"><span class="legend-dot" style="background: rgba(16, 185, 129, 0.95);"></span>Can wait</span>
           </div>
         `;
         container.querySelectorAll('[data-frontier-player]').forEach((button) => {
           button.addEventListener('click', () => {
             state.selectedPlayer = button.getAttribute('data-frontier-player');
-            render();
-          });
-        });
-        container.querySelectorAll('[data-frontier-select]').forEach((button) => {
-          button.addEventListener('click', () => {
-            state.selectedPlayer = button.getAttribute('data-frontier-select');
             render();
           });
         });
@@ -5251,21 +5278,32 @@ def export_dashboard_html(
               <div class="cliff-row">
                 <div class="lane-item-header">
                   <div class="item-title">${group.position}</div>
-                  <span class="pill">Drop strength ${formatNumber(group.cliffStrength)}</span>
+                  <span class="pill">Strongest drop ${formatNumber(group.cliffStrength)}</span>
                 </div>
-                <div class="cliff-player-row">
+                <div class="cliff-strip">
                   ${group.players.map((player, index) => `
                     <button
                       type="button"
-                      class="cliff-chip ${safeLower(player.row.player_name) === safeLower(state.selectedPlayer) ? 'is-selected' : ''} ${player.isCliffEdge ? 'is-cliff-edge' : ''}"
+                      class="cliff-node ${safeLower(player.row.player_name) === safeLower(state.selectedPlayer) ? 'is-selected' : ''} ${safeLower(player.row.player_name) === safeLower(((boardState.pickNow || [])[0] || {}).player_name) ? 'is-primary' : ''} ${index === group.strongestCliffIndex ? 'is-cliff-edge' : ''}"
                       data-cliff-player="${escapeHtml(player.row.player_name)}"
                     >
                       ${escapeHtml(player.row.player_name)}
                     </button>
-                    ${player.isCliffEdge && group.players[index + 1]
-                      ? `<span class="cliff-gap">drop ${formatNumber(player.cliffDistance)} before ${escapeHtml(group.players[index + 1].row.player_name)}</span>`
+                    ${index === group.strongestCliffIndex && group.players[index + 1]
+                      ? `
+                        <div class="cliff-break">
+                          <span class="cliff-break-value">drop ${formatNumber(group.strongestCliffDistance)}</span>
+                          <span class="cliff-break-line"></span>
+                          <span>cliff</span>
+                        </div>
+                      `
                       : ''}
                   `).join('')}
+                </div>
+                <div class="cliff-strip-note">
+                  ${group.strongestCliffIndex >= 0 && group.players[group.strongestCliffIndex + 1]
+                    ? `Main break after ${group.players[group.strongestCliffIndex].row.player_name} before ${group.players[group.strongestCliffIndex + 1].row.player_name}.`
+                    : 'No sharp break detected right now; position remains relatively flat.'}
                 </div>
               </div>
             `).join('')}

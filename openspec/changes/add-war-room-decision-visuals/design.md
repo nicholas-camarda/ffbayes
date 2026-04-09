@@ -54,11 +54,12 @@ At the same time, the dashboard should not become a bloated analytics playground
    Alternatives considered:
    - Emit separate visualization JSON or image artifacts. Rejected because it would complicate lifecycle synchronization and revive the artifact-sprawl problem that the visualization cleanup just removed.
 
-6. **Default the positional cliff map to recommendation-relevant positions.**
-   The cliff map should default to the positions most relevant to the active recommendation lanes or selected-player context, with an explicit way to inspect all positions. That keeps scarcity visible without turning the war room into a dense league-wide board atlas by default.
+6. **Render positional scarcity as tier-break strips, defaulted to recommendation-relevant positions.**
+   The positional scarcity view should present each relevant position as a compact ordered strip with one clearly emphasized strongest break by default, rather than as a chip cloud with inline text annotations. The view should still default to the positions most relevant to the active recommendation lanes or selected-player context, with an explicit way to inspect all positions. That keeps scarcity visible without turning the war room into a dense league-wide board atlas by default.
 
    Alternatives considered:
    - Show all positions by default. Rejected because it adds too much visual noise in the main draft flow and weakens the connection between the chart and the current decision.
+   - Annotated chip clusters. Rejected because they bury the actual cliff signal inside text fragments and make the break harder to read at draft speed.
 
 7. **Evolve the visualization contract additively.**
    The normalized `war_room_visuals` payload should be treated as a semantic compatibility layer. New model outputs may extend it, rename user-facing baseline labels, or improve the underlying calculations, but they should not require the visual components to bind directly to volatile formula fields or to drop existing stable keys without an explicit migration.

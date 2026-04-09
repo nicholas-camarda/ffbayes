@@ -33,6 +33,10 @@ The live draft war room MUST render a positional cliff view that highlights wher
 - **WHEN** the dashboard has normalized positional scarcity data
 - **THEN** it MUST surface the strongest current drop-offs by position instead of leaving scarcity encoded only in tables or prose
 
+#### Scenario: Cliff view uses ordered tier-break strips
+- **WHEN** the dashboard renders positional scarcity for the active draft state
+- **THEN** it MUST show each relevant position as an ordered player strip with a clearly emphasized primary break, rather than as a text-heavy annotation cluster
+
 #### Scenario: Cliff map supports board exploration
 - **WHEN** the operator filters positions or selects a player
 - **THEN** the positional cliff view MUST support corresponding emphasis, filtering, or highlighting rather than remaining disconnected from the board

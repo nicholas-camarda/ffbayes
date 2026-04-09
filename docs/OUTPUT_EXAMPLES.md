@@ -1,305 +1,306 @@
-# Output Examples: What You Get from FFBayes
+# Output Examples
 
-This document shows real examples of the outputs you'll receive from FFBayes.
+Audience: operators and readers who want concrete artifact shapes without reading all of the implementation details.
 
-Example paths below point at the runtime tree under the configured runtime root. Published copies land in cloud `data/` plus a dated `Analysis/<date>/` snapshot only after you run `ffbayes publish`.
+Scope: supported `ffbayes pre-draft` outputs first, then clearly labeled optional analyses.
 
-## 🎯 **Pre-Draft Pipeline Outputs**
+Trust boundary: runtime artifacts are authoritative. Repo `dashboard/` and repo `site/` are derived surfaces. Optional analyses are not default outputs of the supported pre-draft workflow.
 
-### **What You Get: Complete Draft Strategy**
+## What This Is
 
-When you run `ffbayes pre-draft`, you receive:
+This document shows the shapes of the outputs you should expect from the current workflow.
 
-#### **1. 📊 Draft Cheatsheet (Excel)**
-**File**: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
+## When To Use It
 
-| Pick | Primary Targets | Backup Options | Position Priority | Strategy | Risk Level |
-|------|----------------|----------------|-------------------|----------|------------|
-| 10 | Patrick Mahomes, Josh Allen, Lamar Jackson | Justin Herbert, Joe Burrow, Jalen Hurts | QB > RB > WR | Elite QB available at 10 | Medium |
-| 11 | Saquon Barkley, Derrick Henry, Nick Chubb | Austin Ekeler, Josh Jacobs, Aaron Jones | RB > WR > TE | RB scarcity, target workhorse | Medium |
-| 30 | CeeDee Lamb, A.J. Brown, Stefon Diggs | Keenan Allen, DK Metcalf, Chris Olave | WR > RB > TE | WR depth, target WR1 | Low |
-| 31 | Travis Kelce, Mark Andrews, Kyle Pitts | Darren Waller, T.J. Hockenson, Dallas Goedert | TE > WR > RB | TE premium, elite option | Medium |
+Use this document when you need to answer:
 
-#### **2. 📋 Player Rankings (Excel)**
-**File**: `runs/<year>/pre_draft/artifacts/vor_strategy/snake-draft_ppr-0.5_vor_top-120_<year>.csv`
+- what files does `ffbayes pre-draft` actually produce?
+- which files are authoritative versus derived copies?
+- what does the dashboard payload contain at a high level?
+- which outputs require a separate optional command?
 
-| Rank | Name | Position | Projected Points | Uncertainty | Tier | VOR Rank |
-|------|------|----------|------------------|-------------|------|----------|
-| 1 | Patrick Mahomes | QB | 24.8 | 0.12 | 1 | 1 |
-| 2 | Josh Allen | QB | 23.9 | 0.15 | 1 | 2 |
-| 3 | Saquon Barkley | RB | 18.7 | 0.18 | 1 | 3 |
-| 4 | Derrick Henry | RB | 17.9 | 0.14 | 1 | 4 |
-| 5 | CeeDee Lamb | WR | 16.2 | 0.11 | 1 | 5 |
+## What To Inspect
 
-#### **3. 📝 Strategy Summary (Text)**
-**Files**:
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.json`
+Supported default artifacts:
+
+- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
 - `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
 - `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
 - `runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
+- `dashboard/index.html`
+
+Optional outputs:
+
+- `runs/<year>/pre_draft/artifacts/team_aggregation/`
+- `runs/<year>/pre_draft/artifacts/montecarlo_results/`
+- `runs/<year>/pre_draft/artifacts/model_evaluation/`
+- cloud `data/` and `Analysis/<date>/` after `ffbayes publish`
+
+## What Not To Infer
+
+- Do not assume every file under `runs/<year>/pre_draft/artifacts/` comes from `ffbayes pre-draft`.
+- Do not assume a staged Pages file is the authoritative local draft surface.
+- Do not treat example ranges in optional analyses as guaranteed weekly outcomes.
+
+## Supported Pre-Draft Outputs
+
+### Draft Board Workbook
+
+Purpose: authoritative runtime workbook for tabular review and draft-day backup.
+
+Authoritative path:
+
+```text
+runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx
 ```
-============================================================
-FANTASY FOOTBALL DRAFT STRATEGY - POSITION 10
-Generated: <timestamp>
-============================================================
 
-OVERALL STRATEGY:
-• Risk Tolerance: medium
-• League Size: 10
-• Scoring: PPR 0.5
+What it typically contains:
 
-PICK-BY-PICK STRATEGY:
---------------------------------------------------------
-Pick 10: Patrick Mahomes | Josh Allen
-         Priority: QB > RB > WR
+- board ranking
+- by-position views
+- recommendation and availability sheets
+- roster scenarios
+- diagnostics and freshness summaries
 
-Pick 11: Saquon Barkley | Derrick Henry
-         Priority: RB > WR > TE
+### Dashboard Payload
 
-Pick 30: CeeDee Lamb | A.J. Brown
-         Priority: WR > RB > TE
+Purpose: authoritative runtime JSON contract for the local dashboard.
 
-Pick 31: Travis Kelce | Mark Andrews
-         Priority: TE > WR > RB
+Authoritative path:
+
+```text
+runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json
 ```
 
-#### **4. 🌐 Draft Dashboard Surfaces**
-**Files**:
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
-- `dashboard/index.html` after `ffbayes draft-strategy`
-- `site/index.html` after `ffbayes publish-pages`
-
-Use these as the supported visualization surfaces for draft-day decisions.
-
----
-
-## 🎯 **Optional Analyses (After Your Draft)**
-
-### **What You Get: Team Analysis & Season Projections**
-
-These are not part of the split runner. If you want them, run the supported analysis entry points directly (for example `ffbayes agg`, `ffbayes mc`, or `ffbayes compare`).
-
-#### **1. 🎯 Team Aggregation Analysis**
-**File**: `runs/<year>/pre_draft/artifacts/team_aggregation/team_analysis_results.json`
+Minimal example:
 
 ```json
 {
-  "team_projection": {
-    "total_score": {
-      "mean": 207.7,
-      "std": 29.8,
-      "confidence_interval": [203.5, 211.8],
-      "percentiles": {
-        "10th": 175.2,
-        "25th": 188.9,
-        "50th": 207.7,
-        "75th": 226.5,
-        "90th": 240.2
-      }
+  "generated_at": "2026-04-09T18:05:00",
+  "runtime_controls": {
+    "risk_tolerance_options": ["low", "medium", "high"],
+    "supported_scoring_presets": ["standard", "half_ppr", "ppr"],
+    "active_scoring_preset": "half_ppr"
+  },
+  "analysis_provenance": {
+    "overall_freshness": {
+      "status": "fresh",
+      "override_used": false,
+      "warnings": []
+    }
+  },
+  "decision_evidence": {
+    "status": "available",
+    "headline": "Contextual draft score outperforms the simple VOR proxy in backtests.",
+    "winner": "draft_score"
+  },
+  "metric_glossary": {
+    "draft_score": {
+      "label": "Board value score"
     },
-    "player_contributions": {
-      "Patrick Mahomes": {
-        "mean": 23.5,
-        "std": 8.6,
-        "contribution_pct": 11.3,
-        "position": "QB",
-        "risk_level": "low"
-      },
-      "Saquon Barkley": {
-        "mean": 17.9,
-        "std": 8.8,
-        "contribution_pct": 8.6,
-        "position": "RB",
-        "risk_level": "medium"
-      }
+    "replacement_delta": {
+      "label": "Simple VOR proxy"
     }
   }
 }
 ```
 
-#### **2. 📊 Monte Carlo Season Projections**
-**File**: `runs/<year>/pre_draft/artifacts/montecarlo_results/mc_projections_<year>_trained_on_2021-2025.tsv`
+What to notice:
 
-| Player | Position | Mean | Std | Min | Max | 10th % | 90th % |
-|--------|----------|------|-----|-----|-----|---------|---------|
-| Patrick Mahomes | QB | 23.5 | 8.6 | 12.1 | 34.9 | 18.2 | 28.8 |
-| Saquon Barkley | RB | 17.9 | 8.8 | 8.3 | 27.5 | 14.1 | 21.7 |
-| CeeDee Lamb | WR | 16.2 | 6.4 | 9.8 | 22.6 | 13.1 | 19.3 |
-| Travis Kelce | TE | 14.8 | 5.2 | 9.6 | 20.0 | 12.2 | 17.4 |
+- `runtime_controls` tells you which local controls the dashboard expects
+- `analysis_provenance` and `decision_evidence` carry trust messaging
+- `metric_glossary` and `model_overview` define canonical names and interpretation language
+- `war_room_visuals` may be present in newer dashboard builds, but should be treated as additive
 
-#### **3. 🔍 Model Comparison Results**
-**File**: `runs/<year>/pre_draft/artifacts/model_evaluation/mc_validation_results.json`
+### Dashboard HTML
+
+Purpose: authoritative runtime HTML surface paired with the payload above.
+
+Authoritative path:
+
+```text
+runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html
+```
+
+Derived local shortcut:
+
+```text
+dashboard/index.html
+```
+
+What to notice:
+
+- the runtime HTML plus runtime payload are the authoritative local pair
+- `dashboard/index.html` is a convenience copy for local use
+- `site/index.html` is the staged Pages copy, not the working source of truth
+
+### Decision Backtest
+
+Purpose: internal holdout evidence for the `Decision evidence` surface.
+
+Authoritative path:
+
+```text
+runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json
+```
+
+Minimal example:
 
 ```json
 {
-  "model_performance": {
-    "baseline_mae": 4.75,
-    "hybrid_mc_mae": 4.32,
-    "improvement": "9.1%",
-    "uncertainty_enhancement": "39.1%"
+  "evaluation_scope": {
+    "type": "internal_holdout"
   },
-  "team_validation": {
-    "projected_weekly_score": 207.7,
-    "confidence_interval": [203.5, 211.8],
-    "risk_assessment": "medium",
-    "position_strengths": ["QB", "WR"],
-    "position_weaknesses": ["RB depth"]
+  "overall": {
+    "by_strategy": [
+      {
+        "strategy": "draft_score",
+        "mean_lineup_points": 201.4
+      },
+      {
+        "strategy": "historical_vor_proxy",
+        "mean_lineup_points": 198.7
+      }
+    ]
   }
 }
 ```
 
----
+What to notice:
 
-## 🎮 **How to Use These Outputs**
+- this is evidence for comparative board behavior on holdout seasons
+- it is not a guarantee about your future league
 
-### **Pre-Draft: During Your Draft**
+### Staged GitHub Pages Copy
 
-#### **1. Open Your Draft Board**
-- **File**: `draft_board_<year>.xlsx`
-- **When**: Before each pick
-- **What to do**: Look at your current pick number, see primary targets
+Purpose: derived publishing surface for GitHub Pages.
 
-#### **2. Follow the Strategy**
-- **Primary Targets**: Your top 3 choices for this pick
-- **Backup Options**: If primary targets are gone
-- **Position Priority**: What position to target
-- **Strategy**: Why this approach makes sense
+Derived paths:
 
-#### **3. Use Player Rankings**
-- **File**: `snake-draft_ppr-0.5_vor_top-120_<year>.csv`
-- **When**: Need to compare players at same position
-- **What to do**: Sort by projected points, consider uncertainty
-
-### **After Your Draft (Optional)**
-
-#### **1. Set Weekly Expectations**
-- **Expected Score**: Your team should score ~207.7 points per week
-- **Range**: 175-240 points is your realistic weekly range
-- **Confidence**: 90% of weeks will be in this range
-
-#### **2. Make Start/Sit Decisions**
-- **High Uncertainty Players**: Higher ceiling but more volatile
-- **Low Uncertainty Players**: More consistent but lower ceiling
-- **Use**: Start consistent players in must-win situations
-
-#### **3. Evaluate Trades**
-- **Contribution %**: How much each player contributes to team total
-- **Risk Level**: Balance high-upside vs. consistent players
-- **Position Needs**: Target weak positions in trades
-
----
-
-## 📊 **Real-World Example: 10-Team League, Position 10**
-
-### **Your Draft Results**
-```
-Round 1 (Pick 10): Patrick Mahomes, QB
-Round 2 (Pick 11): Saquon Barkley, RB  
-Round 3 (Pick 30): CeeDee Lamb, WR
-Round 4 (Pick 31): Travis Kelce, TE
-Round 5 (Pick 50): Austin Ekeler, RB
-Round 6 (Pick 51): DK Metcalf, WR
-Round 7 (Pick 70): T.J. Hockenson, TE
-Round 8 (Pick 71): Rachaad White, RB
-Round 9 (Pick 90): Justin Herbert, QB
-Round 10 (Pick 91): Brandin Cooks, WR
+```text
+site/index.html
+site/dashboard_payload.json
+site/publish_provenance.json
 ```
 
-### **What FFBayes Told You**
-
-#### **Pre-Draft Strategy (What You Followed)**
-- **Pick 10**: Target elite QB (Mahomes available)
-- **Pick 11**: RB scarcity, target workhorse (Barkley)
-- **Pick 30**: WR depth, target WR1 (Lamb)
-- **Pick 31**: TE premium, elite option (Kelce)
-
-#### **After-Draft Analysis (What You Learned)**
-- **Team Projection**: 207.7 ± 29.8 points per week
-- **Strengths**: Elite QB, strong WR corps
-- **Weaknesses**: RB depth, backup TE
-- **Risk Level**: Medium (balanced team)
-
-### **Season Management**
-- **Week 1-4**: Use projections to set realistic expectations
-- **Week 5-8**: Monitor player performance vs. projections
-- **Week 9-12**: Use uncertainty analysis for playoff push
-- **Week 13-16**: Leverage team insights for championship run
-
----
-
-## 🔧 **Customizing Your Experience**
-
-### **Adjusting Risk Tolerance**
-Edit `config/user_config.json`:
+Minimal provenance example:
 
 ```json
 {
-  "league_settings": {
-    "risk_tolerance": "low"    // or "medium" or "high"
+  "schema_version": "publish_provenance_v1",
+  "season_year": 2026,
+  "source_html": "draft_board_2026.html",
+  "source_payload": "dashboard_payload_2026.json",
+  "surface_sync": {
+    "status": "synchronized"
   }
 }
 ```
 
-### **Changing League Settings**
-Edit `config/user_config.json`:
+What to notice:
 
-```json
-{
-  "league_settings": {
-    "draft_position": 5,       // Your draft position
-    "league_size": 12,         // League size
-    "ppr_value": 1.0          // Full PPR
-  },
-  "vor_settings": {
-    "top_rank": 150           // Analyze top 150 players
-  }
-}
-```
+- `site/` is derived and publish-oriented
+- `publish_provenance.json` records how the staged copy was built
 
-### **Running Individual Components**
+## Optional Analyses
+
+These require separate commands and should not be presented as default `ffbayes pre-draft` outputs.
+
+### Bayesian Versus VOR Comparison
+
+Purpose: compare Bayesian and VOR approaches directly.
+
+Command:
+
 ```bash
-# Just get VOR rankings
 ffbayes bayesian-vor
-
-# Just create visualizations
-ffbayes refresh-dashboard --year <year>
-
-# Mirror selected runtime outputs into cloud storage
-ffbayes publish --year <year>
 ```
 
----
+This is not "just get VOR rankings." It is a comparison command.
 
-## 📈 **Performance Metrics**
+### Monte Carlo Historical Analysis
 
-### **What to Expect**
-- **Pre-Draft Pipeline**: ~10 minutes end-to-end
-- **After-Draft Analysis**: ~5 minutes for team analysis
-- **File Sizes**: 
-  - Excel outputs: 100KB-500KB
-  - JSON data: 1-5MB
-  - Visualizations: 200KB-1MB
+Purpose: run Monte Carlo analysis directly.
 
-### **Quality Indicators**
-- **VOR Match Rate**: 60%+ indicates good data quality
-- **Uncertainty Improvement**: 30%+ shows Bayesian enhancement working
-- **Model Performance**: MAE < 5.0 indicates good predictions
+Command:
 
----
+```bash
+ffbayes mc
+```
 
-## 🎯 **Next Steps**
+Typical optional artifact family:
 
-1. **Run Pre-Draft Pipeline**: Get your complete draft strategy
-2. **Use During Draft**: Follow the cheatsheet and rankings
-3. **Run After-Draft Analysis**: Analyze your drafted team
-4. **Use During Season**: Make informed start/sit and trade decisions
+```text
+runs/<year>/pre_draft/artifacts/montecarlo_results/
+```
 
-**Ready to get started? Run:**
+### Team Aggregation
+
+Purpose: aggregate a drafted roster or roster candidate into team-level outputs.
+
+Command:
+
+```bash
+ffbayes agg
+```
+
+Typical optional artifact family:
+
+```text
+runs/<year>/pre_draft/artifacts/team_aggregation/
+```
+
+### Model Comparison
+
+Purpose: compare candidate model families.
+
+Command:
+
+```bash
+ffbayes compare
+```
+
+Typical optional artifact family:
+
+```text
+runs/<year>/pre_draft/artifacts/model_evaluation/
+```
+
+### Cloud Publish
+
+Purpose: mirror selected runtime artifacts into cloud storage.
+
+Command:
+
+```bash
+ffbayes publish --year 2026
+```
+
+Derived cloud paths:
+
+```text
+data/
+Analysis/<date>/
+```
+
+## Commands And Paths
+
+Supported workflow commands:
+
 ```bash
 ffbayes pre-draft
+ffbayes draft-strategy
+ffbayes refresh-dashboard --year 2026
+ffbayes publish-pages --year 2026
+ffbayes draft-retrospective --year 2026
 ```
 
----
+Optional commands:
 
-*These examples show real outputs from FFBayes. Your actual results will vary based on your league settings and current player data.*
+```bash
+ffbayes bayesian-vor
+ffbayes mc
+ffbayes agg
+ffbayes compare
+ffbayes publish --year 2026
+```
