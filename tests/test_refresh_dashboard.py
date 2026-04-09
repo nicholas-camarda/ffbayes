@@ -94,6 +94,43 @@ def test_refresh_runtime_dashboard_rebuilds_html_and_stages_pages(tmp_path, monk
                     'season_rows': [],
                     'top_disagreements': [],
                 },
+                'war_room_visuals': {
+                    'schema_version': 'war_room_visuals_v1',
+                    'contextual': {'key': 'contextual_score', 'label': 'Board value score'},
+                    'baseline': {'key': 'baseline_score', 'label': 'Simple VOR proxy'},
+                    'timing_frontier': {
+                        'available': True,
+                        'status': 'available',
+                        'question': 'Can I safely wait on this value, or do I need to pick now?',
+                        'reason': '',
+                        'candidates': [
+                            {
+                                'player_name': 'Test Player',
+                                'position': 'RB',
+                                'lane': 'pick_now',
+                                'timing_survival': 0.5,
+                                'wait_regret': 0.1,
+                            }
+                        ],
+                    },
+                    'positional_cliffs': {
+                        'available': True,
+                        'status': 'available',
+                        'question': 'Which positions are about to fall off if I wait?',
+                        'reason': '',
+                        'default_positions': ['RB'],
+                        'positions': [],
+                    },
+                    'comparative_explainer': {
+                        'available': True,
+                        'status': 'available',
+                        'question': 'Why does the contextual board differ from the baseline value view?',
+                        'reason': '',
+                        'contextual_label': 'Board value score',
+                        'baseline_label': 'Simple VOR proxy',
+                        'top_disagreements': [],
+                    },
+                },
                 'model_overview': {'headline': 'Model overview'},
                 'metric_glossary': {},
                 'runtime_controls': {
@@ -143,6 +180,8 @@ def test_refresh_runtime_dashboard_rebuilds_html_and_stages_pages(tmp_path, monk
     staged_payload = json.loads(site_payload.read_text(encoding='utf-8'))
     assert staged_payload['publish_provenance']['schema_version'] == 'publish_provenance_v1'
     assert staged_payload['publish_provenance']['surface_sync']['status'] == 'synchronized'
+    assert staged_payload['war_room_visuals']['schema_version'] == 'war_room_visuals_v1'
+    assert staged_payload['war_room_visuals']['timing_frontier']['available'] is True
 
 
 def test_check_dashboard_freshness_reports_fresh_and_stale(tmp_path, monkeypatch):

@@ -68,6 +68,10 @@ async function runSmoke() {
     finalizeNote: '#finalize-note',
     statusPills: '#status-pills .pill',
     primaryName: '#primary-card .hero-name',
+    timingFrontier: '#timing-frontier',
+    frontierPoints: '#timing-frontier [data-frontier-player]',
+    positionalCliffs: '#positional-cliffs',
+    cliffPlayers: '#positional-cliffs [data-cliff-player]',
     inspector: '#player-inspector',
     rosterNeeds: '#roster-need-grid .metric',
     rosterChips: '#my-roster .pill',
@@ -104,6 +108,30 @@ async function runSmoke() {
         throw new Error(`Could not find board row for ${targetName}`);
       }
       row.click();
+    }, playerName);
+    await page.waitForTimeout(125);
+  };
+
+  const clickFrontierPoint = async (playerName) => {
+    await page.evaluate((targetName) => {
+      const button = Array.from(document.querySelectorAll('#timing-frontier [data-frontier-player]'))
+        .find((node) => node.getAttribute('data-frontier-player') === targetName);
+      if (!button) {
+        throw new Error(`Could not find timing frontier point for ${targetName}`);
+      }
+      button.click();
+    }, playerName);
+    await page.waitForTimeout(125);
+  };
+
+  const clickCliffPlayer = async (playerName) => {
+    await page.evaluate((targetName) => {
+      const button = Array.from(document.querySelectorAll('#positional-cliffs [data-cliff-player]'))
+        .find((node) => node.getAttribute('data-cliff-player') === targetName);
+      if (!button) {
+        throw new Error(`Could not find cliff player chip for ${targetName}`);
+      }
+      button.click();
     }, playerName);
     await page.waitForTimeout(125);
   };
@@ -195,6 +223,9 @@ async function runSmoke() {
     if (!bodyText.includes('Decision evidence') || !bodyText.includes('Freshness and provenance')) {
       throw new Error('Dashboard did not render the decision evidence and provenance sections');
     }
+    if (!bodyText.includes('Wait vs Pick Frontier') || !bodyText.includes('Positional Cliffs')) {
+      throw new Error('Dashboard did not render the new war-room visual sections');
+    }
     if (await page.locator('#reset-button').count()) {
       throw new Error('Reset button should not be present');
     }
@@ -239,12 +270,38 @@ async function runSmoke() {
     if (!primaryBeforeTaken) {
       throw new Error('Primary recommendation was empty before draft actions');
     }
+    if ((await page.locator(selectors.frontierPoints).count()) < 1) {
+      throw new Error('Timing frontier did not render any candidate points');
+    }
+    if ((await page.locator(selectors.cliffPlayers).count()) < 1) {
+      throw new Error('Positional cliff map did not render any player chips');
+    }
+
+    const frontierCandidate = await page.locator(selectors.frontierPoints).nth(0).getAttribute('data-frontier-player');
+    if (!frontierCandidate) {
+      throw new Error('Could not read the first timing frontier candidate');
+    }
+    await clickFrontierPoint(frontierCandidate);
+    await waitForInspectorText(frontierCandidate);
+
+    const cliffCandidate = await page.locator(selectors.cliffPlayers).nth(0).getAttribute('data-cliff-player');
+    if (!cliffCandidate) {
+      throw new Error('Could not read the first positional cliff candidate');
+    }
+    await clickCliffPlayer(cliffCandidate);
+    await waitForInspectorText(cliffCandidate);
+
+    const frontierTextBeforeTaken = (await page.locator(selectors.timingFrontier).textContent()) || '';
 
     await clickAction('taken', primaryBeforeTaken);
     await waitForPillText('Current pick: 2');
     const primaryAfterTaken = await readText(selectors.primaryName);
     if (primaryAfterTaken === primaryBeforeTaken) {
       throw new Error('Taken did not advance the draft to a new recommendation');
+    }
+    const frontierTextAfterTaken = (await page.locator(selectors.timingFrontier).textContent()) || '';
+    if (frontierTextAfterTaken === frontierTextBeforeTaken) {
+      throw new Error('Timing frontier did not respond to a draft-state change');
     }
     if (await isDisabled(selectors.undoButton)) {
       throw new Error('Undo should be enabled after a draft action');
@@ -313,6 +370,10 @@ async function runSmoke() {
 
     await clickBoardRow(stickyCandidate);
     await waitForInspectorText(stickyCandidate);
+    const inspectorText = (await page.locator(selectors.inspector).textContent()) || '';
+    if (!inspectorText.includes('Contextual vs baseline')) {
+      throw new Error('Inspector did not render the contextual-versus-baseline explainer');
+    }
 
     const blockerPlayer = await findFirstAvailablePlayerByPosition('RB');
     if (!blockerPlayer) {

@@ -10,10 +10,12 @@ from ffbayes.draft_strategy.draft_decision_system import (
     LeagueSettings,
     _starter_points_from_roster,
     availability_probability,
+    build_dashboard_payload,
     build_decision_table,
     build_draft_decision_artifacts,
     build_live_recommendation_snapshot,
     build_recommendations,
+    build_tier_cliffs,
     export_workbook,
     run_draft_backtest,
     save_draft_decision_artifacts,
@@ -396,6 +398,12 @@ def test_dashboard_payload_includes_preset_bundle_and_model_notes():
     assert payload['decision_evidence']['available'] is True
     assert 'top_disagreements' in payload['bayesian_vor_summary']
     assert payload['selected_player']
+    assert payload['war_room_visuals']['schema_version'] == 'war_room_visuals_v1'
+    assert payload['war_room_visuals']['timing_frontier']['available'] is True
+    assert payload['war_room_visuals']['positional_cliffs']['available'] is True
+    assert payload['war_room_visuals']['comparative_explainer']['available'] is True
+    assert payload['war_room_visuals']['comparative_explainer']['baseline_label'] == 'Simple VOR proxy'
+    assert payload['war_room_visuals']['positional_cliffs']['default_positions']
 
 
 def test_dashboard_payload_marks_degraded_decision_evidence_when_provenance_is_degraded():
@@ -451,6 +459,50 @@ def test_dashboard_payload_marks_degraded_decision_evidence_when_provenance_is_d
     assert artifacts.dashboard_payload['analysis_provenance']['overall_freshness']['status'] == 'degraded'
     assert artifacts.dashboard_payload['decision_evidence']['status'] == 'degraded'
     assert artifacts.dashboard_payload['decision_evidence']['freshness']['override_used'] is True
+    assert artifacts.dashboard_payload['war_room_visuals']['comparative_explainer']['status'] == 'degraded'
+
+
+def test_dashboard_payload_marks_war_room_visuals_unavailable_when_inputs_missing():
+    settings = LeagueSettings()
+    decision_table = build_decision_table(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
+    payload = build_dashboard_payload(
+        decision_table,
+        pd.DataFrame(),
+        pd.DataFrame(),
+        pd.DataFrame(),
+        pd.DataFrame(),
+        settings,
+        context=DraftContext(current_pick_number=10),
+    )
+
+    assert payload['war_room_visuals']['timing_frontier']['status'] == 'unavailable'
+    assert payload['war_room_visuals']['positional_cliffs']['status'] == 'unavailable'
+    assert payload['war_room_visuals']['comparative_explainer']['status'] == 'degraded'
+    assert payload['war_room_visuals']['timing_frontier']['reason']
+    assert payload['war_room_visuals']['positional_cliffs']['reason']
+
+
+def test_dashboard_payload_marks_comparative_visual_degraded_without_backtest():
+    settings = LeagueSettings()
+    context = DraftContext(current_pick_number=10)
+    decision_table = build_decision_table(_synthetic_players(), settings, context)
+    recommendations = build_recommendations(decision_table, settings, context)
+    payload = build_dashboard_payload(
+        decision_table,
+        recommendations,
+        build_tier_cliffs(decision_table),
+        pd.DataFrame(),
+        pd.DataFrame(),
+        settings,
+        context=context,
+    )
+
+    comparative = payload['war_room_visuals']['comparative_explainer']
+    assert comparative['status'] == 'degraded'
+    assert comparative['available'] is True
+    assert comparative['top_disagreements']
 
 
 def test_workbook_contains_core_sheets():

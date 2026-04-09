@@ -17,7 +17,7 @@ window.FFBAYES_DASHBOARD = {"dashboard": true};
         encoding='utf-8',
     )
     source_payload.write_text(
-        '{"dashboard": true, "generated_at": "2026-04-04T18:35:49", "analysis_provenance": {"overall_freshness": {"status": "fresh", "override_used": false, "warnings": []}}}',
+        '{"dashboard": true, "generated_at": "2026-04-04T18:35:49", "analysis_provenance": {"overall_freshness": {"status": "fresh", "override_used": false, "warnings": []}}, "war_room_visuals": {"schema_version": "war_room_visuals_v1", "timing_frontier": {"available": true, "status": "available", "question": "Can I safely wait?", "reason": ""}, "positional_cliffs": {"available": true, "status": "available", "question": "Which positions are about to fall off?", "reason": "", "default_positions": ["RB"], "positions": []}, "comparative_explainer": {"available": true, "status": "available", "question": "Why does the contextual board differ?", "reason": "", "contextual_label": "Board value score", "baseline_label": "Simple VOR proxy", "top_disagreements": []}}}',
         encoding='utf-8',
     )
 
@@ -40,6 +40,7 @@ window.FFBAYES_DASHBOARD = {"dashboard": true};
     assert provenance['schema_version'] == 'publish_provenance_v1'
     assert provenance['surface_sync']['status'] == 'synchronized'
     assert provenance['surface_sync']['html_bootstrap'] == 'inline_payload_embedded'
+    assert payload['war_room_visuals']['schema_version'] == 'war_room_visuals_v1'
     assert 'publish_provenance' in (output_dir / 'index.html').read_text(encoding='utf-8')
     assert not (output_dir / 'draft_board_2026.html').exists()
 

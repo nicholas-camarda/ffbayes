@@ -506,10 +506,15 @@ Current outputs:
 - GitHub Pages dashboard root in `site/index.html`
 - Published plots and preview images only after `ffbayes publish`
 
-The dashboard is designed to answer four draft-day questions quickly:
+The local war room dashboard is designed as a decision aid, not just a ranked table. In addition to the recommendation lanes and player inspector, it now includes:
+- a `Wait vs Pick Frontier` for timing tradeoffs between current value and next-pick survival
+- a `Positional Cliffs` panel that highlights where a position group is about to fall off
+- an inspector-first `Contextual vs baseline` explainer so disagreement with the simple VOR proxy stays attached to the selected player instead of living in a detached analytics view
+
+The dashboard is designed to answer these draft-day questions quickly:
 - Who are the best players right now?
 - Who is likely to survive to my next pick?
-- What position run risk should I care about?
+- What position run risk or positional cliff should I care about?
 - Which strategy has been working best in the backtest?
 
 ## License

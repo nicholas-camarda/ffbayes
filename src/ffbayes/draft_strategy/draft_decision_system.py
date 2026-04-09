@@ -1787,6 +1787,258 @@ def build_tier_cliffs(decision_table: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _ordered_unique_strings(values: Iterable[Any]) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = _safe_string(value).upper()
+        if not normalized or normalized in seen:
+            continue
+        ordered.append(normalized)
+        seen.add(normalized)
+    return ordered
+
+
+def _build_war_room_visuals(
+    decision_table: pd.DataFrame,
+    recommendations: pd.DataFrame,
+    tier_cliffs: pd.DataFrame,
+    decision_evidence: dict[str, Any],
+    *,
+    selected_player: str,
+) -> dict[str, Any]:
+    contextual_label = METRIC_GLOSSARY.get('draft_score', {}).get(
+        'label', 'Board value score'
+    )
+    baseline_label = METRIC_GLOSSARY.get('replacement_delta', {}).get(
+        'label', 'Simple VOR proxy'
+    )
+
+    timing_required = [
+        'player_name',
+        'position',
+        'draft_score',
+        'replacement_delta',
+        'availability_to_next_pick',
+        'expected_regret',
+        'position_run_risk',
+        'recommendation_lane',
+        'why_flags',
+    ]
+    timing_rows = pd.DataFrame()
+    timing_missing = [
+        column for column in timing_required if column not in recommendations.columns
+    ]
+    timing_status = 'available'
+    timing_available = True
+    timing_reason = ''
+    if recommendations.empty:
+        timing_available = False
+        timing_status = 'unavailable'
+        timing_reason = 'No recommendation rows were available for the timing frontier.'
+    elif timing_missing:
+        timing_available = False
+        timing_status = 'unavailable'
+        timing_reason = (
+            'Timing frontier inputs are incomplete for this payload: '
+            + ', '.join(timing_missing)
+            + '.'
+        )
+    else:
+        timing_rows = recommendations[timing_required].copy().head(10)
+        timing_rows = timing_rows.rename(
+            columns={
+                'draft_score': 'contextual_score',
+                'replacement_delta': 'baseline_score',
+                'availability_to_next_pick': 'timing_survival',
+                'expected_regret': 'wait_regret',
+                'position_run_risk': 'timing_pressure',
+                'recommendation_lane': 'lane',
+            }
+        )
+        timing_rows['lane_label'] = timing_rows['lane'].map(
+            {
+                'pick_now': 'Pick now',
+                'fallback': 'Fallback',
+                'can_wait': 'Can wait',
+            }
+        ).fillna('Watch')
+        if not (timing_rows['lane'] == 'can_wait').any():
+            timing_status = 'degraded'
+            timing_reason = (
+                'No waitable candidates were available, so the timing frontier shows only take-now pressure.'
+            )
+
+    cliff_required = [
+        'position',
+        'player_name',
+        'proj_points_mean',
+        'draft_score',
+        'tier_cliff_distance',
+        'is_tier_cliff',
+        'draft_tier',
+    ]
+    cliff_status = 'available'
+    cliff_available = True
+    cliff_reason = ''
+    cliff_missing = [column for column in cliff_required if column not in tier_cliffs.columns]
+    cliff_groups: list[dict[str, Any]] = []
+    if tier_cliffs.empty:
+        cliff_available = False
+        cliff_status = 'unavailable'
+        cliff_reason = 'No tier-cliff rows were available for this dashboard payload.'
+    elif cliff_missing:
+        cliff_available = False
+        cliff_status = 'unavailable'
+        cliff_reason = (
+            'Positional cliff inputs are incomplete for this payload: '
+            + ', '.join(cliff_missing)
+            + '.'
+        )
+    else:
+        for position, group in tier_cliffs.groupby('position'):
+            ordered = group.sort_values(
+                ['proj_points_mean', 'draft_score'], ascending=[False, False]
+            ).reset_index(drop=True)
+            strongest = ordered.sort_values(
+                ['is_tier_cliff', 'tier_cliff_distance'],
+                ascending=[False, False],
+            ).iloc[0]
+            cliff_groups.append(
+                {
+                    'position': position,
+                    'cliff_strength': float(
+                        _coerce_float(strongest.get('tier_cliff_distance'), 0.0)
+                    ),
+                    'cliff_after_player': _safe_string(
+                        strongest.get('player_name')
+                        if bool(strongest.get('is_tier_cliff'))
+                        else ''
+                    ),
+                    'players': ordered.head(6)
+                    .assign(
+                        cliff_strength=lambda frame: frame['tier_cliff_distance'].apply(
+                            lambda value: float(_coerce_float(value, 0.0))
+                        )
+                    )
+                    .to_dict(orient='records'),
+                }
+            )
+        if cliff_groups and not any(group['cliff_after_player'] for group in cliff_groups):
+            cliff_status = 'degraded'
+            cliff_reason = (
+                'No sharp current cliff was detected, so the view falls back to softer positional drop-offs.'
+            )
+
+    recommendation_positions = (
+        recommendations['position'].tolist() if 'position' in recommendations.columns else []
+    )
+    default_positions = _ordered_unique_strings(
+        [*recommendation_positions, selected_player]
+    )
+    if selected_player and 'player_name' in decision_table.columns and 'position' in decision_table.columns:
+        selected_match = decision_table[
+            decision_table['player_name'].astype(str) == selected_player
+        ]
+        if not selected_match.empty:
+            default_positions = _ordered_unique_strings(
+                [
+                    *default_positions,
+                    _pick_first_row(selected_match['position']),
+                ]
+            )
+    if not default_positions:
+        default_positions = _ordered_unique_strings(
+            [group.get('position') for group in cliff_groups[:3]]
+        )
+
+    disagreement_rows = list(decision_evidence.get('top_disagreements') or [])
+    comparative_status = 'available'
+    comparative_available = True
+    comparative_reason = ''
+    if disagreement_rows:
+        if decision_evidence.get('status') == 'unavailable':
+            comparative_status = 'degraded'
+            comparative_reason = (
+                'Backtest evidence is unavailable, so the comparative explainer shows board-only disagreement semantics.'
+            )
+        elif decision_evidence.get('status') == 'degraded':
+            comparative_status = 'degraded'
+            comparative_reason = (
+                'Comparative explanation is available, but its supporting evidence uses degraded inputs.'
+            )
+    else:
+        comparative_available = False
+        comparative_status = 'unavailable'
+        comparative_reason = decision_evidence.get(
+            'reason_unavailable',
+            'No contextual-versus-baseline disagreement rows were available.',
+        )
+
+    normalized_disagreements = []
+    for row in disagreement_rows[:12]:
+        normalized_disagreements.append(
+            {
+                'player_name': _safe_string(row.get('player_name')),
+                'position': _safe_string(row.get('position')),
+                'contextual_rank': _coerce_int(row.get('draft_rank'), 0),
+                'baseline_rank': _coerce_int(row.get('simple_vor_rank'), 0),
+                'rank_gap': _coerce_int(row.get('rank_gap_vs_vor'), 0),
+                'contextual_score': float(_coerce_float(row.get('draft_score'), 0.0)),
+                'baseline_score': float(
+                    _coerce_float(row.get('replacement_delta'), 0.0)
+                ),
+                'timing_survival': float(
+                    _coerce_float(row.get('availability_at_pick'), np.nan)
+                )
+                if pd.notna(row.get('availability_at_pick'))
+                else None,
+                'why_flags': row.get('why_flags') or [],
+            }
+        )
+
+    return {
+        'schema_version': 'war_room_visuals_v1',
+        'contextual': {
+            'key': 'contextual_score',
+            'label': contextual_label,
+        },
+        'baseline': {
+            'key': 'baseline_score',
+            'label': baseline_label,
+        },
+        'timing_frontier': {
+            'available': timing_available,
+            'status': timing_status,
+            'question': 'Can I safely wait on this value, or do I need to pick now?',
+            'reason': timing_reason,
+            'contextual_label': contextual_label,
+            'baseline_label': baseline_label,
+            'current_pick_number': None,
+            'next_pick_number': None,
+            'candidates': timing_rows.to_dict(orient='records') if not timing_rows.empty else [],
+        },
+        'positional_cliffs': {
+            'available': cliff_available,
+            'status': cliff_status,
+            'question': 'Which positions are about to fall off if I wait?',
+            'reason': cliff_reason,
+            'default_positions': default_positions,
+            'positions': cliff_groups,
+        },
+        'comparative_explainer': {
+            'available': comparative_available,
+            'status': comparative_status,
+            'question': 'Why does the contextual board differ from the baseline value view?',
+            'reason': comparative_reason,
+            'contextual_label': contextual_label,
+            'baseline_label': baseline_label,
+            'selected_player': selected_player,
+            'top_disagreements': normalized_disagreements,
+        },
+    }
+
+
 def build_roster_scenarios(
     decision_table: pd.DataFrame, league_settings: LeagueSettings
 ) -> pd.DataFrame:
@@ -2607,6 +2859,15 @@ def build_dashboard_payload(
         if not recommendations.empty
         else _pick_first_row(decision_table['player_name'])
     )
+    war_room_visuals = _build_war_room_visuals(
+        decision_table,
+        recommendations,
+        tier_cliffs,
+        decision_evidence,
+        selected_player=_safe_string(selected_player),
+    )
+    war_room_visuals['timing_frontier']['current_pick_number'] = context.current_pick_number
+    war_room_visuals['timing_frontier']['next_pick_number'] = live_state['next_pick_number']
     return {
         'generated_at': datetime.now().isoformat(timespec='seconds'),
         'league_settings': league_settings.to_dict(),
@@ -2640,6 +2901,7 @@ def build_dashboard_payload(
         'source_freshness': source_freshness.to_dict(orient='records'),
         'analysis_provenance': analysis_provenance,
         'decision_evidence': decision_evidence,
+        'war_room_visuals': war_room_visuals,
         'backtest': backtest,
         'supporting_math': _dashboard_supporting_math(decision_table),
         'metric_glossary': METRIC_GLOSSARY,
@@ -3252,6 +3514,10 @@ def export_dashboard_html(
       display: grid;
       gap: 10px;
     }
+    .visual-stack {
+      display: grid;
+      gap: 12px;
+    }
     .lane-item, .mini-item {
       padding: 12px;
       border-radius: 14px;
@@ -3390,6 +3656,119 @@ def export_dashboard_html(
       color: #dbeafe;
       line-height: 1.5;
       font-size: 14px;
+    }
+    .frontier-chart {
+      position: relative;
+      min-height: 220px;
+      border-radius: 16px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      background:
+        linear-gradient(180deg, rgba(248, 113, 113, 0.08), rgba(14, 165, 233, 0.05)),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      background-size: auto, 20% 100%, 100% 25%;
+      overflow: hidden;
+    }
+    .frontier-axis {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .frontier-point {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      min-width: 96px;
+      max-width: 148px;
+      padding: 8px 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(9, 16, 32, 0.94);
+      color: #eff6ff;
+      text-align: left;
+      cursor: pointer;
+      box-shadow: 0 10px 24px rgba(2, 6, 23, 0.32);
+    }
+    .frontier-point.pick_now {
+      border-color: rgba(248, 113, 113, 0.35);
+      background: rgba(127, 29, 29, 0.78);
+    }
+    .frontier-point.fallback {
+      border-color: rgba(245, 158, 11, 0.30);
+      background: rgba(120, 53, 15, 0.78);
+    }
+    .frontier-point.can_wait {
+      border-color: rgba(52, 211, 153, 0.30);
+      background: rgba(6, 95, 70, 0.78);
+    }
+    .frontier-point.is-selected {
+      outline: 2px solid rgba(155, 220, 255, 0.80);
+    }
+    .frontier-point-name {
+      display: block;
+      font-weight: 700;
+      font-size: 12px;
+      line-height: 1.25;
+    }
+    .frontier-point-meta {
+      display: block;
+      margin-top: 3px;
+      font-size: 11px;
+      color: rgba(226, 232, 240, 0.88);
+      line-height: 1.3;
+    }
+    .frontier-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .cliff-stack {
+      display: grid;
+      gap: 12px;
+    }
+    .cliff-row {
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: rgba(255, 255, 255, 0.04);
+      display: grid;
+      gap: 10px;
+    }
+    .cliff-player-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .cliff-chip {
+      border-radius: 999px;
+      padding: 7px 10px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(255, 255, 255, 0.05);
+      color: #e2e8f0;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .cliff-chip.is-selected {
+      border-color: rgba(155, 220, 255, 0.85);
+      background: rgba(56, 189, 248, 0.12);
+    }
+    .cliff-chip.is-cliff-edge {
+      border-color: rgba(245, 158, 11, 0.42);
+      background: rgba(245, 158, 11, 0.12);
+    }
+    .cliff-gap {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 8px;
+      border: 1px solid rgba(248, 113, 113, 0.26);
+      background: rgba(248, 113, 113, 0.10);
+      color: #fecaca;
+      font-size: 11px;
     }
     .bar-stack {
       display: grid;
@@ -3535,6 +3914,12 @@ def export_dashboard_html(
         </section>
 
         <section class="panel">
+          <h2>Wait vs Pick Frontier</h2>
+          <p class="subtle">A compact timing view of who you need to take now versus who can plausibly survive to your next turn.</p>
+          <div class="visual-stack" id="timing-frontier"></div>
+        </section>
+
+        <section class="panel">
           <div class="split">
             <div>
               <h2>Fallback Ladder</h2>
@@ -3568,6 +3953,17 @@ def export_dashboard_html(
       </div>
 
       <div class="column">
+        <section class="panel">
+          <div class="split">
+            <div>
+              <h2>Positional Cliffs</h2>
+              <p class="subtle">Scarcity map for the positions most relevant to the current recommendation flow.</p>
+            </div>
+            <span class="pill">Scarcity aid</span>
+          </div>
+          <div class="visual-stack" id="positional-cliffs"></div>
+        </section>
+
         <section class="panel strong">
           <div class="split">
             <div>
@@ -3743,6 +4139,7 @@ def export_dashboard_html(
         pickLog: [],
         search: '',
         selectedPlayer: data.selected_player || '',
+        showAllCliffs: false,
       };
 
       const state = loadState();
@@ -3802,6 +4199,205 @@ def export_dashboard_html(
         }
         const explanation = explainFreshnessState(freshness && freshness.status, freshness && freshness.override_used);
         return explanation ? `<div class="notice">${explanation} Detailed warning text is unavailable in this payload.</div>` : '';
+      }
+
+      function getWarRoomVisualsConfig() {
+        const fallbackBaseline = ((data.metric_glossary || {}).replacement_delta || {}).label || 'Simple VOR proxy';
+        const fallbackContextual = ((data.metric_glossary || {}).draft_score || {}).label || 'Board value score';
+        const raw = data.war_room_visuals || {};
+        return {
+          contextual: raw.contextual || { key: 'contextual_score', label: fallbackContextual },
+          baseline: raw.baseline || { key: 'baseline_score', label: fallbackBaseline },
+          timing_frontier: raw.timing_frontier || {
+            available: true,
+            status: 'available',
+            question: 'Can I safely wait on this value, or do I need to pick now?',
+            reason: '',
+            contextual_label: fallbackContextual,
+            baseline_label: fallbackBaseline,
+            candidates: [],
+          },
+          positional_cliffs: raw.positional_cliffs || {
+            available: true,
+            status: 'available',
+            question: 'Which positions are about to fall off if I wait?',
+            reason: '',
+            default_positions: [],
+            positions: [],
+          },
+          comparative_explainer: raw.comparative_explainer || {
+            available: true,
+            status: 'available',
+            question: 'Why does the contextual board differ from the baseline value view?',
+            reason: '',
+            contextual_label: fallbackContextual,
+            baseline_label: fallbackBaseline,
+            top_disagreements: [],
+          },
+        };
+      }
+
+      function clamp01(value) {
+        return Math.max(0, Math.min(1, Number(value) || 0));
+      }
+
+      function normalizeVisualRow(row) {
+        const config = getWarRoomVisualsConfig();
+        return {
+          player_name: row.player_name,
+          position: row.position,
+          status: row.status,
+          lane: row.recommendation_lane || 'watch',
+          contextual_score: Number(row.draft_score || row.board_value_score || 0),
+          baseline_score: Number(row.simple_vor_proxy || row.replacement_delta || 0),
+          contextual_rank: Number(row.draft_rank || 0),
+          baseline_rank: Number(row.simple_vor_rank || 0),
+          rank_gap: Number(row.rank_gap_vs_vor || 0),
+          timing_survival: clamp01(row.availability_to_next_pick),
+          wait_regret: Math.max(0, Number(row.expected_regret || 0)),
+          timing_pressure: clamp01(row.position_run_risk),
+          contextual_label: config.contextual.label,
+          baseline_label: config.baseline.label,
+          rationale: row.rationale_live || buildPlayerSummary(row),
+        };
+      }
+
+      function uniquePlayerRows(rows) {
+        const seen = new Set();
+        return rows.filter((row) => {
+          const key = safeLower(row && row.player_name);
+          if (!key || seen.has(key)) {
+            return false;
+          }
+          seen.add(key);
+          return true;
+        });
+      }
+
+      function buildTimingFrontierModel(boardState) {
+        const config = getWarRoomVisualsConfig().timing_frontier;
+        if (config.available === false) {
+          return { available: false, status: config.status || 'unavailable', reason: config.reason || 'Timing frontier is unavailable.' };
+        }
+        const candidates = uniquePlayerRows([
+          ...(boardState.pickNow || []),
+          ...(boardState.fallbacks || []).slice(0, 3),
+          ...(boardState.canWait || []).slice(0, 4),
+        ]).map(normalizeVisualRow);
+        if (!candidates.length) {
+          return { available: false, status: 'unavailable', reason: config.reason || 'No current timing candidates are available.' };
+        }
+        const regrets = candidates.map((row) => row.wait_regret);
+        const minRegret = Math.min(...regrets);
+        const maxRegret = Math.max(...regrets);
+        const normalizeRegret = (value) => {
+          if (!Number.isFinite(value)) {
+            return 0.5;
+          }
+          if (Math.abs(maxRegret - minRegret) < 1e-9) {
+            return 0.5;
+          }
+          return (value - minRegret) / (maxRegret - minRegret);
+        };
+        return {
+          available: true,
+          status: config.status || 'available',
+          question: config.question,
+          reason: config.reason || '',
+          candidates: candidates.map((row) => ({
+            ...row,
+            x: clamp01(row.timing_survival),
+            y: normalizeRegret(row.wait_regret),
+          })),
+        };
+      }
+
+      function buildCliffGroups(boardState) {
+        const groups = new Map();
+        (boardState.availableRows || []).forEach((row) => {
+          if (!groups.has(row.position)) {
+            groups.set(row.position, []);
+          }
+          groups.get(row.position).push(row);
+        });
+        return Array.from(groups.entries()).map(([position, rows]) => {
+          const ordered = [...rows].sort((a, b) => (Number(b.proj_points_mean) - Number(a.proj_points_mean)) || (Number(b.draft_score) - Number(a.draft_score))).slice(0, 7);
+          const diffs = ordered.map((row, index) => {
+            const next = ordered[index + 1];
+            return next ? Math.max(0, Number(row.proj_points_mean || 0) - Number(next.proj_points_mean || 0)) : 0;
+          });
+          const sortedDiffs = [...diffs].filter((value) => Number.isFinite(value)).sort((a, b) => a - b);
+          const threshold = sortedDiffs.length > 3
+            ? sortedDiffs[Math.min(sortedDiffs.length - 1, Math.floor(sortedDiffs.length * 0.75))]
+            : Math.max(...sortedDiffs, 0);
+          const players = ordered.map((row, index) => ({
+            row,
+            cliffDistance: Number(diffs[index] || 0),
+            isCliffEdge: Number(diffs[index] || 0) >= Number(threshold || 0) && Number(diffs[index] || 0) > 0,
+          }));
+          const strongest = [...players].sort((a, b) => (Number(b.cliffDistance) - Number(a.cliffDistance)))[0] || null;
+          return {
+            position,
+            cliffStrength: Number((strongest && strongest.cliffDistance) || 0),
+            players,
+          };
+        }).sort((a, b) => Number(b.cliffStrength) - Number(a.cliffStrength));
+      }
+
+      function deriveRelevantCliffPositions(boardState, groups) {
+        const config = getWarRoomVisualsConfig().positional_cliffs;
+        const preferred = [
+          ...(Array.isArray(config.default_positions) ? config.default_positions : []),
+          boardState.selectedRow && boardState.selectedRow.position,
+          ...(boardState.pickNow || []).map((row) => row.position),
+          ...(boardState.fallbacks || []).map((row) => row.position),
+          ...(boardState.canWait || []).map((row) => row.position),
+        ]
+          .map((value) => (value || '').toString().toUpperCase())
+          .filter(Boolean);
+        const seen = new Set();
+        const filtered = preferred.filter((value) => {
+          if (seen.has(value)) {
+            return false;
+          }
+          seen.add(value);
+          return groups.some((group) => group.position === value);
+        });
+        return filtered.length ? filtered : groups.slice(0, 3).map((group) => group.position);
+      }
+
+      function buildComparativeModel(boardState, row) {
+        const config = getWarRoomVisualsConfig().comparative_explainer;
+        if (!row) {
+          return { available: false, status: 'unavailable', reason: 'Select a player to inspect the contextual-versus-baseline comparison.' };
+        }
+        const visualRow = normalizeVisualRow(row);
+        const peerRows = uniquePlayerRows(
+          (boardState.availableRows || [])
+            .filter((candidate) => candidate.player_name !== row.player_name)
+            .sort((a, b) => Math.abs(Number(b.rank_gap_vs_vor || 0)) - Math.abs(Number(a.rank_gap_vs_vor || 0)))
+            .slice(0, 4),
+        ).map(normalizeVisualRow);
+        const status = config.available === false
+          ? 'unavailable'
+          : (config.status || (config.reason ? 'degraded' : 'available'));
+        const available = status !== 'unavailable';
+        let headline = `${config.contextual_label || visualRow.contextual_label} and ${config.baseline_label || visualRow.baseline_label} largely agree on this player.`;
+        if (visualRow.rank_gap > 0) {
+          headline = `${config.contextual_label || visualRow.contextual_label} likes ${row.player_name} ${Math.abs(visualRow.rank_gap)} rank${Math.abs(visualRow.rank_gap) === 1 ? '' : 's'} more than ${config.baseline_label || visualRow.baseline_label}.`;
+        } else if (visualRow.rank_gap < 0) {
+          headline = `${config.baseline_label || visualRow.baseline_label} likes ${row.player_name} ${Math.abs(visualRow.rank_gap)} rank${Math.abs(visualRow.rank_gap) === 1 ? '' : 's'} more than ${config.contextual_label || visualRow.contextual_label}.`;
+        }
+        return {
+          available,
+          status,
+          reason: config.reason || '',
+          headline,
+          row: visualRow,
+          peers: peerRows,
+          contextualLabel: config.contextual_label || visualRow.contextual_label,
+          baselineLabel: config.baseline_label || visualRow.baseline_label,
+        };
       }
 
       function downloadTextFile(filename, text, mimeType) {
@@ -3878,6 +4474,7 @@ def export_dashboard_html(
             history: Array.isArray(parsed.history) ? parsed.history : [],
             redoHistory: Array.isArray(parsed.redoHistory) ? parsed.redoHistory : [],
             pickLog: Array.isArray(parsed.pickLog) ? parsed.pickLog : [],
+            showAllCliffs: Boolean(parsed.showAllCliffs),
           };
         } catch (_) {
           return clone(defaultState);
@@ -4323,9 +4920,9 @@ def export_dashboard_html(
         if (Number(row.starter_delta) > 0) {
           reasons.push(`adds ${formatNumber(row.starter_delta)} points over a typical ${row.position} starter`);
         }
-        if (Number(row.rank_gap_vs_vor) < 0) {
+        if (Number(row.rank_gap_vs_vor) > 0) {
           reasons.push(`the contextual model likes this profile more than the simple VOR baseline`);
-        } else if (Number(row.rank_gap_vs_vor) > 0) {
+        } else if (Number(row.rank_gap_vs_vor) < 0) {
           reasons.push(`simple VOR likes this player a bit more than the contextual score`);
         }
         if (Number(row.availability_to_next_pick) < 0.35) {
@@ -4367,7 +4964,9 @@ def export_dashboard_html(
         persistState();
         renderTopbar(boardState);
         renderRecommendations(boardState);
+        renderTimingFrontier(boardState);
         renderQueue(boardState);
+        renderPositionalCliffs(boardState);
         renderBoard(boardState);
         renderControls(boardState);
         renderInspector(boardState);
@@ -4417,6 +5016,48 @@ def export_dashboard_html(
         renderLane('wait-list', boardState.canWait, 'No wait candidates right now.');
       }
 
+      function renderTimingFrontier(boardState) {
+        const container = document.getElementById('timing-frontier');
+        const model = buildTimingFrontierModel(boardState);
+        if (!model.available) {
+          container.innerHTML = `<div class="notice">${model.reason || 'Timing frontier is unavailable for this dashboard state.'}</div>`;
+          return;
+        }
+        const selectedKey = safeLower(state.selectedPlayer);
+        container.innerHTML = `
+          <div class="summary-box">${model.question || 'Can I safely wait on this value, or do I need to pick now?'}</div>
+          ${model.status !== 'available' && model.reason ? `<div class="notice">${model.reason}</div>` : ''}
+          <div class="frontier-chart">
+            ${model.candidates.map((row) => `
+              <button
+                type="button"
+                class="frontier-point ${row.lane} ${safeLower(row.player_name) === selectedKey ? 'is-selected' : ''}"
+                style="left: ${Math.max(10, Math.min(92, row.x * 100))}%; top: ${Math.max(12, Math.min(88, (1 - row.y) * 100))}%;"
+                data-frontier-player="${escapeHtml(row.player_name)}"
+              >
+                <span class="frontier-point-name">${escapeHtml(row.player_name)}</span>
+                <span class="frontier-point-meta">${escapeHtml(row.position)} • ${formatPercent(row.timing_survival)} survive • regret ${formatNumber(row.wait_regret)}</span>
+              </button>
+            `).join('')}
+          </div>
+          <div class="frontier-axis">
+            <span>Higher regret if you pass</span>
+            <span>More likely to survive</span>
+          </div>
+          <div class="frontier-legend">
+            <span class="pill">Red: pick now pressure</span>
+            <span class="pill">Amber: fallback pivot</span>
+            <span class="pill">Green: can wait</span>
+          </div>
+        `;
+        container.querySelectorAll('[data-frontier-player]').forEach((button) => {
+          button.addEventListener('click', () => {
+            state.selectedPlayer = button.getAttribute('data-frontier-player');
+            render();
+          });
+        });
+      }
+
       function renderLane(elementId, rows, emptyMessage) {
         const container = document.getElementById(elementId);
         if (!rows.length) {
@@ -4457,6 +5098,69 @@ def export_dashboard_html(
             <span class="value">${boardState.rosterNeed[position] || 0}</span>
           </div>
         `).join('');
+      }
+
+      function renderPositionalCliffs(boardState) {
+        const container = document.getElementById('positional-cliffs');
+        const config = getWarRoomVisualsConfig().positional_cliffs;
+        if (config.available === false) {
+          container.innerHTML = `<div class="notice">${config.reason || 'Positional cliff data is unavailable for this payload.'}</div>`;
+          return;
+        }
+        const groups = buildCliffGroups(boardState);
+        if (!groups.length) {
+          container.innerHTML = `<div class="notice">${config.reason || 'No current positional cliff data is available.'}</div>`;
+          return;
+        }
+        const defaultPositions = deriveRelevantCliffPositions(boardState, groups);
+        const visibleGroups = state.showAllCliffs
+          ? groups
+          : groups.filter((group) => defaultPositions.includes(group.position));
+        container.innerHTML = `
+          <div class="summary-box">${config.question || 'Which positions are about to fall off if I wait?'}</div>
+          ${config.status !== 'available' && config.reason ? `<div class="notice">${config.reason}</div>` : ''}
+          <div class="split">
+            <div class="tiny">Default view follows the active recommendation lanes and selected-player context.</div>
+            <button type="button" id="toggle-cliffs">${state.showAllCliffs ? 'Focus relevant positions' : 'Show all positions'}</button>
+          </div>
+          <div class="cliff-stack">
+            ${visibleGroups.map((group) => `
+              <div class="cliff-row">
+                <div class="lane-item-header">
+                  <div class="item-title">${group.position}</div>
+                  <span class="pill">Drop strength ${formatNumber(group.cliffStrength)}</span>
+                </div>
+                <div class="cliff-player-row">
+                  ${group.players.map((player, index) => `
+                    <button
+                      type="button"
+                      class="cliff-chip ${safeLower(player.row.player_name) === safeLower(state.selectedPlayer) ? 'is-selected' : ''} ${player.isCliffEdge ? 'is-cliff-edge' : ''}"
+                      data-cliff-player="${escapeHtml(player.row.player_name)}"
+                    >
+                      ${escapeHtml(player.row.player_name)}
+                    </button>
+                    ${player.isCliffEdge && group.players[index + 1]
+                      ? `<span class="cliff-gap">drop ${formatNumber(player.cliffDistance)} before ${escapeHtml(group.players[index + 1].row.player_name)}</span>`
+                      : ''}
+                  `).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+        const toggle = document.getElementById('toggle-cliffs');
+        if (toggle) {
+          toggle.addEventListener('click', () => {
+            state.showAllCliffs = !state.showAllCliffs;
+            render();
+          });
+        }
+        container.querySelectorAll('[data-cliff-player]').forEach((button) => {
+          button.addEventListener('click', () => {
+            state.selectedPlayer = button.getAttribute('data-cliff-player');
+            render();
+          });
+        });
       }
 
       function renderBoard(boardState) {
@@ -4544,6 +5248,7 @@ def export_dashboard_html(
           container.innerHTML = '<div class="empty">Select a player from the board.</div>';
           return;
         }
+        const comparative = buildComparativeModel(boardState, row);
         const percentileMaps = {
           projection: percentileRows(boardState.rows, 'proj_points_mean'),
           upside: percentileRows(boardState.rows, 'upside_score'),
@@ -4603,6 +5308,48 @@ def export_dashboard_html(
                   </div>
                 `).join('')}
               </div>
+            </div>
+          </details>
+          <details>
+            <summary>Contextual vs baseline</summary>
+            <div class="details-body">
+              ${comparative.available ? `
+                <div class="summary-box">${comparative.headline}</div>
+                ${comparative.status !== 'available' && comparative.reason ? `<div class="notice">${comparative.reason}</div>` : ''}
+                <div class="metric-grid">
+                  <div class="metric"><span class="label">${comparative.contextualLabel} rank</span><span class="value">${comparative.row.contextual_rank || 'n/a'}</span></div>
+                  <div class="metric"><span class="label">${comparative.baselineLabel} rank</span><span class="value">${comparative.row.baseline_rank || 'n/a'}</span></div>
+                  <div class="metric"><span class="label">${comparative.contextualLabel}</span><span class="value">${formatNumber(comparative.row.contextual_score)}</span></div>
+                  <div class="metric"><span class="label">${comparative.baselineLabel}</span><span class="value">${formatNumber(comparative.row.baseline_score)}</span></div>
+                </div>
+                <div class="board-table-wrap" style="max-height: 220px;">
+                  <table>
+                    <thead>
+                      <tr><th>Player</th><th>Pos</th><th>${comparative.contextualLabel} rank</th><th>${comparative.baselineLabel} rank</th><th>Gap</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>${row.player_name}</td>
+                        <td>${row.position}</td>
+                        <td>${comparative.row.contextual_rank || 'n/a'}</td>
+                        <td>${comparative.row.baseline_rank || 'n/a'}</td>
+                        <td>${formatSignedNumber(comparative.row.rank_gap)}</td>
+                      </tr>
+                      ${comparative.peers.map((peer) => `
+                        <tr>
+                          <td>${peer.player_name}</td>
+                          <td>${peer.position}</td>
+                          <td>${peer.contextual_rank || 'n/a'}</td>
+                          <td>${peer.baseline_rank || 'n/a'}</td>
+                          <td>${formatSignedNumber(peer.rank_gap)}</td>
+                        </tr>
+                      `).join('') || '<tr><td colspan="5" class="empty">No nearby disagreement peers are available.</td></tr>'}
+                    </tbody>
+                  </table>
+                </div>
+              ` : `
+                <div class="notice">${comparative.reason || 'No contextual-versus-baseline explainer is available for this player.'}</div>
+              `}
             </div>
           </details>
           <details>
