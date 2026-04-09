@@ -3681,49 +3681,102 @@ def export_dashboard_html(
     .frontier-point {
       position: absolute;
       transform: translate(-50%, -50%);
-      min-width: 96px;
-      max-width: 148px;
-      padding: 8px 10px;
-      border-radius: 14px;
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border-radius: 999px;
       border: 1px solid rgba(148, 163, 184, 0.18);
       background: rgba(9, 16, 32, 0.94);
       color: #eff6ff;
-      text-align: left;
       cursor: pointer;
       box-shadow: 0 10px 24px rgba(2, 6, 23, 0.32);
     }
     .frontier-point.pick_now {
-      border-color: rgba(248, 113, 113, 0.35);
-      background: rgba(127, 29, 29, 0.78);
+      border-color: rgba(254, 202, 202, 0.85);
+      background: rgba(239, 68, 68, 0.95);
     }
     .frontier-point.fallback {
-      border-color: rgba(245, 158, 11, 0.30);
-      background: rgba(120, 53, 15, 0.78);
+      border-color: rgba(253, 230, 138, 0.85);
+      background: rgba(245, 158, 11, 0.95);
     }
     .frontier-point.can_wait {
-      border-color: rgba(52, 211, 153, 0.30);
-      background: rgba(6, 95, 70, 0.78);
+      border-color: rgba(167, 243, 208, 0.85);
+      background: rgba(16, 185, 129, 0.95);
     }
     .frontier-point.is-selected {
       outline: 2px solid rgba(155, 220, 255, 0.80);
     }
-    .frontier-point-name {
-      display: block;
+    .frontier-list {
+      display: grid;
+      gap: 8px;
+    }
+    .frontier-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(148, 163, 184, 0.12);
+      background: rgba(255, 255, 255, 0.04);
+      cursor: pointer;
+    }
+    .frontier-list-item.is-selected {
+      border-color: rgba(56, 189, 248, 0.40);
+      background: rgba(56, 189, 248, 0.10);
+    }
+    .frontier-list-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .frontier-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+    }
+    .frontier-swatch.pick_now {
+      background: rgba(239, 68, 68, 0.95);
+    }
+    .frontier-swatch.fallback {
+      background: rgba(245, 158, 11, 0.95);
+    }
+    .frontier-swatch.can_wait {
+      background: rgba(16, 185, 129, 0.95);
+    }
+    .frontier-list-name {
       font-weight: 700;
-      font-size: 12px;
+      font-size: 13px;
       line-height: 1.25;
     }
-    .frontier-point-meta {
-      display: block;
-      margin-top: 3px;
+    .frontier-list-meta {
       font-size: 11px;
       color: rgba(226, 232, 240, 0.88);
-      line-height: 1.3;
+      line-height: 1.35;
     }
     .frontier-legend {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
+    }
+    .legend-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(255, 255, 255, 0.05);
+      font-size: 12px;
+      color: #dbeafe;
+    }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      flex: 0 0 auto;
     }
     .cliff-stack {
       display: grid;
@@ -5034,9 +5087,8 @@ def export_dashboard_html(
                 class="frontier-point ${row.lane} ${safeLower(row.player_name) === selectedKey ? 'is-selected' : ''}"
                 style="left: ${Math.max(10, Math.min(92, row.x * 100))}%; top: ${Math.max(12, Math.min(88, (1 - row.y) * 100))}%;"
                 data-frontier-player="${escapeHtml(row.player_name)}"
+                title="${escapeHtml(`${row.player_name} • ${row.position} • survival ${formatPercent(row.timing_survival)} • regret ${formatNumber(row.wait_regret)}`)}"
               >
-                <span class="frontier-point-name">${escapeHtml(row.player_name)}</span>
-                <span class="frontier-point-meta">${escapeHtml(row.position)} • ${formatPercent(row.timing_survival)} survive • regret ${formatNumber(row.wait_regret)}</span>
               </button>
             `).join('')}
           </div>
@@ -5045,14 +5097,38 @@ def export_dashboard_html(
             <span>More likely to survive</span>
           </div>
           <div class="frontier-legend">
-            <span class="pill">Red: pick now pressure</span>
-            <span class="pill">Amber: fallback pivot</span>
-            <span class="pill">Green: can wait</span>
+            <span class="legend-pill"><span class="legend-dot" style="background: rgba(239, 68, 68, 0.95);"></span>Pick now pressure</span>
+            <span class="legend-pill"><span class="legend-dot" style="background: rgba(245, 158, 11, 0.95);"></span>Fallback pivot</span>
+            <span class="legend-pill"><span class="legend-dot" style="background: rgba(16, 185, 129, 0.95);"></span>Can wait</span>
+          </div>
+          <div class="frontier-list">
+            ${model.candidates.map((row) => `
+              <button
+                type="button"
+                class="frontier-list-item ${safeLower(row.player_name) === selectedKey ? 'is-selected' : ''}"
+                data-frontier-select="${escapeHtml(row.player_name)}"
+              >
+                <span class="frontier-list-head">
+                  <span class="frontier-swatch ${row.lane}"></span>
+                  <span>
+                    <span class="frontier-list-name">${escapeHtml(row.player_name)} <span class="tiny">• ${escapeHtml(row.position)}</span></span>
+                    <span class="frontier-list-meta">${escapeHtml(row.lane.replace('_', ' '))} • ${formatPercent(row.timing_survival)} survive • regret ${formatNumber(row.wait_regret)}</span>
+                  </span>
+                </span>
+                <span class="tiny">${escapeHtml(row.rationale)}</span>
+              </button>
+            `).join('')}
           </div>
         `;
         container.querySelectorAll('[data-frontier-player]').forEach((button) => {
           button.addEventListener('click', () => {
             state.selectedPlayer = button.getAttribute('data-frontier-player');
+            render();
+          });
+        });
+        container.querySelectorAll('[data-frontier-select]').forEach((button) => {
+          button.addEventListener('click', () => {
+            state.selectedPlayer = button.getAttribute('data-frontier-select');
             render();
           });
         });

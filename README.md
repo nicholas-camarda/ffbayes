@@ -2,6 +2,15 @@
 
 A fantasy football analytics system that combines Monte Carlo simulations, Bayesian uncertainty modeling, and draft-utility decision modeling to generate draft-board recommendations.
 
+## See It Live
+
+The clearest example of what this repo produces is the live draft war room dashboard:
+
+- Public GitHub Pages dashboard: https://nicholas-camarda.github.io/ffbayes/site/
+- Project root redirect: https://nicholas-camarda.github.io/ffbayes/
+
+If you are trying to understand the product before reading the workflow docs, start there.
+
 ## End-to-End Usage
 
 This repo has one supported draft workflow:
