@@ -12,11 +12,19 @@ The draft dashboard payload MUST expose a structured decision-evidence section d
 - **THEN** the payload MUST include an explicit unavailable or degraded evidence state with the reason and interpretation limits
 
 ### Requirement: Dashboard UI SHALL render evidence with limitations
-The draft dashboard UI MUST render the decision-evidence panel in a way that highlights comparative results, interpretation limits, and freshness context without duplicating the same strategy-summary content across multiple panels. Metric labels used in evidence-facing UI MUST remain consistent with the glossary and inspector.
+The draft dashboard UI MUST render the decision-evidence panel in a way that highlights comparative results, internal-validation scope, uncertainty context, and interpretation limits without duplicating the same strategy-summary content across multiple panels. Metric labels used in evidence-facing UI MUST remain consistent with the glossary and inspector.
 
 #### Scenario: Evidence panel shows result and limitations
 - **WHEN** the dashboard loads a payload with structured decision evidence
 - **THEN** the UI MUST display the comparative evidence and the associated limitations in the same evidence surface
+
+#### Scenario: Evidence panel shows result, scope, and limitations
+- **WHEN** the dashboard loads a payload with structured decision evidence
+- **THEN** the UI MUST display the comparative evidence, the associated limitations, and an explicit statement that the evidence is internal rather than external validation in the same evidence surface
+
+#### Scenario: Evidence summary shows season coverage and uncertainty context
+- **WHEN** the dashboard loads a payload whose decision evidence includes season-count, holdout-year, or interval/uncertainty context
+- **THEN** the evidence-facing summary MUST surface that coverage and uncertainty context alongside winner or delta claims rather than hiding it only in secondary details
 
 #### Scenario: Evidence panel shows degraded state
 - **WHEN** the dashboard loads a payload whose decision evidence is degraded or unavailable
