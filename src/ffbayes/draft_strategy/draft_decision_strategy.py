@@ -563,7 +563,9 @@ def _combine_freshness_entries(
 
 
 def _load_season_history_with_freshness() -> tuple[pd.DataFrame | None, dict[str, Any] | None]:
-    from ffbayes.analysis.draft_decision_backtest import load_season_history_with_freshness
+    from ffbayes.analysis.draft_decision_backtest import (
+        load_season_history_with_freshness,
+    )
 
     try:
         return load_season_history_with_freshness()
@@ -774,6 +776,7 @@ def _run_single_slot(
         context=context,
         season_history=season_history,
         analysis_provenance=analysis_provenance,
+        require_fresh_decision_evidence=True,
     )
 
     results_dir = output_dir or get_draft_strategy_dir(current_year)

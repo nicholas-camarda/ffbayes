@@ -383,10 +383,12 @@ def test_collect_nfl_data_refreshes_existing_files_with_backend_only_monkeypatch
         lambda *args, **kwargs: DummyInterface(),
     )
 
-    successful_years = collect_data.collect_nfl_data([2025], allow_stale_latest=False)
+    successful_years = collect_data.collect_nfl_data(
+        [2025], allow_stale_latest=False, force_refresh=True
+    )
 
     season_csv = stale_file.read_text(encoding='utf-8')
 
     assert successful_years == [2025]
-    assert 'Stale Player' in season_csv
-    assert 'Alpha Player' not in season_csv
+    assert 'Stale Player' not in season_csv
+    assert 'Alpha Player' in season_csv

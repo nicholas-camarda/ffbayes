@@ -12,6 +12,7 @@ import signal
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from alive_progress import alive_bar
@@ -29,10 +30,17 @@ from ffbayes.utils.path_constants import (
     SEASON_DATASETS_DIR,
 )
 
+_ProgressMonitor: Any = None
 try:
-    from ffbayes.utils.progress_monitor import ProgressMonitor
+    from ffbayes.utils.progress_monitor import (
+        ProgressMonitor as _ImportedProgressMonitor,
+    )
 except Exception:
-    ProgressMonitor = None
+    pass
+else:
+    _ProgressMonitor = _ImportedProgressMonitor
+
+ProgressMonitor: Any = _ProgressMonitor
 
 # Configuration
 CURRENT_YEAR = datetime.now().year
@@ -864,7 +872,9 @@ def combine_datasets(directory_path, output_directory_path, years_to_process):
         return None
 
 
-def collect_nfl_data(years=None, allow_stale_latest: bool = False):
+def collect_nfl_data(
+    years=None, allow_stale_latest: bool = False, force_refresh: bool = False
+):
     """Collect NFL data for specified years with enhanced functionality."""
     if years is None:
         years = DEFAULT_YEARS
@@ -887,7 +897,7 @@ def collect_nfl_data(years=None, allow_stale_latest: bool = False):
         with monitor.monitor(len(years), 'Processing Years'):
             for year in years:
                 cached_file = SEASON_DATASETS_DIR / f'{year}season.csv'
-                if cached_file.exists():
+                if cached_file.exists() and not force_refresh:
                     print(
                         f'⏭️  Skipping year {year} - cached season file already exists'
                     )
@@ -979,7 +989,10 @@ def main(args=None):
 
     # Collect data for specified years
     successful_years = interface.handle_errors(
-        collect_nfl_data, years, allow_stale_latest=args.allow_stale_season
+        collect_nfl_data,
+        years,
+        allow_stale_latest=args.allow_stale_season,
+        force_refresh=args.force_refresh,
     )
 
     found_years = sorted(

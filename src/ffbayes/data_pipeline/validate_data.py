@@ -6,19 +6,26 @@ Validates data quality and completeness.
 """
 
 import glob
-import os
 
 # Add scripts/utils to path for progress monitoring
 import time
 from datetime import datetime
+from typing import Any
 
 import pandas as pd
 
+_ProgressMonitor: Any = None
 try:
     # this is a custom progress monitor that is used to monitor the progress of the data validation
-    from ffbayes.utils.progress_monitor import ProgressMonitor
+    from ffbayes.utils.progress_monitor import (
+        ProgressMonitor as _ImportedProgressMonitor,
+    )
 except Exception:
-    ProgressMonitor = None
+    pass
+else:
+    _ProgressMonitor = _ImportedProgressMonitor
+
+ProgressMonitor: Any = _ProgressMonitor
 
 
 POSITION_NORMALIZATION_MAP = {

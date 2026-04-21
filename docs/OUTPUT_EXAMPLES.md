@@ -263,6 +263,22 @@ ffbayes compare
 Typical optional artifact family:
 
 ```text
+runs/<year>/pre_draft/diagnostics/model_comparison/
+```
+
+### Bayesian VOR Evaluation
+
+Purpose: compare Bayesian projections against VOR-style baselines.
+
+Command:
+
+```bash
+ffbayes bayesian-vor
+```
+
+Typical optional artifact family:
+
+```text
 runs/<year>/pre_draft/artifacts/model_evaluation/
 ```
 

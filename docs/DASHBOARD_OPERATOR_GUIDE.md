@@ -185,6 +185,10 @@ What to inspect:
 
 Purpose: show internal backtest evidence and interpretation limits.
 
+Production dashboard generation requires this evidence to be available and fresh.
+Missing, unavailable, or degraded evidence is a failed dashboard build, not a
+successful dashboard with a warning.
+
 Minimal shape:
 
 ```json
@@ -200,14 +204,14 @@ Minimal shape:
 
 What to inspect:
 
-- whether evidence is `available`, `degraded`, or `unavailable`
+- evidence status should be `available` on production dashboards
 - the winner label and season count
 - interpretation limits and freshness status
 
 What not to infer:
 
 - this is not external validation
-- degraded freshness weakens confidence even if a winner is still shown
+- degraded or unavailable evidence belongs in non-production investigation only
 
 ### Freshness And Provenance
 
@@ -249,6 +253,9 @@ Canonical runtime destination after import:
 ```text
 runs/<year>/pre_draft/artifacts/draft_strategy/finalized_drafts/
 ```
+
+The import and autodiscovery paths exclude finalized files named like `*_test.*`.
+Those files are test artifacts, not production retrospective inputs.
 
 ## After The Draft
 

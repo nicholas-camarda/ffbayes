@@ -8,14 +8,24 @@ Prepares data specifically for analysis scripts.
 import glob
 import os
 from pathlib import Path
+from typing import Any
 
 # Add scripts/utils to path for progress monitoring
 import pandas as pd
 
+_ProgressMonitor: Any = None
 try:
-    from ffbayes.utils.progress_monitor import ProgressMonitor
+    from ffbayes.utils.progress_monitor import (
+        ProgressMonitor as _ImportedProgressMonitor,
+    )
 except Exception:
-    ProgressMonitor = None
+    pass
+else:
+    _ProgressMonitor = _ImportedProgressMonitor
+
+ProgressMonitor: Any = _ProgressMonitor
+
+POSITION_ID_MAP = {'QB': 0, 'RB': 1, 'WR': 2, 'TE': 3, 'DST': 4, 'K': 5}
 
 
 def _encode_team_codes(values: pd.Series, team_names: pd.Index) -> pd.Series:
@@ -119,9 +129,7 @@ def create_analysis_dataset(path_to_data_directory):
     data['is_home'] = (data['Away'] != data['Tm']).astype(int)
 
     # Position encoding
-    pos_ids = pd.Index(pd.unique(data['pos_id'].dropna()))
-    onehot_pos_ids = list(map(int, data['pos_id'].isin(pos_ids)))
-    data['pos_id'] = onehot_pos_ids
+    data['pos_id'] = data['Position'].map(POSITION_ID_MAP).fillna(-1).astype(int)
 
     # Calculate seven game rolling average
     num_day_roll_avg = 7

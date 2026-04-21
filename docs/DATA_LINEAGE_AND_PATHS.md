@@ -97,7 +97,7 @@ Canonical path:
 
 ### 5. Pre-Draft Artifact Generation
 
-Purpose: create the board workbook, payload, HTML, and decision backtest.
+Purpose: create the board workbook, payload, HTML, and required decision backtest.
 
 Canonical area:
 
@@ -111,6 +111,10 @@ Typical files:
 - `dashboard_payload_<year>.json`
 - `draft_board_<year>.html`
 - `draft_decision_backtest_<year_range>.json`
+
+Production dashboard generation requires the decision backtest evidence to be
+available and fresh. If that evidence is missing, degraded, or unavailable, the
+dashboard build fails instead of publishing a weakened production surface.
 
 ### 6. Repo-Local Shortcut Staging
 
@@ -154,6 +158,9 @@ Canonical finalized import path:
 ```text
 <runtime-root>/runs/<year>/pre_draft/artifacts/draft_strategy/finalized_drafts/
 ```
+
+Files named like `*_test.*` are test artifacts. They are not imported,
+autodiscovered, or used as production retrospective inputs.
 
 Canonical retrospective outputs:
 

@@ -4,8 +4,8 @@ Validate that a draft team exists and is properly formatted.
 This script validates the drafted team file before any downstream analysis.
 """
 
-import os
 import argparse
+import os
 from datetime import datetime
 
 import pandas as pd

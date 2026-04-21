@@ -100,10 +100,10 @@ def _write_outcomes_csv(path):
 
 def _write_finalized_bundle(tmp_path):
     json_path = _write_finalized_payload(
-        tmp_path / 'ffbayes_finalized_draft_2026_test.json'
+        tmp_path / 'ffbayes_finalized_draft_2026_live.json'
     )
-    locked_html = tmp_path / 'ffbayes_finalized_draft_2026_test.html'
-    summary_html = tmp_path / 'ffbayes_finalized_summary_2026_test.html'
+    locked_html = tmp_path / 'ffbayes_finalized_draft_2026_live.html'
+    summary_html = tmp_path / 'ffbayes_finalized_summary_2026_live.html'
     locked_html.write_text('<html>locked</html>', encoding='utf-8')
     summary_html.write_text('<html>summary</html>', encoding='utf-8')
     return json_path, locked_html, summary_html
@@ -174,7 +174,7 @@ def test_import_finalized_artifacts_copies_bundle_into_canonical_dir(tmp_path, m
     assert result['status'] == 'copied'
     assert result['season_years'] == [2026]
     assert result['imported_json_paths'] == [
-        canonical_dir / 'ffbayes_finalized_draft_2026_test.json'
+        canonical_dir / 'ffbayes_finalized_draft_2026_live.json'
     ]
     assert (canonical_dir / json_path.name).exists()
     assert (canonical_dir / locked_html.name).exists()
@@ -183,8 +183,10 @@ def test_import_finalized_artifacts_copies_bundle_into_canonical_dir(tmp_path, m
 
 
 def test_run_draft_retrospective_autodiscovers_imported_json(tmp_path, monkeypatch):
-    from ffbayes.analysis.draft_retrospective import import_finalized_artifacts
-    from ffbayes.analysis.draft_retrospective import run_draft_retrospective
+    from ffbayes.analysis.draft_retrospective import (
+        import_finalized_artifacts,
+        run_draft_retrospective,
+    )
 
     runtime_root = tmp_path / 'runtime'
     project_root = tmp_path / 'project'
@@ -204,8 +206,70 @@ def test_run_draft_retrospective_autodiscovers_imported_json(tmp_path, monkeypat
 
     assert result['status'] == 'available'
     assert result['report']['provenance']['finalized_drafts'][0].endswith(
-        'finalized_drafts/ffbayes_finalized_draft_2026_test.json'
+        'finalized_drafts/ffbayes_finalized_draft_2026_live.json'
     )
+
+
+def test_import_finalized_artifacts_rejects_test_named_bundle(tmp_path, monkeypatch):
+    from ffbayes.analysis.draft_retrospective import import_finalized_artifacts
+
+    runtime_root = tmp_path / 'runtime'
+    project_root = tmp_path / 'project'
+    runtime_root.mkdir()
+    project_root.mkdir()
+    monkeypatch.setenv('FFBAYES_RUNTIME_ROOT', str(runtime_root))
+    monkeypatch.setenv('FFBAYES_PROJECT_ROOT', str(project_root))
+
+    finalized_path = _write_finalized_payload(
+        tmp_path / 'ffbayes_finalized_draft_2026_test.json'
+    )
+
+    with pytest.raises(ValueError, match='test artifact'):
+        import_finalized_artifacts([finalized_path], year=2026)
+
+
+def test_run_draft_retrospective_autodiscovery_skips_test_artifacts(
+    tmp_path, monkeypatch
+):
+    import ffbayes.analysis.draft_retrospective as draft_retrospective
+
+    runtime_root = tmp_path / 'runtime'
+    project_root = tmp_path / 'project'
+    runtime_root.mkdir()
+    project_root.mkdir()
+    monkeypatch.setenv('FFBAYES_RUNTIME_ROOT', str(runtime_root))
+    monkeypatch.setenv('FFBAYES_PROJECT_ROOT', str(project_root))
+    monkeypatch.setattr(
+        draft_retrospective,
+        'get_finalized_drafts_dir',
+        lambda year: runtime_root
+        / 'runs'
+        / str(year)
+        / 'pre_draft'
+        / 'artifacts'
+        / 'draft_strategy'
+        / 'finalized_drafts',
+    )
+    monkeypatch.setattr(
+        draft_retrospective,
+        'get_draft_strategy_dir',
+        lambda year: runtime_root
+        / 'runs'
+        / str(year)
+        / 'pre_draft'
+        / 'artifacts'
+        / 'draft_strategy',
+    )
+
+    canonical_dir = draft_retrospective.get_finalized_drafts_dir(2026)
+    canonical_dir.mkdir(parents=True, exist_ok=True)
+    _write_finalized_payload(canonical_dir / 'ffbayes_finalized_draft_2026_test.json')
+
+    with pytest.raises(FileNotFoundError, match='No finalized draft JSON files'):
+        draft_retrospective.run_draft_retrospective(
+            outcomes_path=_write_outcomes_csv(tmp_path / 'unified_dataset.csv'),
+            year=2026,
+        )
 
 
 def test_run_draft_retrospective_requires_available_outcomes(tmp_path, monkeypatch):

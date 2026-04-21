@@ -17,13 +17,52 @@ from ffbayes.draft_strategy.draft_decision_system import (
     _stage_runtime_dashboard_shortcuts,
     export_dashboard_html,
 )
-from ffbayes.publish_pages import stage_pages_site
+from ffbayes.publish_pages import (
+    PAYLOAD_ASSIGNMENT_PREFIX,
+    PAYLOAD_ASSIGNMENT_SUFFIX,
+    _build_publish_provenance,
+    _inject_dashboard_payload_into_html,
+    stage_pages_site,
+)
 from ffbayes.utils.path_constants import (
     get_dashboard_html_path,
     get_dashboard_payload_path,
 )
 
-REQUIRED_PAYLOAD_KEYS = ('generated_at', 'league_settings', 'decision_table')
+REQUIRED_PAYLOAD_KEYS = (
+    'generated_at',
+    'league_settings',
+    'decision_table',
+    'decision_evidence',
+)
+
+
+def _validate_required_decision_evidence(
+    payload: dict[str, Any], payload_path: Path
+) -> None:
+    evidence = payload.get('decision_evidence')
+    if not isinstance(evidence, dict):
+        raise ValueError(
+            f'Dashboard payload at {payload_path} must include `decision_evidence`.'
+        )
+    freshness = evidence.get('freshness') or {}
+    if not evidence.get('available'):
+        reason = evidence.get('reason_unavailable') or evidence.get('headline')
+        raise ValueError(
+            f'Dashboard payload at {payload_path} has unavailable decision evidence: '
+            f'{reason or "unknown"}'
+        )
+    if evidence.get('status') != 'available' or freshness.get('status') != 'fresh':
+        raise ValueError(
+            f'Dashboard payload at {payload_path} must have fresh decision evidence; '
+            f'got evidence status {evidence.get("status")!r} and freshness status '
+            f'{freshness.get("status")!r}.'
+        )
+    if not evidence.get('strategy_summary') or not evidence.get('season_rows'):
+        raise ValueError(
+            f'Dashboard payload at {payload_path} must include populated decision '
+            'evidence strategy and season rows.'
+        )
 
 
 def _validate_dashboard_payload(
@@ -45,6 +84,7 @@ def _validate_dashboard_payload(
         raise ValueError(
             f'Dashboard payload at {payload_path} has an invalid `league_settings` object.'
         )
+    _validate_required_decision_evidence(payload, payload_path)
     return payload
 
 
@@ -75,10 +115,34 @@ def _generated_label_from_payload(payload: dict[str, Any]) -> str:
 
 
 def _normalized_json_text(payload: Any) -> str:
-    return json.dumps(
-        json.loads(json.dumps(payload, default=str)),
-        sort_keys=True,
-        indent=2,
+    normalized = json.loads(json.dumps(payload, default=str))
+    if (
+        isinstance(normalized, dict)
+        and isinstance(normalized.get('publish_provenance'), dict)
+    ):
+        normalized['publish_provenance']['published_at'] = '<normalized>'
+    if isinstance(normalized, dict) and normalized.get('published_at') is not None:
+        normalized['published_at'] = '<normalized>'
+    return json.dumps(normalized, sort_keys=True, indent=2)
+
+
+def _normalized_dashboard_html_text(html_text: str) -> str:
+    start = html_text.find(PAYLOAD_ASSIGNMENT_PREFIX)
+    if start == -1:
+        return html_text
+    payload_start = start + len(PAYLOAD_ASSIGNMENT_PREFIX)
+    end = html_text.find(PAYLOAD_ASSIGNMENT_SUFFIX, payload_start)
+    if end == -1:
+        return html_text
+    try:
+        embedded_payload = json.loads(html_text[payload_start:end])
+    except json.JSONDecodeError:
+        return html_text
+    return (
+        html_text[:start]
+        + PAYLOAD_ASSIGNMENT_PREFIX
+        + _normalized_json_text(embedded_payload)
+        + html_text[end:]
     )
 
 
@@ -144,6 +208,25 @@ def _render_dashboard_html_text(
         return temp_path.read_text(encoding='utf-8')
 
 
+def _expected_surface_payload(
+    payload: dict[str, Any],
+    surface_kind: str,
+    year: int,
+    output_html: Path,
+    source_payload: Path,
+) -> dict[str, Any]:
+    expected = json.loads(json.dumps(payload, default=str))
+    if surface_kind == 'staged_site':
+        source_html = get_dashboard_html_path(year)
+        expected['publish_provenance'] = _build_publish_provenance(
+            expected,
+            year,
+            source_html,
+            source_payload,
+        )
+    return expected
+
+
 def check_dashboard_freshness(
     year: int | None = None,
     payload_path: Path | str | None = None,
@@ -163,6 +246,15 @@ def check_dashboard_freshness(
         else get_dashboard_html_path(resolved_year)
     )
 
+    surface_kind = _infer_surface_kind(resolved_output_html, resolved_payload)
+    expected_payload = _expected_surface_payload(
+        payload,
+        surface_kind,
+        resolved_year,
+        resolved_output_html,
+        resolved_payload,
+    )
+
     result: dict[str, Any] = {
         'status': 'fresh',
         'checked_paths': [str(resolved_output_html)],
@@ -171,7 +263,7 @@ def check_dashboard_freshness(
         'target_html_path': str(resolved_output_html),
         'target_payload_path': None,
         'generated_at': payload.get('generated_at'),
-        'surface_kind': _infer_surface_kind(resolved_output_html, resolved_payload),
+        'surface_kind': surface_kind,
         'authoritative_paths': {
             'payload': str(resolved_payload),
             'target_html': str(resolved_output_html),
@@ -189,8 +281,15 @@ def check_dashboard_freshness(
         resolved_output_html,
         resolved_year,
     )
+    if surface_kind == 'staged_site':
+        expected_html = _inject_dashboard_payload_into_html(
+            expected_html,
+            expected_payload,
+        )
     current_html = resolved_output_html.read_text(encoding='utf-8')
-    if current_html != expected_html:
+    if _normalized_dashboard_html_text(current_html) != _normalized_dashboard_html_text(
+        expected_html
+    ):
         result['status'] = 'stale'
         result['stale_paths'] = [str(resolved_output_html)]
 
@@ -209,7 +308,7 @@ def check_dashboard_freshness(
             )
             return result
         target_payload = json.loads(target_payload_path.read_text(encoding='utf-8'))
-        if _normalized_json_text(target_payload) != _normalized_json_text(payload):
+        if _normalized_json_text(target_payload) != _normalized_json_text(expected_payload):
             result['status'] = 'stale'
             result['stale_paths'] = list(
                 dict.fromkeys(result['stale_paths'] + [str(target_payload_path)])
@@ -289,7 +388,8 @@ def refresh_runtime_dashboard(
         result['checked_paths'].extend(
             [str(staged['index_path']), str(staged['payload_path'])]
         )
-        result['stale_paths'] = [str(path) for path in staged.get('stale_paths', [])]
+        staged_stale_paths = staged.get('stale_paths') or []
+        result['stale_paths'] = [str(path) for path in staged_stale_paths]
 
     return result
 

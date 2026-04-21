@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -33,11 +32,11 @@ def _normalized_json_text(payload: dict[str, Any]) -> str:
 
 
 def _build_publish_provenance(
-    payload: dict,
+    payload: dict[str, Any],
     year: int,
     source_html: Path,
     source_payload: Path | None,
-) -> dict:
+) -> dict[str, Any]:
     analysis_provenance = payload.get('analysis_provenance') or {}
     analysis_freshness = (
         analysis_provenance.get('overall_freshness')
@@ -63,7 +62,9 @@ def _build_publish_provenance(
     }
 
 
-def _inject_dashboard_payload_into_html(html_text: str, payload: dict) -> str:
+def _inject_dashboard_payload_into_html(
+    html_text: str, payload: dict[str, Any]
+) -> str:
     start = html_text.find(PAYLOAD_ASSIGNMENT_PREFIX)
     if start == -1:
         return html_text
@@ -84,7 +85,7 @@ def stage_pages_site(
     source_html: Path | str | None = None,
     source_payload: Path | str | None = None,
     output_dir: Path | str | None = None,
-) -> dict[str, Path]:
+) -> dict[str, Any]:
     """Copy the canonical dashboard artifacts into the Pages site tree."""
     resolved_year = year or datetime.now().year
     resolved_output_dir = (
@@ -114,7 +115,7 @@ def stage_pages_site(
         if source_payload is not None
         else get_dashboard_payload_path(resolved_year)
     )
-    payload_data: dict | None = None
+    payload_data: dict[str, Any] | None = None
     if resolved_payload.exists():
         payload_data = json.loads(resolved_payload.read_text(encoding='utf-8'))
         payload_data['publish_provenance'] = _build_publish_provenance(
@@ -140,7 +141,9 @@ def stage_pages_site(
     staged_index_text = resolved_html.read_text(encoding='utf-8')
 
     if payload_data is not None:
-        staged_index_text = _inject_dashboard_payload_into_html(staged_index_text, payload_data)
+        staged_index_text = _inject_dashboard_payload_into_html(
+            staged_index_text, payload_data
+        )
 
     stale_paths: list[Path] = []
     if existing_index_text is not None and existing_index_text != staged_index_text:
@@ -148,9 +151,13 @@ def stage_pages_site(
     index_path.write_text(staged_index_text, encoding='utf-8')
 
     if staged_payload_text is not None:
+        assert payload_data is not None
+        assert staged_provenance_text is not None
         if payload_target.exists():
             existing_payload = payload_target.read_text(encoding='utf-8')
-            if _normalized_json_text(json.loads(existing_payload)) != _normalized_json_text(payload_data):
+            if _normalized_json_text(
+                json.loads(existing_payload)
+            ) != _normalized_json_text(payload_data):
                 stale_paths.append(payload_target)
         payload_target.write_text(staged_payload_text, encoding='utf-8')
         if provenance_target.exists():

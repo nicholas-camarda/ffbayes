@@ -1,5 +1,34 @@
 import json
 
+import pytest
+
+
+def _fresh_decision_evidence():
+    return {
+        'decision_evidence': {
+            'available': True,
+            'status': 'available',
+            'headline': 'Decision evidence is available for this board.',
+            'freshness': {'status': 'fresh', 'override_used': False},
+            'strategy_summary': [
+                {
+                    'strategy': 'draft_score',
+                    'mean_lineup_points': 100.0,
+                    'season_count': 1,
+                }
+            ],
+            'season_rows': [
+                {
+                    'holdout_year': 2025,
+                    'draft_score_lineup_points': 100.0,
+                    'historical_vor_proxy_lineup_points': 90.0,
+                    'delta_lineup_points': 10.0,
+                }
+            ],
+            'top_disagreements': [],
+        }
+    }
+
 
 def test_refresh_runtime_dashboard_rebuilds_html_and_stages_pages(tmp_path, monkeypatch):
     import ffbayes.refresh_dashboard as refresh_dashboard
@@ -90,8 +119,21 @@ def test_refresh_runtime_dashboard_rebuilds_html_and_stages_pages(tmp_path, monk
                     'status': 'available',
                     'headline': 'Decision evidence is available for this board.',
                     'freshness': {'status': 'fresh', 'override_used': False},
-                    'strategy_summary': [],
-                    'season_rows': [],
+                    'strategy_summary': [
+                        {
+                            'strategy': 'draft_score',
+                            'mean_lineup_points': 100.0,
+                            'season_count': 1,
+                        }
+                    ],
+                    'season_rows': [
+                        {
+                            'holdout_year': 2025,
+                            'draft_score_lineup_points': 100.0,
+                            'historical_vor_proxy_lineup_points': 90.0,
+                            'delta_lineup_points': 10.0,
+                        }
+                    ],
                     'top_disagreements': [],
                 },
                 'war_room_visuals': {
@@ -238,8 +280,21 @@ def test_check_dashboard_freshness_reports_fresh_and_stale(tmp_path, monkeypatch
                     'status': 'available',
                     'headline': 'Decision evidence is available for this board.',
                     'freshness': {'status': 'fresh', 'override_used': False},
-                    'strategy_summary': [],
-                    'season_rows': [],
+                    'strategy_summary': [
+                        {
+                            'strategy': 'draft_score',
+                            'mean_lineup_points': 100.0,
+                            'season_count': 1,
+                        }
+                    ],
+                    'season_rows': [
+                        {
+                            'holdout_year': 2025,
+                            'draft_score_lineup_points': 100.0,
+                            'historical_vor_proxy_lineup_points': 90.0,
+                            'delta_lineup_points': 10.0,
+                        }
+                    ],
                     'top_disagreements': [],
                 },
                 'model_overview': {'headline': 'Model overview'},
@@ -281,6 +336,73 @@ def test_check_dashboard_freshness_reports_fresh_and_stale(tmp_path, monkeypatch
     assert stale['stale_paths'] == [str(html_path)]
 
 
+def test_check_dashboard_freshness_accepts_staged_site_publish_provenance(
+    tmp_path, monkeypatch
+):
+    import ffbayes.refresh_dashboard as refresh_dashboard
+    from ffbayes.publish_pages import stage_pages_site
+
+    project_root = tmp_path / 'project'
+    runtime_root = tmp_path / 'runtime'
+    project_root.mkdir()
+    runtime_root.mkdir()
+    monkeypatch.setenv('FFBAYES_PROJECT_ROOT', str(project_root))
+    monkeypatch.setenv('FFBAYES_RUNTIME_ROOT', str(runtime_root))
+
+    payload_path = (
+        runtime_root
+        / 'runs'
+        / '2026'
+        / 'pre_draft'
+        / 'artifacts'
+        / 'draft_strategy'
+        / 'dashboard_payload_2026.json'
+    )
+    payload_path.parent.mkdir(parents=True, exist_ok=True)
+    payload_path.write_text(
+        json.dumps(
+            {
+                'generated_at': '2026-04-07T14:50:00',
+                'league_settings': {'league_size': 10, 'draft_position': 10},
+                'decision_table': [{'player_name': 'Test Player', 'position': 'RB'}],
+                'recommendation_summary': [{'player_name': 'Test Player'}],
+                'analysis_provenance': {
+                    'overall_freshness': {
+                        'status': 'fresh',
+                        'override_used': False,
+                        'warnings': [],
+                    }
+                },
+                **_fresh_decision_evidence(),
+            }
+        ),
+        encoding='utf-8',
+    )
+    html_path = payload_path.with_name('draft_board_2026.html')
+    refresh_dashboard.refresh_runtime_dashboard(
+        year=2026,
+        payload_path=payload_path,
+        output_html=html_path,
+        stage_pages=False,
+    )
+    stage_pages_site(
+        year=2026,
+        source_html=html_path,
+        source_payload=payload_path,
+        output_dir=project_root / 'site',
+    )
+
+    result = refresh_dashboard.check_dashboard_freshness(
+        year=2026,
+        payload_path=payload_path,
+        output_html=project_root / 'site' / 'index.html',
+    )
+
+    assert result['surface_kind'] == 'staged_site'
+    assert result['status'] == 'fresh'
+    assert result['stale_paths'] == []
+
+
 def test_check_dashboard_freshness_reports_stale_repo_shortcut_payload(tmp_path, monkeypatch):
     import ffbayes.refresh_dashboard as refresh_dashboard
 
@@ -307,6 +429,7 @@ def test_check_dashboard_freshness_reports_stale_repo_shortcut_payload(tmp_path,
                 'generated_at': '2026-04-07T14:50:00',
                 'league_settings': {'league_size': 10, 'draft_position': 10},
                 'decision_table': [{'player_name': 'Test Player', 'position': 'RB'}],
+                **_fresh_decision_evidence(),
             }
         ),
         encoding='utf-8',
@@ -343,6 +466,37 @@ def test_check_dashboard_freshness_reports_stale_repo_shortcut_payload(tmp_path,
     assert result['stale_paths'] == [str(repo_payload)]
 
 
+def test_refresh_dashboard_rejects_degraded_decision_evidence(tmp_path, monkeypatch):
+    import ffbayes.refresh_dashboard as refresh_dashboard
+
+    runtime_root = tmp_path / 'runtime'
+    runtime_root.mkdir()
+    monkeypatch.setenv('FFBAYES_RUNTIME_ROOT', str(runtime_root))
+
+    payload_path = runtime_root / 'dashboard_payload_2026.json'
+    evidence = _fresh_decision_evidence()
+    evidence['decision_evidence']['status'] = 'degraded'
+    evidence['decision_evidence']['freshness']['status'] = 'degraded'
+    payload_path.write_text(
+        json.dumps(
+            {
+                'generated_at': '2026-04-07T14:50:00',
+                'league_settings': {'league_size': 10, 'draft_position': 10},
+                'decision_table': [{'player_name': 'Test Player', 'position': 'RB'}],
+                **evidence,
+            }
+        ),
+        encoding='utf-8',
+    )
+
+    with pytest.raises(ValueError, match='fresh decision evidence'):
+        refresh_dashboard.refresh_runtime_dashboard(
+            year=2026,
+            payload_path=payload_path,
+            output_html=runtime_root / 'draft_board_2026.html',
+        )
+
+
 def test_check_dashboard_freshness_reports_missing_target(tmp_path, monkeypatch):
     import ffbayes.refresh_dashboard as refresh_dashboard
 
@@ -357,6 +511,7 @@ def test_check_dashboard_freshness_reports_missing_target(tmp_path, monkeypatch)
                 'generated_at': '2026-04-07T14:50:00',
                 'league_settings': {'league_size': 10, 'draft_position': 10},
                 'decision_table': [],
+                **_fresh_decision_evidence(),
             }
         ),
         encoding='utf-8',

@@ -18,13 +18,14 @@ import pandas as pd
 from ffbayes.utils.path_constants import (
     get_draft_retrospective_html_path,
     get_draft_retrospective_json_path,
-    get_finalized_drafts_dir,
     get_draft_strategy_dir,
+    get_finalized_drafts_dir,
     get_unified_dataset_csv_path,
 )
 
 FINALIZED_SCHEMA_VERSION = 'finalized_draft_v1'
 RETROSPECTIVE_SCHEMA_VERSION = 'draft_retrospective_v1'
+TEST_FINALIZED_ARTIFACT_PATTERNS = ('*_test.*',)
 FINALIZED_BUNDLE_PATTERN = re.compile(
     r'^ffbayes_finalized_(?:draft|summary)_(?P<year>\d{4})_'
 )
@@ -252,6 +253,11 @@ def _infer_finalized_artifact_year(
     )
 
 
+def _is_test_finalized_artifact(path: Path | str) -> bool:
+    resolved = Path(path)
+    return any(resolved.match(pattern) for pattern in TEST_FINALIZED_ARTIFACT_PATTERNS)
+
+
 def import_finalized_artifacts(
     import_paths: list[Path | str],
     *,
@@ -276,6 +282,10 @@ def import_finalized_artifacts(
         if source.is_dir():
             raise ValueError(
                 f'Finalized artifact path must be a file, got directory: {source}'
+            )
+        if _is_test_finalized_artifact(source):
+            raise ValueError(
+                f'Finalized test artifact cannot be imported into production runtime: {source}'
             )
 
         season_year = _infer_finalized_artifact_year(source, fallback_year=year)
@@ -885,13 +895,19 @@ def _discover_finalized_json_paths(year: int | None = None) -> list[Path]:
     if year is None:
         return []
     canonical_dir = get_finalized_drafts_dir(year)
-    canonical_matches = sorted(
-        canonical_dir.glob(f'ffbayes_finalized_draft_{year}_*.json')
-    )
+    canonical_matches = [
+        path
+        for path in sorted(canonical_dir.glob(f'ffbayes_finalized_draft_{year}_*.json'))
+        if not _is_test_finalized_artifact(path)
+    ]
     if canonical_matches:
         return canonical_matches
     legacy_dir = get_draft_strategy_dir(year)
-    return sorted(legacy_dir.glob(f'ffbayes_finalized_draft_{year}_*.json'))
+    return [
+        path
+        for path in sorted(legacy_dir.glob(f'ffbayes_finalized_draft_{year}_*.json'))
+        if not _is_test_finalized_artifact(path)
+    ]
 
 
 def write_retrospective_artifacts(
@@ -956,8 +972,9 @@ def run_draft_retrospective(
         )
 
     resolved_outcomes = Path(outcomes_path) if outcomes_path is not None else get_unified_dataset_csv_path()
+    finalized_inputs: list[Path | str] = [*finalized_paths]
     report = build_retrospective_report(
-        finalized_paths=finalized_paths,
+        finalized_paths=finalized_inputs,
         outcomes_path=resolved_outcomes,
         fallback_year=year,
     )

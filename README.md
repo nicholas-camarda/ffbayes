@@ -80,20 +80,28 @@ ffbayes pre-draft
 - generate the draft board workbook, dashboard payload, and dashboard HTML
 - run the internal draft-decision backtest used by the dashboard evidence surface
 
+The draft-decision backtest is a required dashboard component. Production
+dashboard generation fails closed unless decision evidence is available and fresh.
+
 Freshness policy:
 
 - by default, the workflow fails closed if the latest expected season is missing
-- if you intentionally want a degraded run, set `FFBAYES_ALLOW_STALE_SEASON=true`
-- when degraded execution is allowed, the manifests and dashboard provenance should say so explicitly
+- dashboard generation also fails if the draft-decision evidence is unavailable
+  or degraded
+- `FFBAYES_ALLOW_STALE_SEASON=true` is not a production dashboard path; use it
+  only for non-production investigation where degraded evidence is explicitly
+  acceptable
 
 ### 4. Open The Correct Dashboard
 
-After `ffbayes pre-draft` or `ffbayes draft-strategy`, use the repo-local shortcut:
+After `ffbayes pre-draft`, `ffbayes draft-strategy`, or `ffbayes refresh-dashboard`,
+use the repo-local shortcut:
 
 - local shortcut: `dashboard/index.html`
 - paired shortcut payload: `dashboard/dashboard_payload.json`
 
-This is the local draft surface.
+This is a derived local draft surface regenerated from the canonical runtime
+payload. Do not use it if it is stale relative to the authoritative payload.
 
 Do not treat `site/index.html` as your draft-day working dashboard. `site/` is the staged GitHub Pages copy, not the authoritative local surface.
 

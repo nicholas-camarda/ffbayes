@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 import json
-import re
 import shlex
 from pathlib import Path
 
 import ffbayes.cli as cli
-from ffbayes.analysis.draft_retrospective import build_parser as build_retrospective_parser
+from ffbayes.analysis.draft_retrospective import (
+    build_parser as build_retrospective_parser,
+)
 from ffbayes.publish_pages import build_parser as build_publish_pages_parser
 from ffbayes.refresh_dashboard import build_parser as build_refresh_dashboard_parser
 from ffbayes.stage_dashboard import build_parser as build_stage_dashboard_parser
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 README_PATH = REPO_ROOT / 'README.md'

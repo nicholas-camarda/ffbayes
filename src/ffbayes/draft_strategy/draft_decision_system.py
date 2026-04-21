@@ -24,7 +24,7 @@ import shutil
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, TypedDict
 
 import numpy as np
 import openpyxl
@@ -51,7 +51,13 @@ DEFAULT_ROSTER_TEMPLATE = {
     'DST': 1,
     'K': 1,
 }
-SCORING_PRESETS = {
+class ScoringPreset(TypedDict):
+    label: str
+    scoring_type: str
+    ppr_value: float
+
+
+SCORING_PRESETS: dict[str, ScoringPreset] = {
     'standard': {'label': 'Standard', 'scoring_type': 'Standard', 'ppr_value': 0.0},
     'half_ppr': {'label': 'Half PPR', 'scoring_type': 'Half-PPR', 'ppr_value': 0.5},
     'ppr': {'label': 'Full PPR', 'scoring_type': 'PPR', 'ppr_value': 1.0},
@@ -601,7 +607,10 @@ def _build_bayesian_vor_summary(
         'available': False,
         'comparison_scope': 'board_only',
         'headline': 'No direct contextual-vs-VOR backtest summary is available for this export.',
-        'reason_unavailable': 'No normalized backtest comparison rows were available.',
+        'reason_unavailable': backtest.get(
+            'reason_unavailable',
+            'No normalized backtest comparison rows were available.',
+        ),
         'top_disagreements': disagreements,
         'limitations': [
             'Without the backtest comparison artifact, the board can show only current ranking disagreements, not outcome-level evidence.',
@@ -673,6 +682,59 @@ def _build_decision_evidence(
             'Freshness state applies to the evidence source, so degraded freshness weakens confidence even when a winner is shown.',
         ],
     }
+
+
+def _mark_backtest_unavailable(
+    analysis_provenance: dict[str, Any] | None, reason: str
+) -> dict[str, Any]:
+    provenance = dict(analysis_provenance or {})
+    warning = f'Draft decision backtest evidence unavailable: {reason}'
+    backtest_inputs = {
+        'source_name': 'backtest_inputs',
+        'status': 'unavailable',
+        'override_used': False,
+        'warnings': [warning],
+        'reason_unavailable': reason,
+    }
+    sources = dict(provenance.get('sources') or {})
+    sources['backtest_inputs'] = backtest_inputs
+    provenance['sources'] = sources
+    provenance['backtest_inputs'] = backtest_inputs
+
+    overall = dict(provenance.get('overall_freshness') or {})
+    overall_warnings = list(overall.get('warnings') or [])
+    overall_warnings.append(warning)
+    overall['warnings'] = list(dict.fromkeys(overall_warnings))
+    if overall.get('status') != 'stale':
+        overall['status'] = 'degraded'
+    overall['override_used'] = bool(overall.get('override_used', False))
+    available_sources = list(overall.get('available_sources') or [])
+    available_sources.append('backtest_inputs')
+    overall['available_sources'] = sorted(set(available_sources))
+    provenance['overall_freshness'] = overall
+    return provenance
+
+
+def _require_fresh_decision_evidence(payload: dict[str, Any]) -> None:
+    evidence = payload.get('decision_evidence') or {}
+    freshness = evidence.get('freshness') or {}
+    if not evidence.get('available'):
+        reason = evidence.get('reason_unavailable') or evidence.get('headline')
+        raise RuntimeError(
+            'Draft dashboard generation requires available draft-decision '
+            f'backtest evidence. Reason: {reason or "unknown"}'
+        )
+    if evidence.get('status') != 'available' or freshness.get('status') != 'fresh':
+        raise RuntimeError(
+            'Draft dashboard generation requires fresh draft-decision backtest '
+            f'evidence; got evidence status {evidence.get("status")!r} and '
+            f'freshness status {freshness.get("status")!r}.'
+        )
+    if not evidence.get('strategy_summary') or not evidence.get('season_rows'):
+        raise RuntimeError(
+            'Draft dashboard generation requires populated draft-decision '
+            'backtest strategy and season evidence.'
+        )
 
 
 def _build_scoring_preset_bundle(
@@ -2489,10 +2551,12 @@ def run_draft_backtest(
         decision_table['actual_points'] = decision_table['actual_points'].fillna(
             pd.to_numeric(decision_table.get('FantPt'), errors='coerce')
         )
-        by_strategy = {}
+        by_strategy: dict[str, Any] = {}
         for strategy in ['market', 'historical_vor_proxy', 'consensus', 'draft_score']:
             available = decision_table.copy()
-            team_rosters = [[] for _ in range(settings.league_size)]
+            team_rosters: list[list[dict[str, Any]]] = [
+                [] for _ in range(settings.league_size)
+            ]
             our_pick_log: list[dict[str, Any]] = []
             pending_wait_candidate: dict[str, Any] | None = None
             picks_per_team = settings.round_count()
@@ -2576,17 +2640,17 @@ def run_draft_backtest(
                 and int(event.get('round_number', 0)) < early_specialist_cutoff
             )
             wait_survivals = [
-                float(event.get('wait_candidate_survival'))
+                _coerce_float(event.get('wait_candidate_survival'))
                 for event in our_pick_log
                 if pd.notna(event.get('wait_candidate_survival'))
             ]
             realized_regrets = [
-                float(event.get('realized_pass_regret'))
+                _coerce_float(event.get('realized_pass_regret'))
                 for event in our_pick_log
                 if pd.notna(event.get('realized_pass_regret'))
             ]
 
-            metric_rank = {}
+            metric_rank: dict[str, Any] = {}
             for metric_name, score_col in [
                 ('market', 'market_rank'),
                 ('historical_vor_proxy', 'historical_vor_proxy'),
@@ -3067,10 +3131,10 @@ def export_workbook(
     ].copy()
     _write_dataframe_sheet(wb, 'Availability', availability)
 
-    round_rows = []
+    round_rows: list[dict[str, Any]] = []
     current_round_count = league_settings.round_count()
     for rnd in range(1, current_round_count + 1):
-        row = {'round': rnd}
+        row: dict[str, Any] = {'round': rnd}
         cut = max(1, league_settings.league_size * rnd)
         top = decision_table.head(cut)
         row['best_player'] = _pick_first_row(top['player_name'])
@@ -6227,6 +6291,7 @@ def build_draft_decision_artifacts(
     context: DraftContext | None = None,
     season_history: pd.DataFrame | None = None,
     analysis_provenance: dict[str, Any] | None = None,
+    require_fresh_decision_evidence: bool = False,
 ) -> DraftDecisionArtifacts:
     """Build the full set of draft decision artifacts in memory."""
     settings = league_settings or LeagueSettings()
@@ -6237,11 +6302,30 @@ def build_draft_decision_artifacts(
     roster_scenarios = build_roster_scenarios(decision_table, settings)
     source_freshness = _compute_freshness(normalize_player_frame(player_frame))
     scoring_presets = _build_scoring_preset_bundle(player_frame, settings, context)
-    backtest = (
-        run_draft_backtest(season_history, settings)
-        if season_history is not None and not season_history.empty
-        else {}
-    )
+    analysis_provenance = analysis_provenance or {}
+    backtest: dict[str, Any] = {}
+    if season_history is not None and not season_history.empty:
+        if require_fresh_decision_evidence:
+            backtest = run_draft_backtest(season_history, settings)
+        else:
+            try:
+                backtest = run_draft_backtest(season_history, settings)
+            except Exception as exc:
+                reason = f'{type(exc).__name__}: {exc}'
+                backtest = {
+                    'model_type': 'draft_decision_backtest',
+                    'status': 'unavailable',
+                    'reason_unavailable': reason,
+                    'holdout_years': [],
+                }
+                analysis_provenance = _mark_backtest_unavailable(
+                    analysis_provenance, reason
+                )
+    elif require_fresh_decision_evidence:
+        analysis_provenance = _mark_backtest_unavailable(
+            analysis_provenance,
+            'No season history was available for the draft-decision backtest.',
+        )
     dashboard_payload = build_dashboard_payload(
         decision_table,
         recommendations,
@@ -6254,6 +6338,8 @@ def build_draft_decision_artifacts(
         scoring_presets=scoring_presets,
         analysis_provenance=analysis_provenance,
     )
+    if require_fresh_decision_evidence:
+        _require_fresh_decision_evidence(dashboard_payload)
     metadata = {
         'generated_at': datetime.now().isoformat(timespec='seconds'),
         'context': {
@@ -6291,9 +6377,27 @@ def _stage_runtime_dashboard_shortcuts(
     - repo root (if writable): `<repo>/dashboard/index.html`
     """
 
-    from ffbayes.utils.path_constants import get_project_root, get_runtime_root
+    from ffbayes.utils.path_constants import (
+        get_project_root,
+        get_runtime_root,
+    )
 
     shortcuts: dict[str, Path] = {}
+    canonical_artifact_dir = (
+        get_runtime_root()
+        / 'runs'
+        / str(year)
+        / 'pre_draft'
+        / 'artifacts'
+        / 'draft_strategy'
+    )
+    canonical_html = (canonical_artifact_dir / f'draft_board_{year}.html').resolve()
+    canonical_payload = (
+        canonical_artifact_dir / f'dashboard_payload_{year}.json'
+    ).resolve()
+    if html_path.resolve() != canonical_html or payload_path.resolve() != canonical_payload:
+        return shortcuts
+
     try:
         runtime_root = get_runtime_root()
         dashboard_dir = runtime_root / 'dashboard'
@@ -6314,9 +6418,9 @@ def _stage_runtime_dashboard_shortcuts(
 
         shortcuts.update(
             {
-            'runtime_dashboard_dir': dashboard_dir,
-            'runtime_dashboard_index': index_path,
-            'runtime_dashboard_payload': payload_target,
+                'runtime_dashboard_dir': dashboard_dir,
+                'runtime_dashboard_index': index_path,
+                'runtime_dashboard_payload': payload_target,
             }
         )
     except OSError:

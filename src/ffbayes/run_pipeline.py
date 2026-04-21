@@ -14,7 +14,7 @@ import time
 from datetime import datetime
 from glob import glob
 from pathlib import Path
-from typing import Optional
+from typing import Any, TextIO
 
 
 def ensure_conda_environment():
@@ -69,18 +69,23 @@ def ensure_conda_environment():
         sys.exit(1)
 
 
+_EnhancedPipelineOrchestrator: Any = None
 try:
     from ffbayes.utils.enhanced_pipeline_orchestrator import (
-        EnhancedPipelineOrchestrator,
+        EnhancedPipelineOrchestrator as _ImportedEnhancedPipelineOrchestrator,
     )
 except Exception:
-    EnhancedPipelineOrchestrator = None
+    pass
+else:
+    _EnhancedPipelineOrchestrator = _ImportedEnhancedPipelineOrchestrator
+
+EnhancedPipelineOrchestrator: Any = _EnhancedPipelineOrchestrator
 
 # Global timeout configuration (fallback)
 STEP_TIMEOUT = 300  # 5 minutes per step
 
 # Simple logging (optional global log file)
-LOG_FILE_HANDLE: Optional[object] = None
+LOG_FILE_HANDLE: TextIO | None = None
 
 
 def log_write(message: str) -> None:
@@ -379,13 +384,13 @@ def main():
     print('=' * 60)
     print(f'Started at: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
 
-    # CLI to control phases in fallback mode
+    # The production pipeline currently implements the full pre-draft run only.
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument(
         '--phase',
         choices=['draft', 'validate', 'full'],
         default='full',
-        help='Which phase to run: draft (Phase A), validate (Phase B), or full',
+        help='Pipeline phase to run. Only full is implemented.',
     )
     parser.add_argument(
         '--team-file', type=str, help='Path to TSV team file for Monte Carlo validation'
@@ -485,11 +490,11 @@ def main():
                 'No fallbacks allowed.'
             )
 
-    # CRITICAL: No fallback execution allowed
-    # Production pipeline must use enhanced orchestrator
-    log_write('✅ Pipeline completed successfully with enhanced orchestrator')
-
-    return True
+    log_write(
+        f'❌ Unsupported pipeline phase: {known_args.phase}. '
+        'Only --phase full is implemented for ffbayes-pipeline.'
+    )
+    return 2
 
 
 if __name__ == '__main__':

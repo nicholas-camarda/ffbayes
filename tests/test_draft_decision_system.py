@@ -4,6 +4,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pandas as pd
+import pytest
 
 from ffbayes.draft_strategy.draft_decision_system import (
     DraftContext,
@@ -127,6 +128,70 @@ def test_availability_probability_is_monotonic():
     )
 
     assert early > middle > late
+
+
+def test_draft_decision_artifacts_can_mark_backtest_failure_when_not_required(
+    monkeypatch,
+):
+    import ffbayes.draft_strategy.draft_decision_system as draft_decision_system
+
+    def fail_backtest(*args, **kwargs):
+        raise ValueError('synthetic backtest failure')
+
+    monkeypatch.setattr(draft_decision_system, 'run_draft_backtest', fail_backtest)
+
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(),
+        league_settings=LeagueSettings(),
+        season_history=pd.DataFrame({'season': [2025], 'player_name': ['Alpha QB']}),
+        analysis_provenance={
+            'overall_freshness': {
+                'status': 'fresh',
+                'override_used': False,
+                'warnings': [],
+                'available_sources': ['board_inputs'],
+            },
+            'sources': {},
+        },
+    )
+
+    evidence = artifacts.dashboard_payload['decision_evidence']
+    assert not artifacts.decision_table.empty
+    assert evidence['available'] is False
+    assert evidence['status'] == 'unavailable'
+    assert 'synthetic backtest failure' in evidence['reason_unavailable']
+    assert (
+        artifacts.dashboard_payload['analysis_provenance']['backtest_inputs']['status']
+        == 'unavailable'
+    )
+
+
+def test_draft_decision_artifacts_fail_when_required_backtest_fails(monkeypatch):
+    import ffbayes.draft_strategy.draft_decision_system as draft_decision_system
+
+    def fail_backtest(*args, **kwargs):
+        raise ValueError('synthetic backtest failure')
+
+    monkeypatch.setattr(draft_decision_system, 'run_draft_backtest', fail_backtest)
+
+    with pytest.raises(ValueError, match='synthetic backtest failure'):
+        build_draft_decision_artifacts(
+            _synthetic_players(),
+            league_settings=LeagueSettings(),
+            season_history=pd.DataFrame(
+                {'season': [2025], 'player_name': ['Alpha QB']}
+            ),
+            require_fresh_decision_evidence=True,
+        )
+
+
+def test_draft_decision_artifacts_fail_when_required_backtest_is_missing():
+    with pytest.raises(RuntimeError, match='requires available'):
+        build_draft_decision_artifacts(
+            _synthetic_players(),
+            league_settings=LeagueSettings(),
+            require_fresh_decision_evidence=True,
+        )
 
 
 def test_recommendations_update_after_drafted_players():
@@ -461,6 +526,16 @@ def test_dashboard_payload_marks_degraded_decision_evidence_when_provenance_is_d
     assert artifacts.dashboard_payload['decision_evidence']['freshness']['override_used'] is True
     assert artifacts.dashboard_payload['war_room_visuals']['comparative_explainer']['status'] == 'degraded'
 
+    with pytest.raises(RuntimeError, match='requires fresh'):
+        build_draft_decision_artifacts(
+            _synthetic_players(),
+            settings,
+            DraftContext(current_pick_number=10),
+            season_history=season_history,
+            analysis_provenance=provenance,
+            require_fresh_decision_evidence=True,
+        )
+
 
 def test_dashboard_payload_marks_war_room_visuals_unavailable_when_inputs_missing():
     settings = LeagueSettings()
@@ -569,10 +644,8 @@ def test_slot_specific_artifacts_use_prefixed_filenames():
         assert saved['compat_path'].name == 'draft_board_pos03_2026.json'
         assert saved['comparison_path'].parent.name == 'model_outputs'
         assert saved['backtest_path'].name.startswith('draft_decision_backtest_pos03_')
-        assert 'repo_dashboard_index' in saved
-        assert saved['repo_dashboard_index'].exists()
-        if 'runtime_dashboard_index' in saved:
-            assert saved['runtime_dashboard_index'].exists()
+        assert 'repo_dashboard_index' not in saved
+        assert 'runtime_dashboard_index' not in saved
 
 
 def test_exported_dashboard_html_contains_live_controls_and_full_board_renderer():
