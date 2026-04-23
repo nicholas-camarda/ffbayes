@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """
 Bayesian vs VOR comparison.
 
@@ -16,21 +17,138 @@ historical data.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable
 
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-from scipy.stats import spearmanr
 
-from ffbayes.analysis.bayesian_player_model import (
+def _configure_matplotlib_runtime_environment() -> None:
+    """Point Matplotlib at a writable transient config root when needed."""
+    if os.environ.get('MPLCONFIGDIR'):
+        return
+    matplotlib_root = Path(tempfile.gettempdir()) / 'ffbayes_matplotlib'
+    matplotlib_root.mkdir(parents=True, exist_ok=True)
+    os.environ['MPLCONFIGDIR'] = str(matplotlib_root)
+
+
+_configure_matplotlib_runtime_environment()
+
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+from scipy.stats import spearmanr  # noqa: E402
+
+from ffbayes.analysis.bayesian_player_model import (  # noqa: E402
     aggregate_season_player_table,
     build_posterior_projection_table,
 )
-from ffbayes.utils.path_constants import SEASON_DATASETS_DIR, get_results_dir
-from ffbayes.utils.validation_metrics import calculate_model_accuracy_metrics
+from ffbayes.utils.path_constants import (  # noqa: E402
+    SEASON_DATASETS_DIR,
+    get_results_dir,
+)
+from ffbayes.utils.validation_metrics import (
+    calculate_model_accuracy_metrics,  # noqa: E402
+)
+
+
+def _rank_metric_payload(
+    predicted: pd.Series | np.ndarray, truth: pd.Series | np.ndarray
+) -> dict[str, Any]:
+    """Return explicit rank-correlation semantics for a scored slice."""
+    pred = pd.Series(predicted, copy=False)
+    actual = pd.Series(truth, copy=False)
+    valid = pred.notna() & actual.notna()
+    if int(valid.sum()) < 2:
+        return {
+            'spearman_rank_correlation': None,
+            'spearman_rank_correlation_status': 'omitted',
+            'spearman_rank_correlation_reason': 'insufficient_support',
+        }
+
+    pred_valid = pred[valid]
+    truth_valid = actual[valid]
+    if pred_valid.nunique(dropna=True) < 2 or truth_valid.nunique(dropna=True) < 2:
+        return {
+            'spearman_rank_correlation': None,
+            'spearman_rank_correlation_status': 'unavailable',
+            'spearman_rank_correlation_reason': 'constant_input',
+        }
+
+    correlation = spearmanr(pred_valid, truth_valid).correlation
+    if correlation is None or not np.isfinite(correlation):
+        return {
+            'spearman_rank_correlation': None,
+            'spearman_rank_correlation_status': 'unavailable',
+            'spearman_rank_correlation_reason': 'insufficient_variation',
+        }
+
+    return {
+        'spearman_rank_correlation': float(correlation),
+        'spearman_rank_correlation_status': 'available',
+        'spearman_rank_correlation_reason': None,
+    }
+
+
+def _rank_metric_value(metrics: dict[str, Any]) -> float | None:
+    value = metrics.get('spearman_rank_correlation')
+    if value is None:
+        return None
+    value = float(value)
+    return value if np.isfinite(value) else None
+
+
+def _compare_rank_metric(left: dict[str, Any], right: dict[str, Any]) -> str:
+    left_value = _rank_metric_value(left)
+    right_value = _rank_metric_value(right)
+    if left_value is None and right_value is None:
+        return 'unavailable'
+    if left_value is None:
+        return 'right'
+    if right_value is None:
+        return 'left'
+    return 'left' if left_value >= right_value else 'right'
+
+
+def _rank_metric_delta(left: dict[str, Any], right: dict[str, Any]) -> float | None:
+    left_value = _rank_metric_value(left)
+    right_value = _rank_metric_value(right)
+    if left_value is None or right_value is None:
+        return None
+    return float(left_value - right_value)
+
+
+def _aggregate_rank_metric(metrics: list[dict[str, Any]]) -> dict[str, Any]:
+    values = [value for metric in metrics if (value := _rank_metric_value(metric)) is not None]
+    if values:
+        return {
+            'spearman_rank_correlation': float(np.mean(values)),
+            'spearman_rank_correlation_status': 'available',
+            'spearman_rank_correlation_reason': None,
+        }
+    reasons = {
+        metric.get('spearman_rank_correlation_reason')
+        for metric in metrics
+        if metric.get('spearman_rank_correlation_reason')
+    }
+    if any(metric.get('spearman_rank_correlation_status') == 'omitted' for metric in metrics):
+        reason = 'insufficient_support'
+        status = 'omitted'
+    else:
+        reason = sorted(reasons)[0] if reasons else 'no_estimable_rank_correlation'
+        status = 'unavailable'
+    return {
+        'spearman_rank_correlation': None,
+        'spearman_rank_correlation_status': status,
+        'spearman_rank_correlation_reason': reason,
+    }
+
+
+def _format_optional_metric(value: float | None) -> str:
+    if value is None:
+        return 'n/a'
+    return f'{float(value):.3f}'
 
 
 def load_season_history(data_directory: Path | str | None = None) -> pd.DataFrame:
@@ -92,9 +210,7 @@ def _position_metrics(
         metrics = calculate_model_accuracy_metrics(
             pred_valid.to_numpy(), truth_valid.to_numpy()
         )
-        rank_corr = float(
-            np.nan_to_num(spearmanr(score_valid, truth_valid).correlation, nan=0.0)
-        )
+        rank_metric = _rank_metric_payload(score_valid, truth_valid)
         rmse = float(
             np.sqrt(np.mean(np.square(truth_valid.to_numpy() - pred_valid.to_numpy())))
         )
@@ -104,7 +220,7 @@ def _position_metrics(
                 'player_count': int(valid.sum()),
                 'mae': float(metrics['mae']),
                 'rmse': rmse,
-                'spearman_rank_correlation': rank_corr,
+                **rank_metric,
             }
         )
     return rows
@@ -140,7 +256,7 @@ def _evaluate_method(
     metrics = calculate_model_accuracy_metrics(
         point_valid.to_numpy(), truth_valid.to_numpy()
     )
-    rank_corr = float(np.nan_to_num(spearmanr(score_valid, truth_valid).correlation, nan=0.0))
+    rank_metric = _rank_metric_payload(score_valid, truth_valid)
 
     ranked = frame.loc[valid].copy()
     ranked['_score'] = score_valid.to_numpy()
@@ -148,13 +264,13 @@ def _evaluate_method(
 
     payload = {
         **metrics,
-        'spearman_rank_correlation': rank_corr,
         'top_k_mean_actual': top_actual,
         'by_position': _position_metrics(
             frame.loc[valid].copy(),
             score_column=score_column,
             point_column=point_column,
         ),
+        **rank_metric,
     }
 
     if std_column is not None and std_column in frame.columns:
@@ -265,9 +381,7 @@ def _component_metrics(
     metrics = calculate_model_accuracy_metrics(
         pred_valid.to_numpy(), truth_valid.to_numpy()
     )
-    rank_corr = float(
-        np.nan_to_num(spearmanr(pred_valid, truth_valid).correlation, nan=0.0)
-    )
+    rank_metric = _rank_metric_payload(pred_valid, truth_valid)
     rmse = float(
         np.sqrt(np.mean(np.square(truth_valid.to_numpy() - pred_valid.to_numpy())))
     )
@@ -275,9 +389,9 @@ def _component_metrics(
         'player_count': int(valid.sum()),
         'mae': float(metrics['mae']),
         'rmse': rmse,
-        'spearman_rank_correlation': rank_corr,
         'mean_prediction': float(pred_valid.mean()),
         'mean_actual': float(truth_valid.mean()),
+        **rank_metric,
     }
 
 
@@ -446,29 +560,26 @@ def evaluate_holdout_season(
             'mae': 'bayesian'
             if bayesian_metrics['mae'] <= vor_metrics['mae']
             else 'vor',
-            'rank_correlation': 'bayesian'
-            if bayesian_metrics['spearman_rank_correlation']
-            >= vor_metrics['spearman_rank_correlation']
-            else 'vor',
+            'rank_correlation': {
+                'left': 'bayesian',
+                'right': 'vor',
+                'unavailable': 'unavailable',
+            }[_compare_rank_metric(bayesian_metrics, vor_metrics)],
             'top_k_mean_actual': 'bayesian'
             if bayesian_metrics['top_k_mean_actual'] >= vor_metrics['top_k_mean_actual']
             else 'vor',
         },
         'improvement': {
             'mae_delta': float(vor_metrics['mae'] - bayesian_metrics['mae']),
-            'spearman_delta': float(
-                bayesian_metrics['spearman_rank_correlation']
-                - vor_metrics['spearman_rank_correlation']
-            ),
+            'spearman_delta': _rank_metric_delta(bayesian_metrics, vor_metrics),
             'top_k_mean_actual_delta': float(
                 bayesian_metrics['top_k_mean_actual'] - vor_metrics['top_k_mean_actual']
             ),
             'market_mae_delta': float(
                 market_metrics['mae'] - bayesian_metrics['mae']
             ),
-            'market_spearman_delta': float(
-                bayesian_metrics['spearman_rank_correlation']
-                - market_metrics['spearman_rank_correlation']
+            'market_spearman_delta': _rank_metric_delta(
+                bayesian_metrics, market_metrics
             ),
         },
         'top_disagreements': _top_disagreements(prediction_table),
@@ -512,15 +623,9 @@ def run_backtest(
     bayesian_mae = float(np.mean([item['bayesian']['mae'] for item in by_season]))
     vor_mae = float(np.mean([item['vor']['mae'] for item in by_season]))
     market_mae = float(np.mean([item['market']['mae'] for item in by_season]))
-    bayesian_rho = float(
-        np.nanmean([item['bayesian']['spearman_rank_correlation'] for item in by_season])
-    )
-    vor_rho = float(
-        np.nanmean([item['vor']['spearman_rank_correlation'] for item in by_season])
-    )
-    market_rho = float(
-        np.nanmean([item['market']['spearman_rank_correlation'] for item in by_season])
-    )
+    bayesian_rank_metric = _aggregate_rank_metric([item['bayesian'] for item in by_season])
+    vor_rank_metric = _aggregate_rank_metric([item['vor'] for item in by_season])
+    market_rank_metric = _aggregate_rank_metric([item['market'] for item in by_season])
     bayesian_top_k = float(np.mean([item['bayesian']['top_k_mean_actual'] for item in by_season]))
     vor_top_k = float(np.mean([item['vor']['top_k_mean_actual'] for item in by_season]))
     market_top_k = float(np.mean([item['market']['top_k_mean_actual'] for item in by_season]))
@@ -550,32 +655,40 @@ def run_backtest(
         'overall': {
             'bayesian': {
                 'mae': bayesian_mae,
-                'spearman_rank_correlation': bayesian_rho,
                 'top_k_mean_actual': bayesian_top_k,
+                **bayesian_rank_metric,
             },
             'vor': {
                 'mae': vor_mae,
-                'spearman_rank_correlation': vor_rho,
                 'top_k_mean_actual': vor_top_k,
+                **vor_rank_metric,
             },
             'market': {
                 'mae': market_mae,
-                'spearman_rank_correlation': market_rho,
                 'top_k_mean_actual': market_top_k,
+                **market_rank_metric,
             },
             'winner': {
                 'mae': 'bayesian' if bayesian_mae <= vor_mae else 'vor',
-                'rank_correlation': 'bayesian' if bayesian_rho >= vor_rho else 'vor',
+                'rank_correlation': {
+                    'left': 'bayesian',
+                    'right': 'vor',
+                    'unavailable': 'unavailable',
+                }[_compare_rank_metric(bayesian_rank_metric, vor_rank_metric)],
                 'top_k_mean_actual': 'bayesian'
                 if bayesian_top_k >= vor_top_k
                 else 'vor',
             },
             'improvement': {
                 'mae_delta': float(vor_mae - bayesian_mae),
-                'spearman_delta': float(bayesian_rho - vor_rho),
+                'spearman_delta': _rank_metric_delta(
+                    bayesian_rank_metric, vor_rank_metric
+                ),
                 'top_k_mean_actual_delta': float(bayesian_top_k - vor_top_k),
                 'market_mae_delta': float(market_mae - bayesian_mae),
-                'market_spearman_delta': float(bayesian_rho - market_rho),
+                'market_spearman_delta': _rank_metric_delta(
+                    bayesian_rank_metric, market_rank_metric
+                ),
             },
             'season_win_counts': season_win_counts,
         },
@@ -609,17 +722,17 @@ def _write_summary_plot(summary: dict[str, Any], output_dir: Path, run_label: st
     labels = ['MAE', 'Spearman', f'Top {summary["parameters"]["top_k"]} Mean']
     bayesian_values = [
         summary['overall']['bayesian']['mae'],
-        summary['overall']['bayesian']['spearman_rank_correlation'],
+        summary['overall']['bayesian']['spearman_rank_correlation'] or np.nan,
         summary['overall']['bayesian']['top_k_mean_actual'],
     ]
     vor_values = [
         summary['overall']['vor']['mae'],
-        summary['overall']['vor']['spearman_rank_correlation'],
+        summary['overall']['vor']['spearman_rank_correlation'] or np.nan,
         summary['overall']['vor']['top_k_mean_actual'],
     ]
     market_values = [
         summary['overall']['market']['mae'],
-        summary['overall']['market']['spearman_rank_correlation'],
+        summary['overall']['market']['spearman_rank_correlation'] or np.nan,
         summary['overall']['market']['top_k_mean_actual'],
     ]
 
@@ -651,15 +764,19 @@ def main() -> int:
     print(f"Evaluated seasons: {summary['seasons_evaluated']}")
     print(
         'Bayesian rank correlation:',
-        f"{summary['overall']['bayesian']['spearman_rank_correlation']:.3f}",
+        _format_optional_metric(
+            summary['overall']['bayesian']['spearman_rank_correlation']
+        ),
     )
     print(
         'VOR rank correlation:',
-        f"{summary['overall']['vor']['spearman_rank_correlation']:.3f}",
+        _format_optional_metric(summary['overall']['vor']['spearman_rank_correlation']),
     )
     print(
         'Market rank correlation:',
-        f"{summary['overall']['market']['spearman_rank_correlation']:.3f}",
+        _format_optional_metric(
+            summary['overall']['market']['spearman_rank_correlation']
+        ),
     )
     print(f"Scorecard written to: {summary['output_path']}")
     return 0

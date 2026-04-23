@@ -227,7 +227,15 @@ def test_supported_cli_and_docs_do_not_expose_sampled_eval_lane():
 
     assert 'sampled_bayes' not in cli_text
     assert 'hierarchical_sampled_bayes' not in cli_text
-    assert 'sampled bayes' not in combined.lower()
+    lowered = combined.lower()
+    assert 'no active sampled-bayes workflow' in lowered
+    assert 'diagnostics-only evaluation workflow' not in lowered
+
+
+def test_docs_explain_unavailable_validation_metrics():
+    combined = _all_doc_text().lower()
+    assert 'not estimable' in combined
+    assert 'does not mean a measured zero relationship' in combined
 
 
 def test_docs_path_contract_and_authority_language_remain_explicit():

@@ -10,6 +10,7 @@ os.environ.setdefault('MPLCONFIGDIR', tempfile.mkdtemp(prefix='matplotlib-'))
 matplotlib.use('Agg')
 
 from ffbayes.analysis.bayesian_vor_comparison import (  # noqa: E402
+    _evaluate_method,
     build_player_forecast_validation_summary,
     build_season_player_table,
     evaluate_holdout_season,
@@ -105,3 +106,61 @@ def test_build_player_forecast_validation_summary_includes_slices():
     assert summary['overall_forecast']['holdout_years'] == [2024]
     assert 'component_diagnostics' in summary
     assert 'position_slices' in summary
+
+
+def test_evaluate_method_marks_constant_rank_slice_as_unavailable():
+    frame = pd.DataFrame(
+        {
+            'fantasy_points': [10.0, 10.0, 10.0, 10.0],
+            'posterior_mean': [9.0, 9.0, 9.0, 9.0],
+            'posterior_std': [1.0, 1.0, 1.0, 1.0],
+            'Position': ['QB', 'QB', 'QB', 'QB'],
+        }
+    )
+
+    metrics = _evaluate_method(
+        frame,
+        score_column='posterior_mean',
+        point_column='posterior_mean',
+        std_column='posterior_std',
+        label='empirical_bayes',
+        top_k=1,
+    )
+
+    assert metrics['spearman_rank_correlation'] is None
+    assert metrics['spearman_rank_correlation_status'] == 'unavailable'
+    assert metrics['spearman_rank_correlation_reason'] == 'constant_input'
+
+
+def test_build_player_forecast_validation_summary_preserves_unavailable_rank_metric(
+    monkeypatch,
+):
+    constant_prediction_table = pd.DataFrame(
+        {
+            'player_name': ['Alpha QB', 'Beta QB', 'Gamma QB'],
+            'Position': ['QB', 'QB', 'QB'],
+            'fantasy_points': [10.0, 10.0, 10.0],
+            'posterior_mean': [9.0, 9.0, 9.0],
+            'posterior_std': [1.0, 1.0, 1.0],
+            'posterior_rate_mean': [1.0, 1.0, 1.0],
+            'fantasy_points_rate': [1.0, 1.0, 1.0],
+            'posterior_games_mean': [10.0, 10.0, 10.0],
+            'games_played': [10.0, 10.0, 10.0],
+            'season_count': [1.0, 1.0, 1.0],
+            'rookie_draft_pick': [None, None, None],
+        }
+    )
+    monkeypatch.setattr(
+        'ffbayes.analysis.bayesian_vor_comparison._build_holdout_prediction_table',
+        lambda *args, **kwargs: constant_prediction_table.copy(),
+    )
+
+    summary = build_player_forecast_validation_summary(
+        _build_synthetic_history(),
+        holdout_years=[2024],
+        top_k=1,
+    )
+
+    assert summary['overall_forecast']['spearman_rank_correlation'] is None
+    assert summary['overall_forecast']['spearman_rank_correlation_status'] == 'unavailable'
+    assert summary['overall_forecast']['spearman_rank_correlation_reason'] == 'constant_input'

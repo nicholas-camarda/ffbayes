@@ -708,6 +708,28 @@ def test_slot_specific_artifacts_use_prefixed_filenames():
             _loads_strict_json(saved['backtest_path'].read_text(encoding='utf-8'))
 
 
+def test_dashboard_artifacts_do_not_surface_unpromoted_sampled_comparison(tmp_path):
+    settings = LeagueSettings()
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
+
+    saved = save_draft_decision_artifacts(
+        artifacts,
+        output_dir=tmp_path / 'artifacts',
+        year=2026,
+        dashboard_dir=tmp_path / 'artifacts',
+        diagnostics_dir=tmp_path / 'diagnostics',
+    )
+
+    payload = _loads_strict_json(saved['payload_path'].read_text(encoding='utf-8'))
+    html = saved['html_path'].read_text(encoding='utf-8')
+
+    assert 'sampled_bayes' not in json.dumps(payload).lower()
+    assert 'hierarchical_sampled_bayes' not in json.dumps(payload).lower()
+    assert "return Number.isFinite(num) ? num.toFixed(digits) : 'n/a';" in html
+
+
 def test_canonical_runtime_save_prunes_shortcut_surfaces(monkeypatch, tmp_path):
     settings = LeagueSettings()
     artifacts = build_draft_decision_artifacts(

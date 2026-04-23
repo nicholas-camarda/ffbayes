@@ -19,6 +19,7 @@ This guide suite explains the supported `pre-draft` workflow, the current dashbo
 - repo `dashboard/` is a derived local shortcut for convenience
 - repo `site/` is a staged GitHub Pages copy for publishing, not the authoritative local draft surface
 - dashboard evidence is internal holdout evidence, not external validation
+- `n/a` or `not estimable` validation entries mean the slice could not support that estimate cleanly
 
 ## Essential Commands
 

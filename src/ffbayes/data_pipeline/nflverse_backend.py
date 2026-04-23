@@ -436,7 +436,7 @@ def load_players() -> pd.DataFrame:
                 'name',
             ),
             'position': ('position', 'pos'),
-            'recent_team': ('recent_team', 'team', 'current_team'),
+            'recent_team': ('recent_team', 'team', 'current_team', 'latest_team'),
         },
         context='players',
     )
@@ -477,7 +477,6 @@ def load_combine_results(years: list[int]) -> pd.DataFrame:
         frame,
         {
             'season': ('season', 'draft_year'),
-            'player_id': ('player_id', 'gsis_id'),
             'player_display_name': (
                 'player_display_name',
                 'display_name',
@@ -492,7 +491,9 @@ def load_combine_results(years: list[int]) -> pd.DataFrame:
         },
         context='combine',
     )
-    return _ensure_columns(normalized, COMBINE_COLUMNS)
+    normalized = _ensure_columns(normalized, ('player_id',))
+    normalized = _ensure_columns(normalized, COMBINE_COLUMNS)
+    return normalized.loc[:, list(COMBINE_COLUMNS)]
 
 
 def load_depth_charts(years: list[int]) -> pd.DataFrame:
@@ -502,25 +503,32 @@ def load_depth_charts(years: list[int]) -> pd.DataFrame:
     normalized = _normalize_columns(
         frame,
         {
-            'season': ('season',),
+            'season': ('season', 'dt'),
             'player_id': ('player_id', 'gsis_id'),
             'player_display_name': (
                 'player_display_name',
                 'player_name',
                 'display_name',
+                'full_name',
                 'name',
             ),
-            'position': ('position', 'pos'),
-            'recent_team': ('recent_team', 'team'),
+            'position': ('position', 'pos', 'pos_abb'),
+            'recent_team': ('recent_team', 'team', 'latest_team'),
             'depth_chart_rank': (
                 'depth_chart_rank',
                 'depth_team_order',
                 'depth_position_rank',
                 'depth_rank',
+                'pos_rank',
             ),
         },
         context='depth chart',
     )
+    if normalized['season'].dtype == object:
+        normalized = normalized.copy()
+        parsed_year = pd.to_datetime(normalized['season'], errors='coerce').dt.year
+        numeric_year = pd.to_numeric(normalized['season'], errors='coerce')
+        normalized['season'] = parsed_year.where(parsed_year.notna(), numeric_year)
     return _ensure_columns(normalized, DEPTH_CHART_COLUMNS)
 
 
@@ -537,10 +545,11 @@ def load_rosters(years: list[int]) -> pd.DataFrame:
                 'player_display_name',
                 'player_name',
                 'display_name',
+                'full_name',
                 'name',
             ),
             'position': ('position', 'pos'),
-            'recent_team': ('recent_team', 'team'),
+            'recent_team': ('recent_team', 'team', 'latest_team'),
         },
         context='roster',
     )

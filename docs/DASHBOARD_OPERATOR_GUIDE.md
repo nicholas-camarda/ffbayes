@@ -222,11 +222,13 @@ What to inspect:
 - the winner label and season count
 - the compact cohort validation table in the first view
 - interpretation limits and freshness status
+- any `n/a` or `not estimable` validation entries as a sign that the slice could not support that metric cleanly
 
 What not to infer:
 
 - this is not external validation
 - degraded or unavailable evidence belongs in non-production investigation only
+- `n/a` in a validation table does not mean a measured zero relationship
 
 The first visible evidence surface is intentionally compact:
 
@@ -235,6 +237,8 @@ The first visible evidence surface is intentionally compact:
 - one compact validation table
 
 Season-level deltas, strategy rows, and disagreement tables live under the nested `Detailed evidence` disclosure.
+
+Sampled-versus-empirical comparison remains a diagnostics-only workflow unless a formal promotion decision changes the production estimator. Do not expect sampled comparison rows in the live dashboard while empirical Bayes remains production.
 
 ### Freshness And Provenance
 

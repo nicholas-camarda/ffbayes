@@ -207,12 +207,12 @@ def test_load_depth_charts_normalizes_rank_column(monkeypatch):
         pd.DataFrame(
             [
                 {
-                    'season': 2025,
+                    'dt': '2025-08-15T12:00:00Z',
                     'gsis_id': 'p1',
                     'player_name': 'Alpha Rookie',
-                    'pos': 'WR',
+                    'pos_abb': 'WR',
                     'team': 'NYG',
-                    'depth_team_order': 2,
+                    'pos_rank': 2,
                 }
             ]
         )
@@ -224,3 +224,76 @@ def test_load_depth_charts_normalizes_rank_column(monkeypatch):
 
     assert list(result.columns) == list(backend.DEPTH_CHART_COLUMNS)
     assert result.loc[0, 'depth_chart_rank'] == 2
+    assert result.loc[0, 'season'] == 2025
+
+
+def test_load_rosters_accepts_full_name_alias(monkeypatch):
+    roster_frame = _FakePolarsFrame(
+        pd.DataFrame(
+            [
+                {
+                    'season': 2025,
+                    'gsis_id': 'p1',
+                    'full_name': 'Alpha Veteran',
+                    'position': 'RB',
+                    'team': 'NYG',
+                }
+            ]
+        )
+    )
+    fake_backend = SimpleNamespace(load_rosters=lambda seasons: roster_frame)
+    monkeypatch.setattr(backend, '_get_backend_module', lambda: fake_backend)
+
+    result = backend.load_rosters([2025])
+
+    assert result.loc[0, 'player_display_name'] == 'Alpha Veteran'
+    assert result.loc[0, 'recent_team'] == 'NYG'
+
+
+def test_load_players_accepts_latest_team_alias(monkeypatch):
+    players_frame = _FakePolarsFrame(
+        pd.DataFrame(
+            [
+                {
+                    'gsis_id': 'p1',
+                    'display_name': 'Alpha Veteran',
+                    'position': 'WR',
+                    'latest_team': 'NYG',
+                }
+            ]
+        )
+    )
+    fake_backend = SimpleNamespace(load_players=lambda: players_frame)
+    monkeypatch.setattr(backend, '_get_backend_module', lambda: fake_backend)
+
+    result = backend.load_players()
+
+    assert list(result.columns) == list(backend.PLAYER_CONTEXT_COLUMNS)
+    assert result.loc[0, 'player_display_name'] == 'Alpha Veteran'
+    assert result.loc[0, 'recent_team'] == 'NYG'
+
+
+def test_load_combine_results_allows_missing_player_id(monkeypatch):
+    combine_frame = _FakePolarsFrame(
+        pd.DataFrame(
+            [
+                {
+                    'season': 2025,
+                    'player_name': 'Alpha Rookie',
+                    'pos': 'WR',
+                    'forty': 4.41,
+                    'vertical': 38.5,
+                    'broad_jump': 126.0,
+                    'bench': 16.0,
+                }
+            ]
+        )
+    )
+    fake_backend = SimpleNamespace(load_combine=lambda seasons: combine_frame)
+    monkeypatch.setattr(backend, '_get_backend_module', lambda: fake_backend)
+
+    result = backend.load_combine_results([2025])
+
+    assert list(result.columns) == list(backend.COMBINE_COLUMNS)
+    assert pd.isna(result.loc[0, 'player_id'])
+    assert result.loc[0, 'player_display_name'] == 'Alpha Rookie'

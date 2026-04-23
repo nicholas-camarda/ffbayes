@@ -4855,11 +4855,12 @@ def export_dashboard_html(
 
       function formatNumber(value, digits = 2) {
         const num = Number(value);
-        return Number.isFinite(num) ? num.toFixed(digits) : '0.00';
+        return Number.isFinite(num) ? num.toFixed(digits) : 'n/a';
       }
 
       function formatPercent(value) {
-        return `${Math.round((Number(value) || 0) * 100)}%`;
+        const num = Number(value);
+        return Number.isFinite(num) ? `${Math.round(num * 100)}%` : 'n/a';
       }
 
       function formatTimestamp(value) {

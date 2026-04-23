@@ -119,6 +119,7 @@ During the draft:
 - keep the local dashboard open
 - use the workbook as a tabular companion and fallback
 - inspect `Decision evidence` before over-trusting the ranking
+- treat `n/a` or `not estimable` validation entries as slices the board could not judge cleanly, not as measured zero relationships
 - inspect `Freshness and provenance` before assuming the board is current
 - if the current dashboard build includes war-room visuals, use them as decision aids, not as a separate model
 - when you click Finalize, keep the downloaded finalized bundle
@@ -209,6 +210,8 @@ Use these commands by intent:
 - `ffbayes collect`, `ffbayes validate`, `ffbayes preprocess`: lower-level debugging or recovery steps
 
 The top-level `ffbayes` CLI is the main interface. Module-level scripts still exist, but the unified CLI is the intended operator surface.
+
+The repository uses the hierarchical empirical-Bayes estimator for player forecasts. There is no active sampled-Bayes workflow in the repository.
 
 ## Output Organization
 

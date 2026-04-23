@@ -13,6 +13,44 @@ import pandas as pd
 QUICK_TEST = os.getenv('QUICK_TEST', 'false').lower() == 'true'
 
 
+def _group_frame_metric(
+    data: pd.DataFrame,
+    metric_name: str,
+    calculator,
+) -> pd.DataFrame:
+    """Evaluate one grouped frame metric without deprecated DataFrameGroupBy.apply."""
+    rows: list[dict[str, float | str]] = []
+    for (name, season), group in data.groupby(['Name', 'Season'], sort=False):
+        rows.append(
+            {
+                'Name': name,
+                'Season': season,
+                metric_name: calculator(group.copy()),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _group_series_metric(
+    data: pd.DataFrame,
+    metric_name: str,
+    calculator,
+    *,
+    value_column: str = 'FantPt',
+) -> pd.DataFrame:
+    """Evaluate one grouped Series metric without deprecated grouping semantics."""
+    rows: list[dict[str, float | str]] = []
+    for (name, season), group in data.groupby(['Name', 'Season'], sort=False):
+        rows.append(
+            {
+                'Name': name,
+                'Season': season,
+                metric_name: calculator(group[value_column]),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def calculate_advanced_stats_from_existing_data(base_data: pd.DataFrame) -> pd.DataFrame:
     """
     Calculate advanced stats from existing fantasy football data.
@@ -76,14 +114,18 @@ def _calculate_usage_consistency_metrics(data: pd.DataFrame) -> pd.DataFrame:
     )
     
     # Calculate boom/bust ratio (games above 20 vs below 5 points)
-    boom_bust_data = data.groupby(['Name', 'Season'], group_keys=False).apply(
-        lambda x: _calculate_boom_bust_ratio(x['FantPt'])
-    ).reset_index(name='boom_bust_ratio')
+    boom_bust_data = _group_series_metric(
+        data,
+        'boom_bust_ratio',
+        _calculate_boom_bust_ratio,
+    )
     
     # Calculate floor/ceiling spread (90th - 10th percentile)
-    floor_ceiling_data = data.groupby(['Name', 'Season'], group_keys=False).apply(
-        lambda x: _calculate_floor_ceiling_spread(x['FantPt'])
-    ).reset_index(name='floor_ceiling_spread')
+    floor_ceiling_data = _group_series_metric(
+        data,
+        'floor_ceiling_spread',
+        _calculate_floor_ceiling_spread,
+    )
     
     # Merge back to main data
     consistency_metrics = player_stats.merge(boom_bust_data, on=['Name', 'Season'], how='left')
@@ -252,9 +294,11 @@ def _calculate_early_late_season_diff(data: pd.DataFrame) -> pd.DataFrame:
     # Note: G# represents game number, not necessarily week number
     
     # Group by player, season and calculate early vs late performance
-    early_late_stats = data.groupby(['Name', 'Season'], group_keys=False).apply(
-        lambda x: _calculate_early_late_diff(x)
-    ).reset_index(name='early_late_season_diff')
+    early_late_stats = _group_frame_metric(
+        data,
+        'early_late_season_diff',
+        _calculate_early_late_diff,
+    )
     
     # Merge back to main data
     data = data.merge(early_late_stats, on=['Name', 'Season'], how='left')
@@ -338,8 +382,13 @@ def _calculate_position_specific_metrics(data: pd.DataFrame) -> pd.DataFrame:
     # WR Big Play Dependency (% from big games)
     wr_data = data[data['Position'] == 'WR'].copy()
     if len(wr_data) > 0:
-        wr_big_play = wr_data.groupby(['Name', 'Season'], group_keys=False).apply(
-            lambda x: _calculate_big_play_dependency(x['FantPt'])
+        wr_big_play = (
+            _group_series_metric(
+                wr_data,
+                'wr_big_play_dependency',
+                _calculate_big_play_dependency,
+            )
+            .set_index(['Name', 'Season'])['wr_big_play_dependency']
         )
         # Map the values back to the main DataFrame using the index
         data['wr_big_play_dependency'] = data.set_index(['Name', 'Season']).index.map(wr_big_play).values
@@ -347,8 +396,13 @@ def _calculate_position_specific_metrics(data: pd.DataFrame) -> pd.DataFrame:
     # TE Usage Reliability (% above replacement level)
     te_data = data[data['Position'] == 'TE'].copy()
     if len(te_data) > 0:
-        te_reliability = te_data.groupby(['Name', 'Season'], group_keys=False).apply(
-            lambda x: _calculate_te_reliability(x['FantPt'])
+        te_reliability = (
+            _group_series_metric(
+                te_data,
+                'te_usage_reliability',
+                _calculate_te_reliability,
+            )
+            .set_index(['Name', 'Season'])['te_usage_reliability']
         )
         # Map the values back to the main DataFrame using the index
         data['te_usage_reliability'] = data.set_index(['Name', 'Season']).index.map(te_reliability).values
@@ -399,9 +453,11 @@ def _calculate_trend_analysis(data: pd.DataFrame) -> pd.DataFrame:
 def _calculate_recent_form(data: pd.DataFrame) -> pd.DataFrame:
     """Calculate recent form (last 4 games vs season average)."""
     # Group by player and season, then calculate recent form
-    recent_form_data = data.groupby(['Name', 'Season'], group_keys=False).apply(
-        lambda x: _calculate_player_recent_form(x)
-    ).reset_index(name='recent_form')
+    recent_form_data = _group_frame_metric(
+        data,
+        'recent_form',
+        _calculate_player_recent_form,
+    )
     
     # Merge back to main data
     data = data.merge(recent_form_data, on=['Name', 'Season'], how='left')
@@ -430,9 +486,11 @@ def _calculate_player_recent_form(player_data: pd.DataFrame) -> float:
 def _calculate_season_trend(data: pd.DataFrame) -> pd.DataFrame:
     """Calculate season trend (improving/declining)."""
     # Group by player and season, then calculate season trend
-    season_trend_data = data.groupby(['Name', 'Season'], group_keys=False).apply(
-        lambda x: _calculate_player_season_trend(x)
-    ).reset_index(name='season_trend')
+    season_trend_data = _group_frame_metric(
+        data,
+        'season_trend',
+        _calculate_player_season_trend,
+    )
     
     # Merge back to main data
     data = data.merge(season_trend_data, on=['Name', 'Season'], how='left')
@@ -459,9 +517,13 @@ def _calculate_player_season_trend(player_data: pd.DataFrame) -> float:
 def _calculate_consistency_over_time(data: pd.DataFrame) -> pd.DataFrame:
     """Calculate consistency throughout season."""
     # Group by player and season, then calculate consistency over time
-    consistency_data = data.groupby(['Name', 'Season'], group_keys=False).apply(
-        lambda x: _calculate_player_consistency_over_time(x)
-    ).reset_index(name='consistency_over_time')
+    # Keep the grouped logic explicit so pandas grouping-column API changes do not
+    # silently alter these player-season trend metrics.
+    consistency_data = _group_frame_metric(
+        data,
+        'consistency_over_time',
+        _calculate_player_consistency_over_time,
+    )
     
     # Merge back to main data
     data = data.merge(consistency_data, on=['Name', 'Season'], how='left')

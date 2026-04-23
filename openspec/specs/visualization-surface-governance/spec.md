@@ -1,113 +1,35 @@
 ## ADDED Requirements
 
-### Requirement: Visualization surfaces SHALL declare authority level
-The system MUST distinguish canonical visualization artifacts from derived convenience copies and supplemental diagnostics so operators and docs do not treat all visualization outputs as equally authoritative.
+### Requirement: Supported output structure SHALL remain minimal and authority-scoped
+The supported `pre_draft` workflow MUST emit only a small, declared set of authoritative and derived artifact families for the redesigned draft engine. New model, dashboard, and validation outputs MUST fit the declared structure rather than creating ad hoc sibling directories or duplicate truth surfaces.
 
-#### Scenario: Canonical runtime dashboard is identified as authoritative
-- **WHEN** a pre-draft run generates dashboard artifacts
-- **THEN** the system MUST treat `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html` and `dashboard_payload_<year>.json` as the canonical local dashboard pair
+#### Scenario: Canonical runtime draft artifacts remain centralized
+- **WHEN** the redesigned draft engine emits supported runtime artifacts for a given year
+- **THEN** the canonical dashboard HTML, canonical dashboard payload, canonical workbook, and canonical player-forecast outputs MUST live under `seasons/<year>/draft_strategy/` and its declared subdirectories rather than in scattered feature-specific directories
 
-#### Scenario: Derived surfaces are labeled as copies
-- **WHEN** the system stages repo-local `dashboard/`, runtime-root `dashboard/`, or repo-tracked `site/`
-- **THEN** those surfaces MUST be treated as derived copies of the canonical runtime artifact pair rather than independent sources of truth
+#### Scenario: Validation and stress summaries remain under diagnostics
+- **WHEN** the redesigned model emits holdout-validation, calibration, or stress-fixture summaries
+- **THEN** those summaries MUST live under `seasons/<year>/diagnostics/validation/` rather than creating parallel top-level artifact families beside the canonical draft outputs
 
-### Requirement: Repo-local dashboard SHALL remain a narrow convenience surface
-The repo-local `dashboard/` surface MUST remain a shallow shortcut view of the canonical runtime dashboard pair rather than a general artifact dump.
+#### Scenario: Derived surfaces do not accumulate extra artifact families
+- **WHEN** repo-local `dashboard/` or staged `site/` copies are regenerated from the canonical runtime dashboard
+- **THEN** they MUST remain shallow derived copies of the canonical HTML and payload pair and MUST NOT accumulate extra diagnostics, model dumps, or historical artifact families
 
-#### Scenario: Repo-local dashboard is staged
-- **WHEN** the system stages repo-local `dashboard/`
-- **THEN** it MUST contain only the convenience HTML/payload pair and direct shortcut companions for the active year rather than unrelated diagnostics or historical artifact families
+#### Scenario: Ad hoc model-output families are rejected
+- **WHEN** a redesign step attempts to introduce ad hoc output families such as `hybrid_*`, `experimental_*`, duplicate player-forecast dumps, or duplicate canonical dashboard payloads for the same year
+- **THEN** the supported workflow MUST reject that structure in favor of the declared canonical directories and filenames
 
-### Requirement: Local placeholder artifacts SHALL not masquerade as live outputs
-The system MUST NOT allow synthetic or sample visualization content to appear in the repo-local live dashboard shortcut when a canonical runtime dashboard artifact pair exists for the same year.
+### Requirement: Local runtime inputs SHALL use the `inputs/` tree and legacy runtime trees SHALL be removed
+The supported local runtime contract MUST use `inputs/raw/` and `inputs/processed/` as the canonical working input tree. The legacy runtime `data/` and `datasets/` trees MUST NOT remain as parallel supported working roots after migration.
 
-#### Scenario: Canonical runtime board exists
-- **WHEN** a canonical runtime dashboard artifact pair exists for the active year
-- **THEN** the repo-local `dashboard/index.html` and paired payload MUST reflect that runtime board rather than placeholder sample content
+#### Scenario: Canonical local input root is explicit
+- **WHEN** collection, preprocessing, or unified-dataset generation writes local runtime inputs
+- **THEN** those outputs MUST be written under the canonical `inputs/` tree rather than under a parallel local `data/` or `datasets/` root
 
-#### Scenario: No live runtime board exists
-- **WHEN** no canonical runtime dashboard artifact pair exists for the requested year
-- **THEN** the system MUST fail explicitly or present an unmistakably non-live placeholder state instead of implying that a sample board is the real output
+#### Scenario: Cloud mirror keeps the published `data/` name
+- **WHEN** selected runtime inputs are mirrored to the maintainer-configured cloud home
+- **THEN** the cloud mirror MAY continue using cloud `data/` and dated `Analysis/` roots without implying that cloud `data/` is the local working source of truth
 
-### Requirement: Visualization documentation SHALL match emitted artifact categories
-Visualization docs MUST describe only emitted or explicitly optional output categories, MUST distinguish supported outputs from deprecated or supplemental ones, and MUST identify which visualization surfaces are authoritative versus derived copies.
-
-#### Scenario: Documented category is emitted
-- **WHEN** README or docs list a visualization category under runtime diagnostics or staged outputs
-- **THEN** that category MUST correspond to a real emitted artifact family or be clearly marked optional with its producing command
-
-#### Scenario: Legacy category is no longer emitted
-- **WHEN** a previously documented diagnostics category is no longer generated by supported commands
-- **THEN** docs MUST remove it or mark it deprecated instead of presenting it as a current default output
-
-#### Scenario: Documentation distinguishes authority levels
-- **WHEN** durable docs describe canonical runtime dashboards, repo-local `dashboard/`, or staged `site/`
-- **THEN** they MUST identify the canonical runtime artifact pair as authoritative and MUST describe repo-local and staged copies as derived surfaces with their own operator purpose
-
-#### Scenario: Documentation distinguishes supported and optional analyses
-- **WHEN** durable docs mention standalone analysis commands or optional artifact families outside the supported `ffbayes pre-draft` workflow
-- **THEN** they MUST mark those outputs as optional or compatibility-only rather than presenting them as default outputs of the supported workflow
-
-### Requirement: Legacy visualization modules SHALL be classified before retention
-The repo MUST classify visualization-producing modules as active, compatibility-only, deprecated, or removable before treating them as supported output paths. Unused generators that survive only through manual CLI entrypoints MUST be treated as deprecated or removable, not as a supported class of surface.
-
-#### Scenario: Standalone generator duplicates the dashboard product
-- **WHEN** a standalone visualization generator overlaps the supported dashboard lifecycle without owning a distinct supported output surface
-- **THEN** the module MUST be classified as deprecated or compatibility-only rather than left implicitly current
-
-#### Scenario: Wrapper module re-exports nested implementation
-- **WHEN** a visualization module exists only to re-export another implementation
-- **THEN** the repo MUST treat it as a compatibility surface rather than as an independent visualization product
-
-#### Scenario: Legacy generator is still pipeline-referenced
-- **WHEN** a legacy visualization generator remains referenced by supported pipeline configuration
-- **THEN** the repo MUST classify it as deprecated or transitional rather than describing it as an unreferenced orphan until the pipeline wiring is removed
-
-#### Scenario: Unwired weak generator lacks supported consumers
-- **WHEN** a visualization generator has no supported CLI, pipeline, or documented consumer and does not produce unique decision support
-- **THEN** the repo MUST classify it as removable rather than leaving it implicitly supported
-
-#### Scenario: Generator is exposed only through unused manual CLI
-- **WHEN** a visualization generator is reachable only through an explicit CLI command and is not part of the supported pipeline execution graph or documented supported workflow
-- **THEN** the repo MUST classify it as deprecated-for-removal or removable rather than preserving it as a supported surface
-
-### Requirement: Dashboard visual additions SHALL be decision-first
-New visualization elements added to the live draft dashboard MUST justify their space by answering a clear draft-time decision question rather than serving as decorative or generic analytics.
-
-#### Scenario: Proposed visual answers one clear question
-- **WHEN** a new dashboard visual is added to the supported war-room surface
-- **THEN** it MUST map to a concrete operator question such as whether to pick now, wait, or react to positional scarcity
-
-#### Scenario: Redundant decorative view is rejected
-- **WHEN** a proposed visual duplicates existing board, evidence, or inspector information without adding distinct decision support
-- **THEN** the dashboard surface MUST treat it as out of scope for the supported war-room visualization set
-
-### Requirement: Dashboard visual additions SHALL use progressive disclosure
-New war-room visuals MUST preserve the usability of the existing dashboard by using compact defaults and progressive disclosure for heavier explanation surfaces.
-
-#### Scenario: Primary war-room controls remain visible
-- **WHEN** new visuals are integrated into the live dashboard
-- **THEN** they MUST preserve the usability of recommendation lanes, board controls, and the player table rather than crowding them out
-
-#### Scenario: Scarcity view stays close to the board without owning default space
-- **WHEN** positional scarcity is integrated into the war room
-- **THEN** it MUST stay near the player board while using a collapsed-by-default presentation so the board remains the primary default action surface
-
-#### Scenario: Secondary explanation remains collapsible
-- **WHEN** a visualization serves mainly as comparative explanation or trust support
-- **THEN** it MUST be attached to collapsible or inspector-linked UI instead of always-open top-level dashboard real estate
-
-### Requirement: Visualization contracts SHALL remain model-semantic rather than formula-specific
-Supported dashboard visuals MUST depend on stable semantic concepts such as contextual score, baseline score, timing risk, or cliff strength instead of hardcoding today's internal model feature weights or field names as the lasting UI contract.
-
-#### Scenario: Current formula changes but semantics remain
-- **WHEN** the draft model changes how it computes contextual recommendations while still exposing equivalent semantic concepts
-- **THEN** the supported war-room visuals MUST remain valid without requiring a full redesign
-
-#### Scenario: Baseline label changes in a future model
-- **WHEN** the comparison baseline changes from the current simple VOR proxy to another supported baseline
-- **THEN** the dashboard MUST update user-facing labels and semantic payload values without breaking the visualization surface contract
-
-#### Scenario: New semantics extend existing visuals
-- **WHEN** future model improvements introduce richer timing, scarcity, or comparative semantics
-- **THEN** the supported dashboard visualization contract MUST accept additive extension without requiring the war-room layout itself to be rebuilt
+#### Scenario: Parallel local roots are rejected
+- **WHEN** the migrated runtime layout is verified
+- **THEN** supported code, docs, and tests MUST NOT require parallel local `inputs/` and `data/` trees or a surviving legacy local `datasets/` tree

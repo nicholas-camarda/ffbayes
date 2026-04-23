@@ -6,6 +6,8 @@ Scope: the supported `pre-draft` workflow, the implemented player-posterior mode
 
 Trust boundary: this document describes the implemented current board. Additional non-default analyses are labeled explicitly. Internal holdout backtests are directional evidence, not external validation.
 
+When a rank-based validation slice cannot be estimated because the slice is constant or lacks variation, the emitted artifact records that metric as unavailable and operator-facing surfaces render it as `n/a` or `not estimable`. That state is not equivalent to a measured zero relationship.
+
 ## What This Is
 
 This is the single authoritative technical and methods guide for the draft board. It replaces overlapping "deep dive" and "statistician guide" narratives.

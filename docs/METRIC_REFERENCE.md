@@ -49,6 +49,7 @@ Primary guide-facing payload fields:
 | `Market gap` | difference between model rank and market rank | where the board disagrees with cost | not proof the market is wrong |
 | `Decision evidence` | internal holdout comparison between contextual and baseline strategies | status, winner, season count, limitations | not external validation |
 | `Freshness and provenance` | run freshness plus source and staging metadata | status, warnings, override usage, source files | not proof the picks are correct |
+| `n/a` / `Not estimable` | validation metric state showing the slice could not support that estimate cleanly | whether the slice was constant or too thin | not the same as a measured zero relationship |
 | `Season total mean` | central season-total forecast shown in the inspector | posterior mean for total points | not a pick-now instruction by itself |
 | `Rate when active` | expected scoring pace when the player is active | scoring-rate component of the player forecast | not full-season value without availability |
 | `Expected games` | expected availability over the fantasy season | games-played component of the player forecast | not a medical forecast |
@@ -67,6 +68,8 @@ Purpose: short dashboard-owned explanation of how the current board is structure
 ### Decision Evidence
 
 Purpose: summarize internal holdout support and interpretation limits.
+
+If `Decision evidence` includes `n/a` or `Not estimable`, read that as "the metric could not be estimated cleanly for this slice," not as "the relationship was exactly zero."
 
 ### Analysis Provenance
 

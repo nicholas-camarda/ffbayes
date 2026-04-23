@@ -115,6 +115,7 @@ What to notice:
 - `analysis_provenance` and `decision_evidence` carry trust messaging
 - `metric_glossary` and `model_overview` define canonical names and interpretation language
 - `war_room_visuals` may be present in newer dashboard builds, but should be treated as additive
+- if a validation metric is unavailable, runtime payloads render it as `n/a` or `not estimable` rather than fabricating `0.00`
 
 ### Dashboard HTML
 
@@ -174,6 +175,7 @@ What to notice:
 
 - this is evidence for comparative board behavior on holdout seasons
 - it is not a guarantee about your future league
+- the repository uses the empirical-Bayes player forecast and does not carry an active sampled-Bayes workflow
 
 ### Staged GitHub Pages Copy
 

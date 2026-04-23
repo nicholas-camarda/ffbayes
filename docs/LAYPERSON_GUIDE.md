@@ -329,6 +329,8 @@ What to notice:
 
 - the board tells you whether evidence is available
 - the board tells you whether the run was fresh or degraded
+- if a validation cell says `n/a` or `not estimable`, the dashboard could not judge that slice cleanly
+- `n/a` does not mean the relationship was exactly zero
 
 ## If Your Dashboard Includes War-Room Visuals
 
@@ -356,3 +358,5 @@ Important paths:
 - authoritative local HTML: `seasons/<year>/draft_strategy/draft_board_<year>.html`
 - easy local shortcut: `dashboard/index.html`
 - staged GitHub Pages copy: `site/index.html`
+
+The repository uses the empirical-Bayes player forecast. There is no active sampled-Bayes workflow in the repo or the live dashboard.

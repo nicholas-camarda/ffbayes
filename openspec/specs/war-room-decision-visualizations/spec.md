@@ -1,11 +1,11 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: Dashboard payload SHALL expose a normalized war-room visualization contract
-The live dashboard payload MUST expose a normalized `war_room_visuals` contract for interactive draft-decision visuals so the UI depends on stable semantic fields rather than raw model-formula internals.
+The live dashboard payload MUST expose a normalized `war_room_visuals` contract for interactive draft-decision visuals so the UI depends on stable semantic fields rather than raw model-formula internals. The contract MUST be driven by the supported player-model and draft-decision stack and MUST NOT depend on retired hybrid Monte Carlo or random-forest semantics.
 
 #### Scenario: Payload includes semantic visualization sections
 - **WHEN** `ffbayes draft-strategy` generates the canonical runtime dashboard payload
-- **THEN** the payload MUST include normalized sections for timing decisions, positional scarcity, and contextual-versus-baseline explanation with semantic values and user-facing labels
+- **THEN** the payload MUST include normalized sections for timing decisions, positional scarcity, and contextual-versus-baseline explanation with semantic values and user-facing labels derived from the supported model stack
 
 #### Scenario: Visualization section is unavailable
 - **WHEN** the dashboard cannot derive one of the normalized visualization sections from the available draft artifacts
@@ -14,6 +14,10 @@ The live dashboard payload MUST expose a normalized `war_room_visuals` contract 
 #### Scenario: Visualization contract evolves additively
 - **WHEN** later model upgrades add or refine war-room visualization semantics
 - **THEN** the normalized payload contract MUST evolve through additive or explicitly versioned semantic fields rather than forcing existing dashboard surfaces to bind to volatile raw model internals
+
+#### Scenario: Supported-model provenance is visible to visualization builders
+- **WHEN** visualization sections are generated from the runtime artifacts
+- **THEN** the payload MUST be able to identify that those semantics came from the supported player-model and decision-policy contract rather than a retired hybrid analysis lane
 
 ### Requirement: War room dashboard SHALL render a timing ladder as a decision aid
 The live draft war room MUST render a compact `wait-vs-pick` timing visualization that helps operators compare immediate selection against waiting for the next pick window, without relying on overlapping scatter marks.
@@ -25,6 +29,10 @@ The live draft war room MUST render a compact `wait-vs-pick` timing visualizatio
 #### Scenario: Frontier reacts to live board state
 - **WHEN** local dashboard state changes through `taken`, `mine`, queue, current pick, next pick, or scoring-preset updates
 - **THEN** the timing visualization MUST update to reflect the new local decision context
+
+#### Scenario: Timing semantics remain stable after model redesign
+- **WHEN** the underlying player-model architecture changes from the current mixed stack to the supported season-total player-model contract
+- **THEN** the timing visualization MUST continue to consume stable semantic timing fields rather than binding directly to estimator-specific implementation details
 
 ### Requirement: War room dashboard SHALL render positional scarcity cliffs
 The live draft war room MUST render a positional cliff view that highlights where a position group drops off materially and which candidates sit just before those cliffs.
@@ -59,6 +67,10 @@ The live dashboard MUST support contextual-versus-baseline comparison visuals wi
 #### Scenario: Future baseline changes
 - **WHEN** a later model upgrade replaces or augments the current baseline comparison
 - **THEN** the comparative visualization contract MUST remain valid through updated semantic labels and values without requiring the UI layout itself to be rewritten
+
+#### Scenario: Comparative explanation can surface rate and availability context
+- **WHEN** the supported player-model contract exposes separate rate and availability context for a selected player
+- **THEN** the inspector-linked comparative explanation MAY surface those supported semantics without requiring a new standalone dashboard surface
 
 ### Requirement: Visuals SHALL use progressive disclosure inside the war room
 The new decision visuals MUST fit inside the existing war-room dashboard as compact, action-supporting components rather than as a separate analytics surface.

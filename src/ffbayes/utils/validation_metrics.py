@@ -91,7 +91,14 @@ def calculate_model_accuracy_metrics(predicted: np.ndarray, actual: np.ndarray) 
         ss_tot = np.sum((actual - np.mean(actual)) ** 2)
         r_squared = 1 - ss_res / ss_tot if ss_tot != 0 else 0.0
         mae = float(np.mean(np.abs(actual - predicted)))
-        corr = float(np.corrcoef(predicted, actual)[0, 1]) if len(predicted) > 1 else 0.0
+        if (
+            len(predicted) > 1
+            and np.unique(predicted).size > 1
+            and np.unique(actual).size > 1
+        ):
+            corr = float(np.corrcoef(predicted, actual)[0, 1])
+        else:
+            corr = float('nan')
         return {'r_squared': float(r_squared), 'mae': mae, 'correlation': corr}
     except Exception as e:
         logger.error(f"Error calculating model accuracy metrics: {str(e)}")
@@ -190,4 +197,3 @@ def validate_convergence_diagnostics(trace_data: Dict[str, np.ndarray], r_hat_th
     except Exception as e:
         logger.error(f"Error validating convergence: {str(e)}")
         return {'converged': False, 'parameters': {}, 'worst_r_hat': 1.0, 'n_divergent': 0}
-
