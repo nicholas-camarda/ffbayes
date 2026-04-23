@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the sampled-Bayes promotion governance contract for comparison artifacts, promotion decisions, and production model ownership.
+
+## Requirements
 
 ### Requirement: Sampled-versus-empirical evaluation SHALL produce a persisted comparison artifact
 The repository MUST evaluate the sampled hierarchical estimator against the empirical-Bayes production baseline through one persisted comparison artifact family rather than through ad hoc console output or implicit selector behavior.

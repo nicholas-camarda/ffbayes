@@ -455,6 +455,8 @@ def test_preprocess_to_canonical_dashboard_fixture_path(tmp_path, monkeypatch):
 
     monkeypatch.setenv('FFBAYES_RUNTIME_ROOT', str(runtime_dir))
     monkeypatch.setenv('FFBAYES_PROJECT_ROOT', str(project_root))
+    monkeypatch.setattr(path_constants, 'RUNTIME_DIR', runtime_dir, raising=False)
+    monkeypatch.setattr(path_constants, 'BASE_DIR', project_root, raising=False)
     monkeypatch.setattr(path_constants, 'RAW_DATA_DIR', raw_dir, raising=False)
     monkeypatch.setattr(
         path_constants, 'SEASON_DATASETS_DIR', season_dir, raising=False

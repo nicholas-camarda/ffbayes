@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the validation and stress-harness contract for player forecasts, diagnostics, dashboard staging, and implementation review.
+
+## Requirements
 
 ### Requirement: The supported player forecast stack SHALL emit rolling holdout accuracy and calibration artifacts
 The supported `pre_draft` modeling path MUST emit deterministic validation artifacts covering rolling holdout forecast accuracy, ranking quality, and calibration for the supported player forecast stack.

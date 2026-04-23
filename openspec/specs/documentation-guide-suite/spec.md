@@ -1,4 +1,7 @@
-## MODIFIED Requirements
+## Purpose
+Defines the documentation guide contract for operator workflow, technical method explanation, and lay interpretation.
+
+## Requirements
 
 ### Requirement: Operator documentation SHALL explain the current dashboard workflow end to end
 The guide suite MUST include a dashboard operator guide that explains how to use the canonical runtime dashboard, the repo-local shortcut, and the staged Pages copy, including the steps an operator takes before, during, and after a draft.

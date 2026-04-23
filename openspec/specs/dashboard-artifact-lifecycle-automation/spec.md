@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the dashboard artifact lifecycle contract for refresh checks, staged Pages payloads, and source-of-truth boundaries.
+
+## Requirements
 
 ### Requirement: Dashboard HTML SHALL be refreshable from an existing payload
 The system MUST provide a cheap regeneration path that rebuilds dashboard HTML from an existing dashboard payload without rerunning the full draft-strategy model pipeline.

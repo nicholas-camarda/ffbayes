@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the production contract for retiring the hybrid Monte Carlo plus random-forest analysis path.
+
+## Requirements
 
 ### Requirement: The hybrid Monte Carlo plus random-forest analysis path SHALL be removed completely
 The repository MUST remove the hybrid Monte Carlo plus random-forest uncertainty path from the supported `pre_draft` workflow, runtime artifacts, CLI surfaces, and documentation. The system MUST NOT retain that path as a fallback, compatibility toggle, or silent rescue branch.

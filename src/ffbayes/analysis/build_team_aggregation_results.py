@@ -14,7 +14,7 @@ import pandas as pd
 
 
 def find_latest_mc_tsv() -> Optional[Path]:
-    candidates = []
+    candidates: list[Path] = []
     # Search both results and plots directories for projections TSVs
     from ffbayes.utils.training_config import get_monte_carlo_training_years
     training_years = get_monte_carlo_training_years()

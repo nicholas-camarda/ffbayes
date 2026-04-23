@@ -1,4 +1,7 @@
-## MODIFIED Requirements
+## Purpose
+Defines the decision-evidence payload and dashboard UI contract for internal validation evidence, limitations, and unavailable metric semantics.
+
+## Requirements
 
 ### Requirement: Dashboard payload SHALL expose structured decision evidence
 The draft dashboard payload MUST expose a structured decision-evidence section derived from the backtest, related trust metadata, and current validation semantics rather than only a thin summary table.

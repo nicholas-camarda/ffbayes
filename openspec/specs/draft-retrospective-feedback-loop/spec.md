@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the draft retrospective feedback-loop contract for finalized draft imports, realized outcomes, and runtime-local retrospective reporting.
+
+## Requirements
 
 ### Requirement: Retrospective command SHALL operate on finalized draft artifacts plus realized season outcomes
 The retrospective feedback loop MUST read finalized draft snapshots, pick receipts, exported dashboard artifacts, and realized season outcome data for the drafted season, rather than rerunning the full draft-model generation pipeline.

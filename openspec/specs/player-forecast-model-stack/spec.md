@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the player forecast model-stack contract for season-total fantasy value, empirical Bayes production behavior, and sampled hierarchical evaluation.
+
+## Requirements
 
 ### Requirement: The supported player forecast stack SHALL target season-total fantasy value for the dashboard
 The supported `pre_draft` player forecast stack MUST produce posterior predictive summaries for season-total fantasy points under the active scoring preset. The player forecast contract MUST be the authoritative source for draft-facing player value, uncertainty, and replacement-level comparisons used by the dashboard and draft decision engine.

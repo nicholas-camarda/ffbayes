@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the freshness governance contract for pre-draft inputs, serialized freshness state, and user-facing degraded-state interpretation.
+
+## Requirements
 
 ### Requirement: Pre-draft freshness SHALL fail closed by default
 The `ffbayes` pre-draft pipeline and related freshness-sensitive commands MUST reject runs that are missing the latest expected season unless the operator has provided an explicit degraded-data override.

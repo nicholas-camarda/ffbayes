@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines validation metric semantics for non-estimable metrics, unavailable reasons, evidence rendering, and regression coverage.
+
+## Requirements
 
 ### Requirement: Non-estimable rank metrics SHALL be represented explicitly
 Validation code MUST distinguish between an estimated near-zero rank association and a non-estimable rank metric caused by constant input, insufficient variation, or insufficient support.

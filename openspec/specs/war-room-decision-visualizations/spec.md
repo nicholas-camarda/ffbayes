@@ -1,4 +1,7 @@
-## MODIFIED Requirements
+## Purpose
+Defines the war-room decision visualization contract for dashboard payloads, timing ladders, positional cliffs, and progressive disclosure.
+
+## Requirements
 
 ### Requirement: Dashboard payload SHALL expose a normalized war-room visualization contract
 The live dashboard payload MUST expose a normalized `war_room_visuals` contract for interactive draft-decision visuals so the UI depends on stable semantic fields rather than raw model-formula internals. The contract MUST be driven by the supported player-model and draft-decision stack and MUST NOT depend on retired hybrid Monte Carlo or random-forest semantics.

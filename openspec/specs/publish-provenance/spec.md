@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the publish-provenance contract for Pages staging, user-visible lineage, artifact locations, and synchronization status.
+
+## Requirements
 
 ### Requirement: Pages staging SHALL include publish-time provenance
 `ffbayes publish-pages` MUST stage publish-time provenance for the dashboard artifacts it copies into `site/`.

@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines the documentation validation contract for CLI commands, path references, dashboard payload fields, and glossary terminology.
+
+## Requirements
 
 ### Requirement: Documented CLI commands SHALL be validated against the supported command surface
 The repository MUST validate that user-facing `ffbayes` command examples in durable docs refer only to real supported CLI commands and supported argument names.

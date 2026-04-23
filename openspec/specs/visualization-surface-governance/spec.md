@@ -1,4 +1,7 @@
-## ADDED Requirements
+## Purpose
+Defines visualization surface governance for supported output structure, authority boundaries, and local runtime input layout.
+
+## Requirements
 
 ### Requirement: Supported output structure SHALL remain minimal and authority-scoped
 The supported `pre_draft` workflow MUST emit only a small, declared set of authoritative and derived artifact families for the redesigned draft engine. New model, dashboard, and validation outputs MUST fit the declared structure rather than creating ad hoc sibling directories or duplicate truth surfaces.
