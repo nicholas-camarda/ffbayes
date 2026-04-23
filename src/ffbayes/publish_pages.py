@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ffbayes.utils.json_serialization import dumps_strict_json, to_strict_jsonable
 from ffbayes.utils.path_constants import (
     get_dashboard_html_path,
     get_dashboard_payload_path,
@@ -20,22 +21,18 @@ PAYLOAD_ASSIGNMENT_SUFFIX = ';\n\n    (() => {'
 
 
 def _normalized_json_text(payload: dict[str, Any]) -> str:
-    normalized = json.loads(json.dumps(payload, default=str))
-    if (
-        isinstance(normalized, dict)
-        and isinstance(normalized.get('publish_provenance'), dict)
+    normalized = to_strict_jsonable(payload)
+    if isinstance(normalized, dict) and isinstance(
+        normalized.get('publish_provenance'), dict
     ):
         normalized['publish_provenance']['published_at'] = '<normalized>'
     if isinstance(normalized, dict) and normalized.get('published_at') is not None:
         normalized['published_at'] = '<normalized>'
-    return json.dumps(normalized, sort_keys=True, indent=2)
+    return dumps_strict_json(normalized, sort_keys=True, indent=2)
 
 
 def _build_publish_provenance(
-    payload: dict[str, Any],
-    year: int,
-    source_html: Path,
-    source_payload: Path | None,
+    payload: dict[str, Any], year: int, source_html: Path, source_payload: Path | None
 ) -> dict[str, Any]:
     analysis_provenance = payload.get('analysis_provenance') or {}
     analysis_freshness = (
@@ -43,7 +40,11 @@ def _build_publish_provenance(
         or payload.get('decision_evidence', {}).get('freshness')
         or {'status': 'unknown', 'override_used': False, 'warnings': []}
     )
-    warnings = list(dict.fromkeys(str(item) for item in analysis_freshness.get('warnings', []) if item))
+    warnings = list(
+        dict.fromkeys(
+            str(item) for item in analysis_freshness.get('warnings', []) if item
+        )
+    )
     return {
         'schema_version': 'publish_provenance_v1',
         'season_year': int(year),
@@ -62,21 +63,16 @@ def _build_publish_provenance(
     }
 
 
-def _inject_dashboard_payload_into_html(
-    html_text: str, payload: dict[str, Any]
-) -> str:
+def _inject_dashboard_payload_into_html(html_text: str, payload: dict[str, Any]) -> str:
     start = html_text.find(PAYLOAD_ASSIGNMENT_PREFIX)
     if start == -1:
         return html_text
     end = html_text.find(PAYLOAD_ASSIGNMENT_SUFFIX, start)
     if end == -1:
         return html_text
-    payload_json = json.dumps(payload, default=str)
+    payload_json = dumps_strict_json(payload)
     return (
-        html_text[:start]
-        + PAYLOAD_ASSIGNMENT_PREFIX
-        + payload_json
-        + html_text[end:]
+        html_text[:start] + PAYLOAD_ASSIGNMENT_PREFIX + payload_json + html_text[end:]
     )
 
 
@@ -119,14 +115,11 @@ def stage_pages_site(
     if resolved_payload.exists():
         payload_data = json.loads(resolved_payload.read_text(encoding='utf-8'))
         payload_data['publish_provenance'] = _build_publish_provenance(
-            payload_data,
-            resolved_year,
-            resolved_html,
-            resolved_payload,
+            payload_data, resolved_year, resolved_html, resolved_payload
         )
-        staged_payload_text = json.dumps(payload_data, default=str, indent=2)
-        staged_provenance_text = json.dumps(
-            payload_data['publish_provenance'], default=str, indent=2
+        staged_payload_text = dumps_strict_json(payload_data, indent=2)
+        staged_provenance_text = dumps_strict_json(
+            payload_data['publish_provenance'], indent=2
         )
     elif payload_target.exists():
         payload_target.unlink()
@@ -195,9 +188,7 @@ def build_parser() -> argparse.ArgumentParser:
         '--year', type=int, default=datetime.now().year, help='Season year to stage'
     )
     parser.add_argument(
-        '--source-html',
-        type=Path,
-        help='Override the source dashboard HTML file',
+        '--source-html', type=Path, help='Override the source dashboard HTML file'
     )
     parser.add_argument(
         '--source-payload',
@@ -205,9 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
         help='Override the source dashboard payload JSON file',
     )
     parser.add_argument(
-        '--output-dir',
-        type=Path,
-        help='Override the GitHub Pages site directory',
+        '--output-dir', type=Path, help='Override the GitHub Pages site directory'
     )
     return parser
 

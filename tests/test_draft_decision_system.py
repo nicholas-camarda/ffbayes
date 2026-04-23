@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -21,6 +22,14 @@ from ffbayes.draft_strategy.draft_decision_system import (
     run_draft_backtest,
     save_draft_decision_artifacts,
 )
+
+
+def _reject_json_constant(value):
+    raise ValueError(f'Invalid JSON constant: {value}')
+
+
+def _loads_strict_json(text):
+    return json.loads(text, parse_constant=_reject_json_constant)
 
 
 def _synthetic_players() -> pd.DataFrame:
@@ -233,25 +242,43 @@ def test_recommendations_use_starter_first_policy_and_wait_gate():
         }
     )
     settings = LeagueSettings()
-    table = build_decision_table(players, settings, DraftContext(current_pick_number=10))
+    table = build_decision_table(
+        players, settings, DraftContext(current_pick_number=10)
+    )
     recommendations = build_recommendations(
-        table,
-        settings,
-        DraftContext(current_pick_number=10, roster_counts={'QB': 1}),
+        table, settings, DraftContext(current_pick_number=10, roster_counts={'QB': 1})
     )
 
-    pick_now = recommendations[recommendations['recommendation_lane'] == 'pick_now'].iloc[0]
+    pick_now = recommendations[
+        recommendations['recommendation_lane'] == 'pick_now'
+    ].iloc[0]
     can_wait = recommendations[recommendations['recommendation_lane'] == 'can_wait']
 
     assert pick_now['position'] == 'RB'
-    assert 'Early DST' not in recommendations[recommendations['recommendation_lane'] != 'can_wait']['player_name'].tolist()
-    assert set(can_wait['wait_signal']).issubset({'safe_to_wait', 'late_round_stash_ok'})
+    assert (
+        'Early DST'
+        not in recommendations[recommendations['recommendation_lane'] != 'can_wait'][
+            'player_name'
+        ].tolist()
+    )
+    assert set(can_wait['wait_signal']).issubset(
+        {'safe_to_wait', 'late_round_stash_ok'}
+    )
 
 
 def test_starter_points_include_dst_and_k_slots():
     roster = pd.DataFrame(
         {
-            'player_name': ['Alpha QB', 'Alpha RB', 'Beta RB', 'Alpha WR', 'Beta WR', 'Alpha TE', 'Alpha DST', 'Alpha K'],
+            'player_name': [
+                'Alpha QB',
+                'Alpha RB',
+                'Beta RB',
+                'Alpha WR',
+                'Beta WR',
+                'Alpha TE',
+                'Alpha DST',
+                'Alpha K',
+            ],
             'position': ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'DST', 'K'],
             'actual_points': [20, 15, 12, 14, 11, 9, 8, 7],
         }
@@ -280,14 +307,10 @@ def test_recommendations_fill_specialists_in_late_rounds():
     )
 
     table = build_decision_table(
-        players,
-        settings,
-        DraftContext(current_pick_number=late_pick),
+        players, settings, DraftContext(current_pick_number=late_pick)
     )
     recommendations = build_recommendations(
-        table,
-        settings,
-        DraftContext(current_pick_number=late_pick),
+        table, settings, DraftContext(current_pick_number=late_pick)
     )
 
     assert recommendations.iloc[0]['position'] in {'DST', 'K'}
@@ -303,17 +326,16 @@ def test_live_recommendation_snapshot_recomputes_with_board_state():
 
     initial_recs = build_recommendations(table, settings, base_context)
     initial_snapshot = build_live_recommendation_snapshot(
-        table,
-        initial_recs,
-        artifacts.roster_scenarios,
-        settings,
-        base_context,
+        table, initial_recs, artifacts.roster_scenarios, settings, base_context
     )
 
     after_top_taken_context = DraftContext(
-        current_pick_number=10, drafted_players={initial_snapshot['pick_now']['player_name']}
+        current_pick_number=10,
+        drafted_players={initial_snapshot['pick_now']['player_name']},
     )
-    after_top_taken_recs = build_recommendations(table, settings, after_top_taken_context)
+    after_top_taken_recs = build_recommendations(
+        table, settings, after_top_taken_context
+    )
     after_top_taken_snapshot = build_live_recommendation_snapshot(
         table,
         after_top_taken_recs,
@@ -342,21 +364,23 @@ def test_live_recommendation_snapshot_recomputes_with_board_state():
     later_pick_context = DraftContext(current_pick_number=12)
     later_pick_recs = build_recommendations(table, settings, later_pick_context)
     later_pick_snapshot = build_live_recommendation_snapshot(
-        table,
-        later_pick_recs,
-        artifacts.roster_scenarios,
-        settings,
-        later_pick_context,
+        table, later_pick_recs, artifacts.roster_scenarios, settings, later_pick_context
     )
 
-    assert initial_snapshot['pick_now']['player_name'] != after_top_taken_snapshot['pick_now']['player_name']
+    assert (
+        initial_snapshot['pick_now']['player_name']
+        != after_top_taken_snapshot['pick_now']['player_name']
+    )
     assert (
         after_roster_pick_snapshot['roster_need'][
             initial_snapshot['pick_now']['position']
         ]
         == 0
     )
-    assert later_pick_snapshot['can_wait'][0]['availability_to_next_pick'] != initial_snapshot['can_wait'][0]['availability_to_next_pick']
+    assert (
+        later_pick_snapshot['can_wait'][0]['availability_to_next_pick']
+        != initial_snapshot['can_wait'][0]['availability_to_next_pick']
+    )
 
 
 def test_decision_table_respects_scoring_preset_projection_inputs():
@@ -467,7 +491,10 @@ def test_dashboard_payload_includes_preset_bundle_and_model_notes():
     assert payload['war_room_visuals']['timing_frontier']['available'] is True
     assert payload['war_room_visuals']['positional_cliffs']['available'] is True
     assert payload['war_room_visuals']['comparative_explainer']['available'] is True
-    assert payload['war_room_visuals']['comparative_explainer']['baseline_label'] == 'Simple VOR proxy'
+    assert (
+        payload['war_room_visuals']['comparative_explainer']['baseline_label']
+        == 'Simple VOR proxy'
+    )
     assert payload['war_room_visuals']['positional_cliffs']['default_positions']
 
 
@@ -521,10 +548,23 @@ def test_dashboard_payload_marks_degraded_decision_evidence_when_provenance_is_d
         analysis_provenance=provenance,
     )
 
-    assert artifacts.dashboard_payload['analysis_provenance']['overall_freshness']['status'] == 'degraded'
+    assert (
+        artifacts.dashboard_payload['analysis_provenance']['overall_freshness'][
+            'status'
+        ]
+        == 'degraded'
+    )
     assert artifacts.dashboard_payload['decision_evidence']['status'] == 'degraded'
-    assert artifacts.dashboard_payload['decision_evidence']['freshness']['override_used'] is True
-    assert artifacts.dashboard_payload['war_room_visuals']['comparative_explainer']['status'] == 'degraded'
+    assert (
+        artifacts.dashboard_payload['decision_evidence']['freshness']['override_used']
+        is True
+    )
+    assert (
+        artifacts.dashboard_payload['war_room_visuals']['comparative_explainer'][
+            'status'
+        ]
+        == 'degraded'
+    )
 
     with pytest.raises(RuntimeError, match='requires fresh'):
         build_draft_decision_artifacts(
@@ -632,10 +672,7 @@ def test_slot_specific_artifacts_use_prefixed_filenames():
     with TemporaryDirectory() as tmpdir:
         output_dir = Path(tmpdir) / 'artifacts'
         saved = save_draft_decision_artifacts(
-            artifacts,
-            output_dir,
-            year=2026,
-            filename_prefix='pos03_',
+            artifacts, output_dir, year=2026, filename_prefix='pos03_'
         )
 
         assert saved['workbook_path'].name == 'draft_board_pos03_2026.xlsx'
@@ -646,6 +683,10 @@ def test_slot_specific_artifacts_use_prefixed_filenames():
         assert saved['backtest_path'].name.startswith('draft_decision_backtest_pos03_')
         assert 'repo_dashboard_index' not in saved
         assert 'runtime_dashboard_index' not in saved
+        for path_key in ['payload_path', 'compat_path', 'comparison_path']:
+            _loads_strict_json(saved[path_key].read_text(encoding='utf-8'))
+        if saved['backtest_path'].exists():
+            _loads_strict_json(saved['backtest_path'].read_text(encoding='utf-8'))
 
 
 def test_exported_dashboard_html_contains_live_controls_and_full_board_renderer():
@@ -702,7 +743,10 @@ def test_exported_dashboard_html_includes_undo_redo_state_helpers():
 
         html = output_path.read_text(encoding='utf-8')
         assert 'id="provenance-panel"' in html
-        assert 'Publish provenance will appear after `ffbayes stage-dashboard` or `ffbayes publish-pages` stages this dashboard.' in html
+        assert (
+            'Publish provenance will appear after `ffbayes stage-dashboard` or `ffbayes publish-pages` stages this dashboard.'
+            in html
+        )
         assert 'id="redo-button"' in html
         assert 'id="finalize-button"' in html
         assert 'redoHistory: []' in html
@@ -712,7 +756,10 @@ def test_exported_dashboard_html_includes_undo_redo_state_helpers():
         assert 'function isInspectableStatus(status)' in html
         assert 'pickNow[0] || availableRows[0] || rows[0] || null' in html
         assert "window.location.protocol === 'file:'" in html
-        assert "window.confirm('Your roster is not full yet. Download a finalized draft snapshot anyway?')" in html
+        assert (
+            "window.confirm('Your roster is not full yet. Download a finalized draft snapshot anyway?')"
+            in html
+        )
         assert 'Reset draft state' not in html
 
 
@@ -738,7 +785,10 @@ def test_exported_dashboard_html_clears_redo_history_on_new_actions():
 
         html = output_path.read_text(encoding='utf-8')
         assert 'state.redoHistory = [];' in html
-        assert "document.getElementById('redo-button').disabled = !state.redoHistory.length;" in html
+        assert (
+            "document.getElementById('redo-button').disabled = !state.redoHistory.length;"
+            in html
+        )
         assert 'pushSnapshot(state.redoHistory, captureDraftSnapshot());' in html
 
 
@@ -826,7 +876,7 @@ def test_exported_dashboard_html_includes_flex_need_adjustment_logic():
         )
 
         html = output_path.read_text(encoding='utf-8')
-        assert 'const flexEligibleExtras = [\'RB\', \'WR\', \'TE\']' in html
+        assert "const flexEligibleExtras = ['RB', 'WR', 'TE']" in html
         assert 'function offensiveNeedByPosition(need, position)' in html
         assert 'acc[position] = offensiveNeedByPosition(need, position);' in html
 
@@ -852,7 +902,10 @@ def test_backtest_payload_has_expected_shape():
 
     backtest = run_draft_backtest(season_history, LeagueSettings())
     assert backtest['model_type'] == 'draft_decision_backtest'
-    assert backtest['evaluation_scope']['draft_score_label'] == 'posterior_contextual_policy'
+    assert (
+        backtest['evaluation_scope']['draft_score_label']
+        == 'posterior_contextual_policy'
+    )
     assert backtest['evaluation_scope']['primary_objective'] == 'starter_lineup_points'
     assert backtest['evaluation_scope']['wait_policy'] == 'conservative'
     assert 'overall' in backtest
@@ -892,7 +945,20 @@ def test_backtest_labels_historical_vor_proxy_explicitly():
 def test_backtest_filters_non_fantasy_positions_from_rosters_and_reports_scope():
     season_history = pd.DataFrame(
         {
-            'Season': [2021, 2021, 2021, 2022, 2022, 2022, 2023, 2023, 2023, 2024, 2024, 2024],
+            'Season': [
+                2021,
+                2021,
+                2021,
+                2022,
+                2022,
+                2022,
+                2023,
+                2023,
+                2023,
+                2024,
+                2024,
+                2024,
+            ],
             'Name': [
                 'Alpha QB',
                 'Alpha RB',
@@ -907,15 +973,40 @@ def test_backtest_filters_non_fantasy_positions_from_rosters_and_reports_scope()
                 'Alpha RB',
                 'Fullback',
             ],
-            'Position': ['QB', 'RB', 'DL', 'QB', 'RB', 'WR', 'QB', 'RB', 'FB', 'QB', 'RB', 'FB'],
+            'Position': [
+                'QB',
+                'RB',
+                'DL',
+                'QB',
+                'RB',
+                'WR',
+                'QB',
+                'RB',
+                'FB',
+                'QB',
+                'RB',
+                'FB',
+            ],
             'FantPt': [250, 180, 90, 260, 190, 40, 270, 200, 35, 280, 210, 20],
         }
     )
 
     backtest = run_draft_backtest(season_history, LeagueSettings())
 
-    assert backtest['evaluation_scope']['eligible_positions'] == ['QB', 'RB', 'WR', 'TE', 'DST', 'K']
-    assert backtest['evaluation_scope']['eligible_player_universe']['removed_non_fantasy_position_count'] >= 2
+    assert backtest['evaluation_scope']['eligible_positions'] == [
+        'QB',
+        'RB',
+        'WR',
+        'TE',
+        'DST',
+        'K',
+    ]
+    assert (
+        backtest['evaluation_scope']['eligible_player_universe'][
+            'removed_non_fantasy_position_count'
+        ]
+        >= 2
+    )
     for season in backtest['by_season']:
         drafted = season['by_strategy']['draft_score']['drafted_players']
         counts = season['by_strategy']['draft_score']['position_counts']

@@ -1,6 +1,14 @@
 import json
 
 
+def _reject_json_constant(value):
+    raise ValueError(f'Invalid JSON constant: {value}')
+
+
+def _loads_strict_json(text):
+    return json.loads(text, parse_constant=_reject_json_constant)
+
+
 def test_stage_pages_site_copies_canonical_dashboard_files(tmp_path):
     from ffbayes.publish_pages import stage_pages_site
 
@@ -34,15 +42,57 @@ window.FFBAYES_DASHBOARD = {"dashboard": true};
     assert result['payload_path'] == output_dir / 'dashboard_payload.json'
     assert result['provenance_path'] == output_dir / 'publish_provenance.json'
     assert result['nojekyll_path'] == output_dir / '.nojekyll'
-    payload = json.loads((output_dir / 'dashboard_payload.json').read_text(encoding='utf-8'))
-    provenance = json.loads((output_dir / 'publish_provenance.json').read_text(encoding='utf-8'))
+    payload = json.loads(
+        (output_dir / 'dashboard_payload.json').read_text(encoding='utf-8')
+    )
+    provenance = json.loads(
+        (output_dir / 'publish_provenance.json').read_text(encoding='utf-8')
+    )
     assert payload['publish_provenance']['schema_version'] == 'publish_provenance_v1'
     assert provenance['schema_version'] == 'publish_provenance_v1'
     assert provenance['surface_sync']['status'] == 'synchronized'
     assert provenance['surface_sync']['html_bootstrap'] == 'inline_payload_embedded'
     assert payload['war_room_visuals']['schema_version'] == 'war_room_visuals_v1'
-    assert 'publish_provenance' in (output_dir / 'index.html').read_text(encoding='utf-8')
+    assert 'publish_provenance' in (output_dir / 'index.html').read_text(
+        encoding='utf-8'
+    )
     assert not (output_dir / 'draft_board_2026.html').exists()
+
+
+def test_stage_pages_site_writes_strict_json_when_payload_contains_nan(tmp_path):
+    from ffbayes.publish_pages import stage_pages_site
+
+    source_html = tmp_path / 'draft_board_2026.html'
+    source_payload = tmp_path / 'dashboard_payload_2026.json'
+    source_html.write_text(
+        """
+<html><body><script>
+window.FFBAYES_DASHBOARD = {"dashboard": true, "metric": NaN};
+
+    (() => { console.log('dashboard'); })();
+</script></body></html>
+""".strip(),
+        encoding='utf-8',
+    )
+    source_payload.write_text(
+        '{"dashboard": true, "metric": NaN, "generated_at": "2026-04-04T18:35:49", "analysis_provenance": {"overall_freshness": {"status": "fresh", "override_used": false, "warnings": []}}}',
+        encoding='utf-8',
+    )
+
+    output_dir = tmp_path / 'site'
+    stage_pages_site(
+        year=2026,
+        source_html=source_html,
+        source_payload=source_payload,
+        output_dir=output_dir,
+    )
+
+    payload_text = (output_dir / 'dashboard_payload.json').read_text(encoding='utf-8')
+    index_text = (output_dir / 'index.html').read_text(encoding='utf-8')
+    payload = _loads_strict_json(payload_text)
+    assert payload['metric'] is None
+    assert 'NaN' not in payload_text
+    assert 'NaN' not in index_text
 
 
 def test_stage_pages_site_removes_stale_payload_when_missing(tmp_path):
@@ -68,7 +118,9 @@ def test_stage_pages_site_removes_stale_payload_when_missing(tmp_path):
     assert not stale_provenance.exists()
 
 
-def test_stage_pages_site_surfaces_stale_paths_without_timestamp_false_positive(tmp_path):
+def test_stage_pages_site_surfaces_stale_paths_without_timestamp_false_positive(
+    tmp_path,
+):
     from ffbayes.publish_pages import stage_pages_site
 
     source_html = tmp_path / 'draft_board_2026.html'

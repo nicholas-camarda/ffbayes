@@ -37,6 +37,7 @@ from ffbayes.analysis.bayesian_player_model import (
     aggregate_season_player_table,
     build_posterior_projection_table,
 )
+from ffbayes.utils.json_serialization import dumps_strict_json
 
 POSITION_ORDER = ['QB', 'RB', 'WR', 'TE', 'DST', 'K']
 FANTASY_DRAFT_POSITIONS = tuple(POSITION_ORDER)
@@ -51,6 +52,8 @@ DEFAULT_ROSTER_TEMPLATE = {
     'DST': 1,
     'K': 1,
 }
+
+
 class ScoringPreset(TypedDict):
     label: str
     scoring_type: str
@@ -411,8 +414,7 @@ def _supports_scoring_presets(frame: pd.DataFrame) -> tuple[bool, str]:
         ],
     )
     ppr = _first_numeric_series(
-        frame,
-        ['FantPtPPR', 'fantasy_points_ppr', 'proj_points_ppr'],
+        frame, ['FantPtPPR', 'fantasy_points_ppr', 'proj_points_ppr']
     )
     rec = _first_numeric_series(frame, ['REC', 'receptions', 'Receptions'])
     if standard is not None and ppr is not None:
@@ -441,8 +443,7 @@ def _projection_series_for_settings(
         ],
     )
     ppr = _first_numeric_series(
-        frame,
-        ['FantPtPPR', 'fantasy_points_ppr', 'proj_points_ppr'],
+        frame, ['FantPtPPR', 'fantasy_points_ppr', 'proj_points_ppr']
     )
     rec = _first_numeric_series(frame, ['REC', 'receptions', 'Receptions'])
 
@@ -508,9 +509,7 @@ def _build_bayesian_vor_summary(
     table = decision_table.copy()
     if not table.empty:
         table['simple_vor_rank'] = (
-            table['replacement_delta']
-            .rank(method='first', ascending=False)
-            .astype(int)
+            table['replacement_delta'].rank(method='first', ascending=False).astype(int)
         )
         table['rank_gap_vs_vor'] = table['simple_vor_rank'] - table['draft_rank']
         disagreements = (
@@ -535,9 +534,7 @@ def _build_bayesian_vor_summary(
         disagreements = []
 
     overall = backtest.get('overall', {}).get('by_strategy', []) if backtest else []
-    by_strategy = {
-        row.get('strategy'): row for row in overall if isinstance(row, dict)
-    }
+    by_strategy = {row.get('strategy'): row for row in overall if isinstance(row, dict)}
     draft_score_row = by_strategy.get('draft_score')
     vor_row = by_strategy.get('historical_vor_proxy')
     bootstrap = (
@@ -565,7 +562,8 @@ def _build_bayesian_vor_summary(
                     'holdout_year': season.get('holdout_year'),
                     'draft_score_lineup_points': float(draft_score_points),
                     'historical_vor_proxy_lineup_points': float(vor_points),
-                    'delta_lineup_points': float(draft_score_points) - float(vor_points),
+                    'delta_lineup_points': float(draft_score_points)
+                    - float(vor_points),
                     'winner': (
                         'draft_score'
                         if float(draft_score_points) >= float(vor_points)
@@ -613,7 +611,7 @@ def _build_bayesian_vor_summary(
         ),
         'top_disagreements': disagreements,
         'limitations': [
-            'Without the backtest comparison artifact, the board can show only current ranking disagreements, not outcome-level evidence.',
+            'Without the backtest comparison artifact, the board can show only current ranking disagreements, not outcome-level evidence.'
         ],
     }
 
@@ -638,7 +636,9 @@ def _build_decision_evidence(
             'available_sources': [],
         }
     )
-    strategy_summary = backtest.get('overall', {}).get('by_strategy', []) if backtest else []
+    strategy_summary = (
+        backtest.get('overall', {}).get('by_strategy', []) if backtest else []
+    )
     evaluation_scope = backtest.get('evaluation_scope', {}) if backtest else {}
     limitations = list(
         dict.fromkeys(
@@ -673,7 +673,9 @@ def _build_decision_evidence(
         'season_rows': bayesian_vor_summary.get('by_season', []),
         'top_disagreements': bayesian_vor_summary.get('top_disagreements', []),
         'winner': bayesian_vor_summary.get('winner'),
-        'delta_mean_lineup_points': bayesian_vor_summary.get('delta_mean_lineup_points'),
+        'delta_mean_lineup_points': bayesian_vor_summary.get(
+            'delta_mean_lineup_points'
+        ),
         'season_count': bayesian_vor_summary.get('season_count'),
         'holdout_years': bayesian_vor_summary.get('holdout_years', []),
         'limitations': limitations,
@@ -738,9 +740,7 @@ def _require_fresh_decision_evidence(payload: dict[str, Any]) -> None:
 
 
 def _build_scoring_preset_bundle(
-    player_frame: pd.DataFrame,
-    settings: LeagueSettings,
-    context: DraftContext,
+    player_frame: pd.DataFrame, settings: LeagueSettings, context: DraftContext
 ) -> dict[str, Any]:
     normalized = normalize_player_frame(player_frame)
     supported, reason = _supports_scoring_presets(normalized)
@@ -774,9 +774,9 @@ def _build_scoring_preset_bundle(
             'label': f'Custom ({_effective_ppr_value(settings):.2f} PPR)',
             'available': True,
             'league_settings': settings.to_dict(),
-            'decision_table': build_decision_table(player_frame, settings, context).to_dict(
-                orient='records'
-            ),
+            'decision_table': build_decision_table(
+                player_frame, settings, context
+            ).to_dict(orient='records'),
         }
     return bundle
 
@@ -851,7 +851,10 @@ def normalize_player_frame(player_frame: pd.DataFrame) -> pd.DataFrame:
                 continue
             rename_map[column] = 'proj_points_ceiling'
             canonical_columns.add('proj_points_ceiling')
-        elif normalized in {'posterior_prob_beats_replacement', 'beat_replacement_prob'}:
+        elif normalized in {
+            'posterior_prob_beats_replacement',
+            'beat_replacement_prob',
+        }:
             if 'posterior_prob_beats_replacement' in canonical_columns:
                 continue
             rename_map[column] = 'posterior_prob_beats_replacement'
@@ -912,7 +915,9 @@ def normalize_player_frame(player_frame: pd.DataFrame) -> pd.DataFrame:
         df['uncertainty_score'] = np.nan
 
     if 'proj_points_floor' in df.columns:
-        df['proj_points_floor'] = pd.to_numeric(df['proj_points_floor'], errors='coerce')
+        df['proj_points_floor'] = pd.to_numeric(
+            df['proj_points_floor'], errors='coerce'
+        )
     else:
         df['proj_points_floor'] = np.nan
 
@@ -971,7 +976,9 @@ def normalize_player_frame(player_frame: pd.DataFrame) -> pd.DataFrame:
     if 'source_updated_at' not in df.columns:
         df['source_updated_at'] = pd.NaT
 
-    df = df.drop_duplicates(subset=['player_name', 'position'], keep='last').reset_index(drop=True)
+    df = df.drop_duplicates(
+        subset=['player_name', 'position'], keep='last'
+    ).reset_index(drop=True)
     return df
 
 
@@ -1086,7 +1093,9 @@ def _current_round_number(pick_number: int, league_size: int) -> int:
 
 
 def _specialist_round_open(settings: LeagueSettings, round_number: int) -> bool:
-    return round_number >= max(1, settings.round_count() - LATE_SPECIALIST_BUFFER_ROUNDS)
+    return round_number >= max(
+        1, settings.round_count() - LATE_SPECIALIST_BUFFER_ROUNDS
+    )
 
 
 def _starter_position_needs(
@@ -1099,9 +1108,7 @@ def _starter_position_needs(
 
 
 def _score_policy_rows(
-    available: pd.DataFrame,
-    league_settings: LeagueSettings,
-    context: DraftContext,
+    available: pd.DataFrame, league_settings: LeagueSettings, context: DraftContext
 ) -> pd.DataFrame:
     if available.empty:
         return available.copy()
@@ -1130,10 +1137,14 @@ def _score_policy_rows(
             adp_std=row.position_adp_spread,
             uncertainty_score=row.uncertainty_score,
         )
-        for row in rows.assign(position_adp_spread=position_spread).itertuples(index=False)
+        for row in rows.assign(position_adp_spread=position_spread).itertuples(
+            index=False
+        )
     ]
 
-    roster_counts = {pos: int(context.roster_counts.get(pos, 0)) for pos in POSITION_ORDER}
+    roster_counts = {
+        pos: int(context.roster_counts.get(pos, 0)) for pos in POSITION_ORDER
+    }
     starter_needs = _starter_position_needs(league_settings, roster_counts)
     offensive_needs = {pos: starter_needs.get(pos, 0) for pos in OFFENSIVE_POSITIONS}
     open_offensive_slots = sum(offensive_needs.values())
@@ -1167,11 +1178,7 @@ def _score_policy_rows(
             (
                 1.25 * (1.0 - float(row['availability_to_next_pick']))
                 + 0.75
-                * np.clip(
-                    1.0 / max(1.0, float(row['specialist_urgency'])),
-                    0.0,
-                    1.0,
-                )
+                * np.clip(1.0 / max(1.0, float(row['specialist_urgency'])), 0.0, 1.0)
             )
             if row['position'] in {'DST', 'K'}
             and specialist_window_open
@@ -1195,12 +1202,17 @@ def _score_policy_rows(
         ),
         axis=1,
     )
-    lineup_gain_rank = rows['lineup_gain_now'].rank(pct=True, method='average').fillna(0.0)
+    lineup_gain_rank = (
+        rows['lineup_gain_now'].rank(pct=True, method='average').fillna(0.0)
+    )
 
     def _position_run_risk(position: str) -> float:
         remaining = position_counts_remaining.get(position, 0)
         if position in OFFENSIVE_POSITIONS:
-            demand = max(1, league_settings.league_size * max(1, offensive_needs.get(position, 0)))
+            demand = max(
+                1,
+                league_settings.league_size * max(1, offensive_needs.get(position, 0)),
+            )
         else:
             demand = max(1, league_settings.league_size)
         return float(np.clip(1.0 - remaining / demand, 0.0, 1.0))
@@ -1208,9 +1220,7 @@ def _score_policy_rows(
     rows['position_run_risk'] = rows['position'].map(_position_run_risk)
 
     best_offensive_value = (
-        float(
-            rows.loc[rows['position'].isin(OFFENSIVE_POSITIONS), 'draft_score'].max()
-        )
+        float(rows.loc[rows['position'].isin(OFFENSIVE_POSITIONS), 'draft_score'].max())
         if rows['position'].isin(OFFENSIVE_POSITIONS).any()
         else float(rows['draft_score'].max())
     )
@@ -1230,7 +1240,8 @@ def _score_policy_rows(
             position in {'QB', 'TE'}
             and open_offensive_slots > 0
             and current_count >= starter_requirement
-            and float(row.draft_score) < (best_offensive_value + SECONDARY_QB_TE_VALUE_EDGE)
+            and float(row.draft_score)
+            < (best_offensive_value + SECONDARY_QB_TE_VALUE_EDGE)
         ):
             eligible = False
             reason = 'starter_priority'
@@ -1249,7 +1260,9 @@ def _score_policy_rows(
     for row in rows.itertuples(index=False):
         if row.position in {'DST', 'K'} and specialist_window_open:
             wait_signal.append('late_round_stash_ok')
-        elif float(row.availability_to_next_pick) < CONSERVATIVE_WAIT_SURVIVAL_THRESHOLD:
+        elif (
+            float(row.availability_to_next_pick) < CONSERVATIVE_WAIT_SURVIVAL_THRESHOLD
+        ):
             wait_signal.append('low_survival')
         elif float(row.expected_regret) > CONSERVATIVE_WAIT_LINEUP_LOSS_THRESHOLD:
             wait_signal.append('too_much_lineup_loss')
@@ -1325,7 +1338,9 @@ def build_decision_table(
         df['proj_points_mean'].abs() * (0.08 + 0.35 * df['uncertainty_score'])
     ).fillna(0.0)
     computed_floor = df['proj_points_mean'] - spread_from_std.fillna(fallback_spread)
-    computed_ceiling = df['proj_points_mean'] + spread_from_std.fillna(fallback_spread) * 1.25
+    computed_ceiling = (
+        df['proj_points_mean'] + spread_from_std.fillna(fallback_spread) * 1.25
+    )
     df['proj_points_floor'] = pd.to_numeric(
         df.get('proj_points_floor'), errors='coerce'
     ).combine_first(computed_floor)
@@ -1363,7 +1378,10 @@ def build_decision_table(
                 / (
                     1.0
                     + np.exp(
-                        -(df['replacement_delta'] / np.maximum(spread_from_std.fillna(fallback_spread), 1.0))
+                        -(
+                            df['replacement_delta']
+                            / np.maximum(spread_from_std.fillna(fallback_spread), 1.0)
+                        )
                     )
                 )
             ),
@@ -1444,9 +1462,7 @@ def build_decision_table(
         1.0,
     )
     df['fragility_score'] = _clamp(
-        0.65 * df['fragility_score'] + 0.35 * posterior_reliability_penalty,
-        0.0,
-        1.0,
+        0.65 * df['fragility_score'] + 0.35 * posterior_reliability_penalty, 0.0, 1.0
     )
 
     df['upside_score'] = _clamp(
@@ -1626,9 +1642,8 @@ def build_recommendations(
     available = _score_policy_rows(available, league_settings, context)
 
     now = (
-        available[available['policy_eligible']].sort_values(
-            ['current_pick_utility', 'draft_score'], ascending=[False, False]
-        )
+        available[available['policy_eligible']]
+        .sort_values(['current_pick_utility', 'draft_score'], ascending=[False, False])
         .head(top_n)
         .copy()
     )
@@ -1660,8 +1675,7 @@ def build_recommendations(
         wait = (
             available[~available['player_name'].isin(now['player_name'])]
             .sort_values(
-                ['availability_to_next_pick', 'draft_score'],
-                ascending=[False, False],
+                ['availability_to_next_pick', 'draft_score'], ascending=[False, False]
             )
             .head(top_n)
             .copy()
@@ -1720,7 +1734,10 @@ def _rationale_now(row: pd.Series) -> str:
         parts.append(row['why_flags'].replace('|', ', '))
     if pd.notna(row.get('availability_to_next_pick')):
         parts.append(f'survival={row["availability_to_next_pick"]:.0%}')
-    if row.get('policy_eligibility_reason') and row['policy_eligibility_reason'] != 'eligible':
+    if (
+        row.get('policy_eligibility_reason')
+        and row['policy_eligibility_reason'] != 'eligible'
+    ):
         parts.append(row['policy_eligibility_reason'].replace('_', ' '))
     return '; '.join(parts)
 
@@ -1787,7 +1804,9 @@ def build_live_recommendation_snapshot(
 
     roster_need = {
         pos: max(
-            0, league_settings.roster_spots.get(pos, 0) - context.roster_counts.get(pos, 0)
+            0,
+            league_settings.roster_spots.get(pos, 0)
+            - context.roster_counts.get(pos, 0),
         )
         for pos in ['QB', 'RB', 'WR', 'TE', 'FLEX', 'DST', 'K']
     }
@@ -1808,9 +1827,10 @@ def build_live_recommendation_snapshot(
         'wait_candidates': wait_survival,
         'best_roster_paths': best_roster_paths,
         'board_pressure': (
-            decision_table.groupby('position')['player_name'].count().sort_values(
-                ascending=False
-            ).to_dict()
+            decision_table.groupby('position')['player_name']
+            .count()
+            .sort_values(ascending=False)
+            .to_dict()
             if not decision_table.empty
             else {}
         ),
@@ -1918,18 +1938,16 @@ def _build_war_room_visuals(
                 'recommendation_lane': 'lane',
             }
         )
-        timing_rows['lane_label'] = timing_rows['lane'].map(
-            {
-                'pick_now': 'Pick now',
-                'fallback': 'Fallback',
-                'can_wait': 'Can wait',
-            }
-        ).fillna('Watch')
+        timing_rows['lane_label'] = (
+            timing_rows['lane']
+            .map(
+                {'pick_now': 'Pick now', 'fallback': 'Fallback', 'can_wait': 'Can wait'}
+            )
+            .fillna('Watch')
+        )
         if not (timing_rows['lane'] == 'can_wait').any():
             timing_status = 'degraded'
-            timing_reason = (
-                'No waitable candidates were available, so the timing frontier shows only take-now pressure.'
-            )
+            timing_reason = 'No waitable candidates were available, so the timing frontier shows only take-now pressure.'
 
     cliff_required = [
         'position',
@@ -1943,7 +1961,9 @@ def _build_war_room_visuals(
     cliff_status = 'available'
     cliff_available = True
     cliff_reason = ''
-    cliff_missing = [column for column in cliff_required if column not in tier_cliffs.columns]
+    cliff_missing = [
+        column for column in cliff_required if column not in tier_cliffs.columns
+    ]
     cliff_groups: list[dict[str, Any]] = []
     if tier_cliffs.empty:
         cliff_available = False
@@ -1963,8 +1983,7 @@ def _build_war_room_visuals(
                 ['proj_points_mean', 'draft_score'], ascending=[False, False]
             ).reset_index(drop=True)
             strongest = ordered.sort_values(
-                ['is_tier_cliff', 'tier_cliff_distance'],
-                ascending=[False, False],
+                ['is_tier_cliff', 'tier_cliff_distance'], ascending=[False, False]
             ).iloc[0]
             cliff_groups.append(
                 {
@@ -1986,28 +2005,31 @@ def _build_war_room_visuals(
                     .to_dict(orient='records'),
                 }
             )
-        if cliff_groups and not any(group['cliff_after_player'] for group in cliff_groups):
+        if cliff_groups and not any(
+            group['cliff_after_player'] for group in cliff_groups
+        ):
             cliff_status = 'degraded'
-            cliff_reason = (
-                'No sharp current cliff was detected, so the view falls back to softer positional drop-offs.'
-            )
+            cliff_reason = 'No sharp current cliff was detected, so the view falls back to softer positional drop-offs.'
 
     recommendation_positions = (
-        recommendations['position'].tolist() if 'position' in recommendations.columns else []
+        recommendations['position'].tolist()
+        if 'position' in recommendations.columns
+        else []
     )
     default_positions = _ordered_unique_strings(
         [*recommendation_positions, selected_player]
     )
-    if selected_player and 'player_name' in decision_table.columns and 'position' in decision_table.columns:
+    if (
+        selected_player
+        and 'player_name' in decision_table.columns
+        and 'position' in decision_table.columns
+    ):
         selected_match = decision_table[
             decision_table['player_name'].astype(str) == selected_player
         ]
         if not selected_match.empty:
             default_positions = _ordered_unique_strings(
-                [
-                    *default_positions,
-                    _pick_first_row(selected_match['position']),
-                ]
+                [*default_positions, _pick_first_row(selected_match['position'])]
             )
     if not default_positions:
         default_positions = _ordered_unique_strings(
@@ -2021,14 +2043,10 @@ def _build_war_room_visuals(
     if disagreement_rows:
         if decision_evidence.get('status') == 'unavailable':
             comparative_status = 'degraded'
-            comparative_reason = (
-                'Backtest evidence is unavailable, so the comparative explainer shows board-only disagreement semantics.'
-            )
+            comparative_reason = 'Backtest evidence is unavailable, so the comparative explainer shows board-only disagreement semantics.'
         elif decision_evidence.get('status') == 'degraded':
             comparative_status = 'degraded'
-            comparative_reason = (
-                'Comparative explanation is available, but its supporting evidence uses degraded inputs.'
-            )
+            comparative_reason = 'Comparative explanation is available, but its supporting evidence uses degraded inputs.'
     else:
         comparative_available = False
         comparative_status = 'unavailable'
@@ -2061,14 +2079,8 @@ def _build_war_room_visuals(
 
     return {
         'schema_version': 'war_room_visuals_v1',
-        'contextual': {
-            'key': 'contextual_score',
-            'label': contextual_label,
-        },
-        'baseline': {
-            'key': 'baseline_score',
-            'label': baseline_label,
-        },
+        'contextual': {'key': 'contextual_score', 'label': contextual_label},
+        'baseline': {'key': 'baseline_score', 'label': baseline_label},
         'timing_frontier': {
             'available': timing_available,
             'status': timing_status,
@@ -2078,7 +2090,9 @@ def _build_war_room_visuals(
             'baseline_label': baseline_label,
             'current_pick_number': None,
             'next_pick_number': None,
-            'candidates': timing_rows.to_dict(orient='records') if not timing_rows.empty else [],
+            'candidates': timing_rows.to_dict(orient='records')
+            if not timing_rows.empty
+            else [],
         },
         'positional_cliffs': {
             'available': cliff_available,
@@ -2179,7 +2193,9 @@ def _team_actual_points(
     if team_players.empty:
         return 0.0
     del league_settings
-    return float(pd.to_numeric(team_players['actual_points'], errors='coerce').fillna(0.0).sum())
+    return float(
+        pd.to_numeric(team_players['actual_points'], errors='coerce').fillna(0.0).sum()
+    )
 
 
 def _build_strategy_ranker(strategy_name: str):
@@ -2224,7 +2240,9 @@ def build_historical_vor_proxy_table(
 ) -> pd.DataFrame:
     """Build a clearly labeled historical VOR proxy from pre-holdout information."""
     if test_frame is None or test_frame.empty:
-        return pd.DataFrame(columns=['Season', 'Name', 'Position', 'historical_vor_proxy'])
+        return pd.DataFrame(
+            columns=['Season', 'Name', 'Position', 'historical_vor_proxy']
+        )
 
     proxy = test_frame.copy()
     replacement_values: dict[str, float] = {}
@@ -2238,14 +2256,16 @@ def build_historical_vor_proxy_table(
         else:
             slot_count = max(1, min(len(pos_train), 12))
             replacement_values[position] = float(
-                pos_train.sort_values(ascending=False).reset_index(drop=True).iloc[
-                    slot_count - 1
-                ]
+                pos_train.sort_values(ascending=False)
+                .reset_index(drop=True)
+                .iloc[slot_count - 1]
             )
 
     proxy['historical_vor_proxy'] = proxy.apply(
-        lambda row: float(row['proj_points_mean'])
-        - replacement_values.get(row['Position'], 0.0),
+        lambda row: (
+            float(row['proj_points_mean'])
+            - replacement_values.get(row['Position'], 0.0)
+        ),
         axis=1,
     )
     proxy['historical_vor_proxy_rank'] = proxy.groupby('Position')[
@@ -2270,7 +2290,9 @@ def _starter_fill_timing(
 ) -> dict[str, int | None]:
     counts = {pos: 0 for pos in POSITION_ORDER}
     fill_timing: dict[str, int | None] = {
-        pos: None for pos in POSITION_ORDER if league_settings.roster_spots.get(pos, 0) > 0
+        pos: None
+        for pos in POSITION_ORDER
+        if league_settings.roster_spots.get(pos, 0) > 0
     }
     for event in pick_log:
         position = _normalize_position(event.get('position'))
@@ -2278,7 +2300,11 @@ def _starter_fill_timing(
             continue
         counts[position] += 1
         needed = league_settings.roster_spots.get(position, 0)
-        if needed > 0 and counts[position] >= needed and fill_timing.get(position) is None:
+        if (
+            needed > 0
+            and counts[position] >= needed
+            and fill_timing.get(position) is None
+        ):
             fill_timing[position] = int(event.get('pick_number', 0))
     return fill_timing
 
@@ -2349,8 +2375,7 @@ def _draft_team_from_pool(
             and not forced_specialists.empty
         ):
             choice = forced_specialists.sort_values(
-                ['current_pick_utility', 'draft_score'],
-                ascending=[False, False],
+                ['current_pick_utility', 'draft_score'], ascending=[False, False]
             ).iloc[0]
         else:
             choice = ranked.iloc[0]
@@ -2392,7 +2417,9 @@ def _draft_team_from_pool(
         {
             'player_name': _safe_string(choice_record.get('player_name')),
             'position': _normalize_position(choice_record.get('position')),
-            'actual_points': float(_coerce_float(choice_record.get('actual_points'), 0.0)),
+            'actual_points': float(
+                _coerce_float(choice_record.get('actual_points'), 0.0)
+            ),
             'availability_to_next_pick': float(
                 _coerce_float(choice_record.get('availability_to_next_pick'), np.nan)
             )
@@ -2462,9 +2489,7 @@ def run_draft_backtest(
     df['Position'] = df['Position'].map(_normalize_position)
     df['FantPt'] = pd.to_numeric(df['FantPt'], errors='coerce')
     df = df.dropna(subset=['Season', 'Name', 'Position', 'FantPt']).copy()
-    raw_pool_metadata = {
-        'raw_player_count': int(len(df)),
-    }
+    raw_pool_metadata = {'raw_player_count': int(len(df))}
     df = df.rename(columns={'Name': 'player_name', 'Position': 'position'})
     df, fantasy_pool_metadata = _filter_fantasy_player_pool(df)
     df = df.rename(columns={'player_name': 'Name', 'position': 'Position'})
@@ -2512,9 +2537,7 @@ def run_draft_backtest(
         ].fillna(0.0)
         posterior_inputs['role_label'] = 'posterior'
         posterior_inputs['adp'] = posterior_inputs['adp'].fillna(
-            posterior_inputs['market_proxy_score'].rank(
-                method='first', ascending=False
-            )
+            posterior_inputs['market_proxy_score'].rank(method='first', ascending=False)
         )
         posterior_inputs['adp_std'] = posterior_inputs['adp_std'].fillna(
             np.maximum(2.0, posterior_inputs['posterior_std'] * 0.18)
@@ -2539,9 +2562,7 @@ def run_draft_backtest(
             }
         )
         decision_table = decision_table.merge(
-            proxy_table,
-            on=['player_name', 'position'],
-            how='left',
+            proxy_table, on=['player_name', 'position'], how='left'
         )
         decision_table['historical_vor_proxy'] = decision_table[
             'historical_vor_proxy'
@@ -2579,16 +2600,21 @@ def run_draft_backtest(
                         and pending_wait_candidate.get('player_name')
                         in set(available_pool['player_name'])
                     )
-                    available_pool, team_rosters[team_idx], pick_event = _draft_team_from_pool(
-                        available_pool,
-                        team_rosters[team_idx],
-                        strategy,
-                        round_number,
-                        pick_index,
-                        settings,
+                    available_pool, team_rosters[team_idx], pick_event = (
+                        _draft_team_from_pool(
+                            available_pool,
+                            team_rosters[team_idx],
+                            strategy,
+                            round_number,
+                            pick_index,
+                            settings,
+                        )
                     )
                     if strategy == 'draft_score':
-                        if pending_wait_candidate and not pending_candidate_was_available:
+                        if (
+                            pending_wait_candidate
+                            and not pending_candidate_was_available
+                        ):
                             pick_event['realized_pass_regret'] = float(
                                 max(
                                     0.0,
@@ -2626,7 +2652,7 @@ def run_draft_backtest(
                         pd.MultiIndex.from_frame(our_roster[['Name', 'Position']])
                     )['actual_points']
                     .to_numpy()
-            )
+                )
             roster_points = _team_actual_points(our_roster, settings)
             lineup_points = _starter_points_from_roster(our_roster, settings)
             fill_timing = _starter_fill_timing(our_pick_log, settings)
@@ -2816,7 +2842,12 @@ def run_draft_backtest(
             )
             else None,
             'mean_realized_pass_regret': float(
-                np.mean([diag.get('mean_realized_pass_regret', 0.0) for diag in strategy_diags])
+                np.mean(
+                    [
+                        diag.get('mean_realized_pass_regret', 0.0)
+                        for diag in strategy_diags
+                    ]
+                )
             ),
         }
 
@@ -2862,11 +2893,7 @@ def build_dashboard_payload(
         current_pick_number=league_settings.draft_position
     )
     live_state = build_live_recommendation_snapshot(
-        decision_table,
-        recommendations,
-        roster_scenarios,
-        league_settings,
-        context,
+        decision_table, recommendations, roster_scenarios, league_settings, context
     )
     recommendation_inputs_cols = [
         'player_name',
@@ -2899,7 +2926,9 @@ def build_dashboard_payload(
         'pick_mode',
         'rationale',
     ]
-    recommendation_source = recommendations if not recommendations.empty else decision_table
+    recommendation_source = (
+        recommendations if not recommendations.empty else decision_table
+    )
     recommendation_inputs = recommendation_source[
         [
             column
@@ -2930,8 +2959,12 @@ def build_dashboard_payload(
         decision_evidence,
         selected_player=_safe_string(selected_player),
     )
-    war_room_visuals['timing_frontier']['current_pick_number'] = context.current_pick_number
-    war_room_visuals['timing_frontier']['next_pick_number'] = live_state['next_pick_number']
+    war_room_visuals['timing_frontier']['current_pick_number'] = (
+        context.current_pick_number
+    )
+    war_room_visuals['timing_frontier']['next_pick_number'] = live_state[
+        'next_pick_number'
+    ]
     return {
         'generated_at': datetime.now().isoformat(timespec='seconds'),
         'league_settings': league_settings.to_dict(),
@@ -3075,7 +3108,9 @@ def export_workbook(
         [
             {
                 'metric': 'current_pick_number',
-                'value': context.current_pick_number if context else league_settings.draft_position,
+                'value': context.current_pick_number
+                if context
+                else league_settings.draft_position,
             },
             {
                 'metric': 'next_pick_number',
@@ -3087,32 +3122,29 @@ def export_workbook(
                     league_settings.league_size,
                 ),
             },
-            {
-                'metric': 'draft_position',
-                'value': league_settings.draft_position,
-            },
-            {
-                'metric': 'league_size',
-                'value': league_settings.league_size,
-            },
+            {'metric': 'draft_position', 'value': league_settings.draft_position},
+            {'metric': 'league_size', 'value': league_settings.league_size},
         ]
     )
     _write_dataframe_sheet(wb, 'Live Context', live_summary)
 
     pick_now = recommendations[
-        recommendations.get('recommendation_lane', pd.Series(dtype=object)) == 'pick_now'
+        recommendations.get('recommendation_lane', pd.Series(dtype=object))
+        == 'pick_now'
     ].copy()
     if pick_now.empty and not recommendations.empty:
         pick_now = recommendations.head(1).copy()
     _write_dataframe_sheet(wb, 'Pick Now', pick_now)
 
     fallbacks = recommendations[
-        recommendations.get('recommendation_lane', pd.Series(dtype=object)) == 'fallback'
+        recommendations.get('recommendation_lane', pd.Series(dtype=object))
+        == 'fallback'
     ].copy()
     _write_dataframe_sheet(wb, 'Fallback Ladder', fallbacks)
 
     can_wait = recommendations[
-        recommendations.get('recommendation_lane', pd.Series(dtype=object)) == 'can_wait'
+        recommendations.get('recommendation_lane', pd.Series(dtype=object))
+        == 'can_wait'
     ].copy()
     _write_dataframe_sheet(wb, 'Can Wait', can_wait)
 
@@ -3203,7 +3235,7 @@ def export_workbook(
                 ),
             ],
             ignore_index=True,
-    )
+        )
     _write_dataframe_sheet(wb, 'Model Diagnostics', diagnostics)
     _write_dataframe_sheet(wb, 'Source Freshness', source_freshness)
 
@@ -3225,11 +3257,15 @@ def export_workbook(
             {'metric': 'season_count', 'value': decision_evidence.get('season_count')},
             {
                 'metric': 'freshness_status',
-                'value': decision_evidence.get('freshness', {}).get('status', 'unknown'),
+                'value': decision_evidence.get('freshness', {}).get(
+                    'status', 'unknown'
+                ),
             },
             {
                 'metric': 'override_used',
-                'value': decision_evidence.get('freshness', {}).get('override_used', False),
+                'value': decision_evidence.get('freshness', {}).get(
+                    'override_used', False
+                ),
             },
             {
                 'metric': 'reason_unavailable',
@@ -3243,7 +3279,9 @@ def export_workbook(
     if not strategy_summary.empty:
         _write_dataframe_sheet(wb, 'Backtest Summary', strategy_summary)
 
-    provenance = payload.get('analysis_provenance', {}) if isinstance(payload, dict) else {}
+    provenance = (
+        payload.get('analysis_provenance', {}) if isinstance(payload, dict) else {}
+    )
     provenance_rows = []
     overall_freshness = provenance.get('overall_freshness') or {}
     provenance_rows.append(
@@ -3367,7 +3405,7 @@ def export_dashboard_html(
         backtest=backtest,
         context=DraftContext(current_pick_number=league_settings.draft_position),
     )
-    payload_json = json.dumps(payload, default=str)
+    payload_json = dumps_strict_json(payload)
     payload_generated_at = payload.get('generated_at')
     resolved_generated_label = generated_label
     if resolved_generated_label is None:
@@ -3448,12 +3486,14 @@ def export_dashboard_html(
       margin: 0 auto;
       display: grid;
       gap: 16px;
+      min-width: 0;
     }
     .topbar, .panel {
       background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.92));
       border: 1px solid var(--border);
       border-radius: 22px;
       box-shadow: var(--shadow);
+      min-width: 0;
     }
     .topbar {
       padding: 20px 22px;
@@ -3470,12 +3510,14 @@ def export_dashboard_html(
     .title-wrap {
       display: grid;
       gap: 8px;
+      min-width: 0;
     }
     .title-row {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
       align-items: center;
+      min-width: 0;
     }
     .title-row h1 {
       font-size: 30px;
@@ -3496,6 +3538,7 @@ def export_dashboard_html(
       display: grid;
       gap: 8px;
       justify-items: end;
+      min-width: 0;
     }
     .toolbar-note {
       max-width: 340px;
@@ -3520,11 +3563,13 @@ def export_dashboard_html(
       grid-template-columns: minmax(290px, 0.9fr) minmax(0, 1.7fr) minmax(330px, 1fr);
       gap: 16px;
       align-items: start;
+      min-width: 0;
     }
     .column, .stack {
       display: grid;
       gap: 16px;
       align-content: start;
+      min-width: 0;
     }
     .panel {
       padding: 18px;
@@ -4045,6 +4090,23 @@ def export_dashboard_html(
     @media (max-width: 760px) {
       body {
         padding: 10px;
+      }
+      .topbar {
+        padding: 16px 14px;
+      }
+      .topbar-head, .toolbar-row {
+        width: 100%;
+      }
+      .toolbar-stack {
+        justify-items: start;
+        width: 100%;
+      }
+      .toolbar-note {
+        max-width: none;
+        text-align: left;
+      }
+      .title-row h1 {
+        flex: 1 1 100%;
       }
       .topbar, .panel {
         border-radius: 18px;
@@ -6377,10 +6439,7 @@ def _stage_runtime_dashboard_shortcuts(
     - repo root (if writable): `<repo>/dashboard/index.html`
     """
 
-    from ffbayes.utils.path_constants import (
-        get_project_root,
-        get_runtime_root,
-    )
+    from ffbayes.utils.path_constants import get_project_root, get_runtime_root
 
     shortcuts: dict[str, Path] = {}
     canonical_artifact_dir = (
@@ -6395,8 +6454,15 @@ def _stage_runtime_dashboard_shortcuts(
     canonical_payload = (
         canonical_artifact_dir / f'dashboard_payload_{year}.json'
     ).resolve()
-    if html_path.resolve() != canonical_html or payload_path.resolve() != canonical_payload:
+    if (
+        html_path.resolve() != canonical_html
+        or payload_path.resolve() != canonical_payload
+    ):
         return shortcuts
+
+    def _write_payload_shortcut(target_path: Path) -> None:
+        payload = json.loads(payload_path.read_text(encoding='utf-8'))
+        target_path.write_text(dumps_strict_json(payload, indent=2), encoding='utf-8')
 
     try:
         runtime_root = get_runtime_root()
@@ -6414,7 +6480,7 @@ def _stage_runtime_dashboard_shortcuts(
 
         payload_target = dashboard_dir / 'dashboard_payload.json'
         if payload_path.exists() and payload_path.resolve() != payload_target.resolve():
-            shutil.copy2(payload_path, payload_target)
+            _write_payload_shortcut(payload_target)
 
         shortcuts.update(
             {
@@ -6442,7 +6508,7 @@ def _stage_runtime_dashboard_shortcuts(
 
         repo_payload = repo_dashboard_dir / 'dashboard_payload.json'
         if payload_path.exists() and payload_path.resolve() != repo_payload.resolve():
-            shutil.copy2(payload_path, repo_payload)
+            _write_payload_shortcut(repo_payload)
 
         shortcuts.update(
             {
@@ -6503,7 +6569,7 @@ def save_draft_decision_artifacts(
         dashboard_payload=artifacts.dashboard_payload,
     )
     payload_path.write_text(
-        json.dumps(artifacts.dashboard_payload, default=str, indent=2), encoding='utf-8'
+        dumps_strict_json(artifacts.dashboard_payload, indent=2), encoding='utf-8'
     )
     export_dashboard_html(
         artifacts.decision_table,
@@ -6515,12 +6581,11 @@ def save_draft_decision_artifacts(
         dashboard_payload=artifacts.dashboard_payload,
     )
     compat_path.write_text(
-        json.dumps(artifacts.dashboard_payload, default=str, indent=2),
-        encoding='utf-8',
+        dumps_strict_json(artifacts.dashboard_payload, indent=2), encoding='utf-8'
     )
     if artifacts.backtest:
         backtest_path.write_text(
-            json.dumps(artifacts.backtest, default=str, indent=2), encoding='utf-8'
+            dumps_strict_json(artifacts.backtest, indent=2), encoding='utf-8'
         )
 
     comparison_payload = {
@@ -6539,7 +6604,7 @@ def save_draft_decision_artifacts(
         'league_settings': artifacts.league_settings.to_dict(),
     }
     comparison_path.write_text(
-        json.dumps(comparison_payload, default=str, indent=2), encoding='utf-8'
+        dumps_strict_json(comparison_payload, indent=2), encoding='utf-8'
     )
 
     shortcuts = _stage_runtime_dashboard_shortcuts(html_path, payload_path, year)

@@ -1,8 +1,8 @@
 {
   "schema_version": "publish_provenance_v1",
   "season_year": 2026,
-  "published_at": "2026-04-21T15:29:22",
-  "dashboard_generated_at": "2026-04-08T15:03:30",
+  "published_at": "2026-04-23T11:33:12",
+  "dashboard_generated_at": "2026-04-23T11:32:53",
   "source_html": "draft_board_2026.html",
   "source_payload": "dashboard_payload_2026.json",
   "analysis_freshness": {

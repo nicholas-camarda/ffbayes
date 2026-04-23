@@ -24,6 +24,7 @@ from ffbayes.publish_pages import (
     _inject_dashboard_payload_into_html,
     stage_pages_site,
 )
+from ffbayes.utils.json_serialization import dumps_strict_json, to_strict_jsonable
 from ffbayes.utils.path_constants import (
     get_dashboard_html_path,
     get_dashboard_payload_path,
@@ -69,7 +70,9 @@ def _validate_dashboard_payload(
     payload: dict[str, Any], payload_path: Path
 ) -> dict[str, Any]:
     missing = [
-        key for key in REQUIRED_PAYLOAD_KEYS if key not in payload or payload.get(key) is None
+        key
+        for key in REQUIRED_PAYLOAD_KEYS
+        if key not in payload or payload.get(key) is None
     ]
     if missing:
         raise ValueError(
@@ -115,15 +118,14 @@ def _generated_label_from_payload(payload: dict[str, Any]) -> str:
 
 
 def _normalized_json_text(payload: Any) -> str:
-    normalized = json.loads(json.dumps(payload, default=str))
-    if (
-        isinstance(normalized, dict)
-        and isinstance(normalized.get('publish_provenance'), dict)
+    normalized = to_strict_jsonable(payload)
+    if isinstance(normalized, dict) and isinstance(
+        normalized.get('publish_provenance'), dict
     ):
         normalized['publish_provenance']['published_at'] = '<normalized>'
     if isinstance(normalized, dict) and normalized.get('published_at') is not None:
         normalized['published_at'] = '<normalized>'
-    return json.dumps(normalized, sort_keys=True, indent=2)
+    return dumps_strict_json(normalized, sort_keys=True, indent=2)
 
 
 def _normalized_dashboard_html_text(html_text: str) -> str:
@@ -162,9 +164,13 @@ def _infer_surface_kind(output_html: Path, source_payload: Path) -> str:
     resolved_payload = source_payload.resolve()
     if resolved_html.parent == resolved_payload.parent:
         return 'canonical_runtime'
-    if project_root is not None and resolved_html.parent == (project_root / 'dashboard'):
+    if project_root is not None and resolved_html.parent == (
+        project_root / 'dashboard'
+    ):
         return 'repo_shortcut'
-    if runtime_root is not None and resolved_html.parent == (runtime_root / 'dashboard'):
+    if runtime_root is not None and resolved_html.parent == (
+        runtime_root / 'dashboard'
+    ):
         return 'runtime_shortcut'
     if project_root is not None and resolved_html.parent == (project_root / 'site'):
         return 'staged_site'
@@ -172,9 +178,7 @@ def _infer_surface_kind(output_html: Path, source_payload: Path) -> str:
 
 
 def _paired_payload_path(
-    output_html: Path,
-    year: int,
-    authoritative_payload: Path,
+    output_html: Path, year: int, authoritative_payload: Path
 ) -> Path:
     if output_html.parent == authoritative_payload.parent:
         return authoritative_payload
@@ -186,9 +190,7 @@ def _paired_payload_path(
 
 
 def _render_dashboard_html_text(
-    payload: dict[str, Any],
-    output_html: Path,
-    year: int,
+    payload: dict[str, Any], output_html: Path, year: int
 ) -> str:
     league_settings = LeagueSettings.from_mapping(
         {'league_settings': payload.get('league_settings', {})}
@@ -215,14 +217,11 @@ def _expected_surface_payload(
     output_html: Path,
     source_payload: Path,
 ) -> dict[str, Any]:
-    expected = json.loads(json.dumps(payload, default=str))
+    expected = to_strict_jsonable(payload)
     if surface_kind == 'staged_site':
         source_html = get_dashboard_html_path(year)
         expected['publish_provenance'] = _build_publish_provenance(
-            expected,
-            year,
-            source_html,
-            source_payload,
+            expected, year, source_html, source_payload
         )
     return expected
 
@@ -248,11 +247,7 @@ def check_dashboard_freshness(
 
     surface_kind = _infer_surface_kind(resolved_output_html, resolved_payload)
     expected_payload = _expected_surface_payload(
-        payload,
-        surface_kind,
-        resolved_year,
-        resolved_output_html,
-        resolved_payload,
+        payload, surface_kind, resolved_year, resolved_output_html, resolved_payload
     )
 
     result: dict[str, Any] = {
@@ -277,14 +272,11 @@ def check_dashboard_freshness(
         return result
 
     expected_html = _render_dashboard_html_text(
-        payload,
-        resolved_output_html,
-        resolved_year,
+        payload, resolved_output_html, resolved_year
     )
     if surface_kind == 'staged_site':
         expected_html = _inject_dashboard_payload_into_html(
-            expected_html,
-            expected_payload,
+            expected_html, expected_payload
         )
     current_html = resolved_output_html.read_text(encoding='utf-8')
     if _normalized_dashboard_html_text(current_html) != _normalized_dashboard_html_text(
@@ -294,9 +286,7 @@ def check_dashboard_freshness(
         result['stale_paths'] = [str(resolved_output_html)]
 
     target_payload_path = _paired_payload_path(
-        resolved_output_html,
-        resolved_year,
-        resolved_payload,
+        resolved_output_html, resolved_year, resolved_payload
     )
     result['target_payload_path'] = str(target_payload_path)
     if target_payload_path.resolve() != resolved_payload.resolve():
@@ -308,7 +298,9 @@ def check_dashboard_freshness(
             )
             return result
         target_payload = json.loads(target_payload_path.read_text(encoding='utf-8'))
-        if _normalized_json_text(target_payload) != _normalized_json_text(expected_payload):
+        if _normalized_json_text(target_payload) != _normalized_json_text(
+            expected_payload
+        ):
             result['status'] = 'stale'
             result['stale_paths'] = list(
                 dict.fromkeys(result['stale_paths'] + [str(target_payload_path)])
@@ -411,9 +403,7 @@ def build_parser() -> argparse.ArgumentParser:
         help='Override the source dashboard payload JSON file',
     )
     parser.add_argument(
-        '--output-html',
-        type=Path,
-        help='Override the regenerated dashboard HTML path',
+        '--output-html', type=Path, help='Override the regenerated dashboard HTML path'
     )
     parser.add_argument(
         '--stage-pages',
@@ -429,9 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
         help='Check whether the target HTML matches regeneration from the current payload without mutating files',
     )
     parser.add_argument(
-        '--json',
-        action='store_true',
-        help='Emit machine-readable JSON output',
+        '--json', action='store_true', help='Emit machine-readable JSON output'
     )
     return parser
 

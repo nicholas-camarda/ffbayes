@@ -32,6 +32,15 @@ DOC_PATHS = [
     *GUIDE_SUITE_PATHS,
 ]
 
+
+def _reject_json_constant(value):
+    raise ValueError(f'Invalid JSON constant: {value}')
+
+
+def _loads_strict_json(text):
+    return json.loads(text, parse_constant=_reject_json_constant)
+
+
 REQUIRED_GUIDE_MARKERS = [
     'Audience:',
     'Scope:',
@@ -191,9 +200,9 @@ def test_documented_commands_use_supported_subcommands_and_flags():
             assert subcommand in valid_subcommands, f'{path.name}: unknown {subcommand}'
             allowed_flags = COMMAND_SOURCE_ALLOWLIST[subcommand]
             for flag in flags:
-                assert (
-                    flag in allowed_flags
-                ), f'{path.name}: unsupported flag {flag} for {subcommand}'
+                assert flag in allowed_flags, (
+                    f'{path.name}: unsupported flag {flag} for {subcommand}'
+                )
 
 
 def test_docs_do_not_use_known_stale_command_examples():
@@ -247,8 +256,10 @@ def test_optional_outputs_are_clearly_marked_optional():
 
 
 def test_committed_site_payload_contains_required_guide_fields_and_consistent_provenance():
-    payload = json.loads((SITE_DIR / 'dashboard_payload.json').read_text(encoding='utf-8'))
-    provenance = json.loads(
+    payload = _loads_strict_json(
+        (SITE_DIR / 'dashboard_payload.json').read_text(encoding='utf-8')
+    )
+    provenance = _loads_strict_json(
         (SITE_DIR / 'publish_provenance.json').read_text(encoding='utf-8')
     )
 
@@ -273,12 +284,16 @@ def test_committed_site_payload_contains_required_guide_fields_and_consistent_pr
     assert payload['publish_provenance']['surface_sync']['status'] == 'synchronized'
     assert payload['publish_provenance']['season_year'] == provenance['season_year']
     assert payload['publish_provenance']['source_html'] == provenance['source_html']
-    assert payload['publish_provenance']['source_payload'] == provenance['source_payload']
+    assert (
+        payload['publish_provenance']['source_payload'] == provenance['source_payload']
+    )
 
 
 def test_metric_reference_terms_align_with_committed_payload_labels():
     metric_reference = _read(DOCS_DIR / 'METRIC_REFERENCE.md')
-    payload = json.loads((SITE_DIR / 'dashboard_payload.json').read_text(encoding='utf-8'))
+    payload = _loads_strict_json(
+        (SITE_DIR / 'dashboard_payload.json').read_text(encoding='utf-8')
+    )
     glossary = payload.get('metric_glossary') or {}
 
     for key in [
