@@ -23,22 +23,26 @@ Use this document when you need to answer:
 
 Supported default artifacts:
 
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
+- `seasons/<year>/draft_strategy/draft_board_<year>.xlsx`
+- `seasons/<year>/draft_strategy/dashboard_payload_<year>.json`
+- `seasons/<year>/draft_strategy/draft_board_<year>.html`
+- `seasons/<year>/draft_strategy/draft_decision_backtest_<year_range>.json`
+- `seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_<year>.json`
+- `seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_diagnostics_<year>.json`
+- `seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_validation_<year_range>.json`
+- `seasons/<year>/diagnostics/validation/player_forecast_validation_summary_<year_range>.json`
+- `<runtime-root>/dashboard/index.html`
 - `dashboard/index.html`
 
-Optional outputs:
+Additional outputs from explicit commands:
 
-- `runs/<year>/pre_draft/artifacts/team_aggregation/`
-- `runs/<year>/pre_draft/artifacts/montecarlo_results/`
-- `runs/<year>/pre_draft/artifacts/model_evaluation/`
+- `seasons/<year>/montecarlo_results/`
+- `seasons/<year>/model_evaluation/`
 - cloud `data/` and `Analysis/<date>/` after `ffbayes publish`
 
 ## What Not To Infer
 
-- Do not assume every file under `runs/<year>/pre_draft/artifacts/` comes from `ffbayes pre-draft`.
+- Do not assume every file under `seasons/<year>/` comes from `ffbayes pre-draft`.
 - Do not assume a staged Pages file is the authoritative local draft surface.
 - Do not treat example ranges in optional analyses as guaranteed weekly outcomes.
 
@@ -51,7 +55,7 @@ Purpose: authoritative runtime workbook for tabular review and draft-day backup.
 Authoritative path:
 
 ```text
-runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx
+seasons/<year>/draft_strategy/draft_board_<year>.xlsx
 ```
 
 What it typically contains:
@@ -69,7 +73,7 @@ Purpose: authoritative runtime JSON contract for the local dashboard.
 Authoritative path:
 
 ```text
-runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json
+seasons/<year>/draft_strategy/dashboard_payload_<year>.json
 ```
 
 Minimal example:
@@ -119,7 +123,7 @@ Purpose: authoritative runtime HTML surface paired with the payload above.
 Authoritative path:
 
 ```text
-runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html
+seasons/<year>/draft_strategy/draft_board_<year>.html
 ```
 
 Derived local shortcut:
@@ -141,7 +145,7 @@ Purpose: internal holdout evidence for the `Decision evidence` surface.
 Authoritative path:
 
 ```text
-runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json
+seasons/<year>/draft_strategy/draft_decision_backtest_<year_range>.json
 ```
 
 Minimal example:
@@ -231,44 +235,12 @@ ffbayes mc
 Typical optional artifact family:
 
 ```text
-runs/<year>/pre_draft/artifacts/montecarlo_results/
+seasons/<year>/montecarlo_results/
 ```
 
-### Team Aggregation
+### Rolling Forecast Validation
 
-Purpose: aggregate a drafted roster or roster candidate into team-level outputs.
-
-Command:
-
-```bash
-ffbayes agg
-```
-
-Typical optional artifact family:
-
-```text
-runs/<year>/pre_draft/artifacts/team_aggregation/
-```
-
-### Model Comparison
-
-Purpose: compare candidate model families.
-
-Command:
-
-```bash
-ffbayes compare
-```
-
-Typical optional artifact family:
-
-```text
-runs/<year>/pre_draft/diagnostics/model_comparison/
-```
-
-### Bayesian VOR Evaluation
-
-Purpose: compare Bayesian projections against VOR-style baselines.
+Purpose: compare production player forecasts against simpler baseline expectations.
 
 Command:
 
@@ -276,10 +248,10 @@ Command:
 ffbayes bayesian-vor
 ```
 
-Typical optional artifact family:
+Typical additional artifact family:
 
 ```text
-runs/<year>/pre_draft/artifacts/model_evaluation/
+seasons/<year>/model_evaluation/
 ```
 
 ### Cloud Publish
@@ -316,7 +288,5 @@ Optional commands:
 ```bash
 ffbayes bayesian-vor
 ffbayes mc
-ffbayes agg
-ffbayes compare
 ffbayes publish --year 2026
 ```

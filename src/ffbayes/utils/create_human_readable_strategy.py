@@ -147,11 +147,11 @@ def main():
     """Main function to create human-readable outputs."""
     current_year = datetime.now().year
     
-    # Input: JSON strategy file (from pre_draft/draft_strategy)
+    # Input: JSON strategy file from the canonical season draft-strategy output.
     from ffbayes.utils.strategy_path_generator import get_bayesian_strategy_path
     json_path = get_bayesian_strategy_path()
     
-    # Output: Human-readable files in pre_draft folder
+    # Output: Human-readable files in the canonical season output root.
     from ffbayes.utils.path_constants import get_pre_draft_dir
     output_dir = str(get_pre_draft_dir(current_year))
     os.makedirs(output_dir, exist_ok=True)

@@ -47,6 +47,34 @@ def build_season_player_table(history: pd.DataFrame) -> pd.DataFrame:
     return aggregate_season_player_table(history)
 
 
+def _build_holdout_prediction_table(
+    season_table: pd.DataFrame,
+    holdout_year: int,
+    *,
+    replacement_quantile: float,
+    min_history_seasons: int,
+) -> pd.DataFrame:
+    train = season_table[season_table['Season'] < holdout_year].copy()
+    test = season_table[season_table['Season'] == holdout_year].copy()
+    if train.empty:
+        raise ValueError(f'No training data available before {holdout_year}')
+    if test.empty:
+        raise ValueError(f'No holdout data available for {holdout_year}')
+
+    prediction_table = build_posterior_projection_table(
+        train_history=train,
+        target_frame=test,
+        holdout_year=holdout_year,
+        replacement_quantile=replacement_quantile,
+        min_history_seasons=min_history_seasons,
+    )
+    prediction_table = prediction_table.rename(
+        columns={'position': 'Position', 'actual_points': 'fantasy_points'}
+    )
+    prediction_table['holdout_year'] = int(holdout_year)
+    return prediction_table
+
+
 def _position_metrics(
     frame: pd.DataFrame, score_column: str, point_column: str
 ) -> list[dict[str, Any]]:
@@ -187,6 +215,177 @@ def _top_disagreements(frame: pd.DataFrame, top_n: int = 15) -> list[dict[str, A
     )
 
 
+def _slice_metrics(
+    frame: pd.DataFrame,
+    *,
+    slice_name: str,
+    mask: pd.Series,
+    score_column: str,
+    point_column: str,
+    top_k: int,
+    std_column: str | None = None,
+) -> dict[str, Any] | None:
+    subset = frame.loc[mask].copy()
+    if subset.empty:
+        return None
+    metrics = _evaluate_method(
+        subset,
+        score_column=score_column,
+        point_column=point_column,
+        std_column=std_column,
+        label=slice_name,
+        top_k=min(top_k, max(1, len(subset))),
+    )
+    return {'slice': slice_name, 'player_count': int(len(subset)), **metrics}
+
+
+def _is_rookie_slice(frame: pd.DataFrame) -> pd.Series:
+    season_count = pd.to_numeric(frame.get('season_count'), errors='coerce').fillna(0.0)
+    rookie_pick = pd.to_numeric(
+        frame.get('rookie_draft_pick'), errors='coerce'
+    ).notna()
+    return (season_count <= 0) | rookie_pick
+
+
+def _component_metrics(
+    frame: pd.DataFrame,
+    *,
+    prediction_column: str,
+    truth_column: str,
+) -> dict[str, Any] | None:
+    if prediction_column not in frame.columns or truth_column not in frame.columns:
+        return None
+    truth = pd.to_numeric(frame[truth_column], errors='coerce')
+    pred = pd.to_numeric(frame[prediction_column], errors='coerce')
+    valid = truth.notna() & pred.notna()
+    if valid.sum() < 2:
+        return None
+    truth_valid = truth[valid]
+    pred_valid = pred[valid]
+    metrics = calculate_model_accuracy_metrics(
+        pred_valid.to_numpy(), truth_valid.to_numpy()
+    )
+    rank_corr = float(
+        np.nan_to_num(spearmanr(pred_valid, truth_valid).correlation, nan=0.0)
+    )
+    rmse = float(
+        np.sqrt(np.mean(np.square(truth_valid.to_numpy() - pred_valid.to_numpy())))
+    )
+    return {
+        'player_count': int(valid.sum()),
+        'mae': float(metrics['mae']),
+        'rmse': rmse,
+        'spearman_rank_correlation': rank_corr,
+        'mean_prediction': float(pred_valid.mean()),
+        'mean_actual': float(truth_valid.mean()),
+    }
+
+
+def build_player_forecast_validation_summary(
+    history: pd.DataFrame,
+    *,
+    holdout_years: Iterable[int] | None = None,
+    replacement_quantile: float = 0.2,
+    top_k: int = 24,
+    min_history_seasons: int = 0,
+) -> dict[str, Any]:
+    """Build the supported player-forecast validation artifact."""
+    season_table = build_season_player_table(history)
+    seasons = sorted(int(season) for season in season_table['Season'].dropna().unique())
+    if holdout_years is None:
+        holdout_years = seasons[3:] if len(seasons) > 3 else seasons[1:]
+    resolved_holdout_years = [int(year) for year in holdout_years]
+    if not resolved_holdout_years:
+        raise ValueError('No holdout seasons available for player forecast validation')
+
+    prediction_tables = [
+        _build_holdout_prediction_table(
+            season_table,
+            holdout_year,
+            replacement_quantile=replacement_quantile,
+            min_history_seasons=min_history_seasons,
+        )
+        for holdout_year in resolved_holdout_years
+    ]
+    combined = pd.concat(prediction_tables, ignore_index=True)
+    rookie_mask = _is_rookie_slice(combined)
+    veteran_mask = ~rookie_mask
+
+    overall_forecast = _evaluate_method(
+        combined,
+        score_column='posterior_mean',
+        point_column='posterior_mean',
+        std_column='posterior_std',
+        label='empirical_bayes',
+        top_k=min(top_k, max(1, len(combined))),
+    )
+    overall_forecast['holdout_years'] = resolved_holdout_years
+
+    cohort_slices = []
+    for name, mask in [('rookie', rookie_mask), ('veteran', veteran_mask)]:
+        metrics = _slice_metrics(
+            combined,
+            slice_name=name,
+            mask=mask,
+            score_column='posterior_mean',
+            point_column='posterior_mean',
+            std_column='posterior_std',
+            top_k=top_k,
+        )
+        if metrics is not None:
+            cohort_slices.append(metrics)
+
+    component_slices = []
+    for name, mask in [('rookie', rookie_mask), ('veteran', veteran_mask)]:
+        subset = combined.loc[mask].copy()
+        if subset.empty:
+            continue
+        component_slices.append(
+            {
+                'slice': name,
+                'rate': _component_metrics(
+                    subset,
+                    prediction_column='posterior_rate_mean',
+                    truth_column='fantasy_points_rate',
+                ),
+                'availability': _component_metrics(
+                    subset,
+                    prediction_column='posterior_games_mean',
+                    truth_column='games_played',
+                ),
+            }
+        )
+
+    return {
+        'schema_version': 'player_forecast_validation_v2',
+        'model_type': 'player_forecast_validation',
+        'estimator': 'hierarchical_empirical_bayes',
+        'forecast_target': 'held_out_season_fantasy_points',
+        'validation_scope': 'rolling_internal_holdout',
+        'holdout_years': resolved_holdout_years,
+        'overall_forecast': overall_forecast,
+        'position_slices': _position_metrics(
+            combined,
+            score_column='posterior_mean',
+            point_column='posterior_mean',
+        ),
+        'cohort_slices': cohort_slices,
+        'component_diagnostics': {
+            'rate': _component_metrics(
+                combined,
+                prediction_column='posterior_rate_mean',
+                truth_column='fantasy_points_rate',
+            ),
+            'availability': _component_metrics(
+                combined,
+                prediction_column='posterior_games_mean',
+                truth_column='games_played',
+            ),
+            'by_cohort': component_slices,
+        },
+    }
+
+
 def evaluate_holdout_season(
     season_table: pd.DataFrame,
     holdout_year: int,
@@ -198,23 +397,11 @@ def evaluate_holdout_season(
 ) -> dict[str, Any]:
     """Evaluate Bayesian vs VOR on one holdout season."""
     del shrinkage_strength, trend_weight
-
-    train = season_table[season_table['Season'] < holdout_year].copy()
-    test = season_table[season_table['Season'] == holdout_year].copy()
-    if train.empty:
-        raise ValueError(f'No training data available before {holdout_year}')
-    if test.empty:
-        raise ValueError(f'No holdout data available for {holdout_year}')
-
-    prediction_table = build_posterior_projection_table(
-        train_history=train,
-        target_frame=test,
-        holdout_year=holdout_year,
+    prediction_table = _build_holdout_prediction_table(
+        season_table,
+        holdout_year,
         replacement_quantile=replacement_quantile,
         min_history_seasons=min_history_seasons,
-    )
-    prediction_table = prediction_table.rename(
-        columns={'position': 'Position', 'actual_points': 'fantasy_points'}
     )
 
     bayesian_metrics = _evaluate_method(

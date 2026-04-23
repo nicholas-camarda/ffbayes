@@ -27,7 +27,7 @@ class ModelValidationFramework:
     def __init__(self):
         """Initialize the model validation framework."""
         self.validation_results = {}
-        self.supported_models = ['vor', 'bayesian', 'hybrid']
+        self.supported_models = ['vor', 'bayesian']
     
     def load_historical_data(self, data_sources: Dict[str, Union[str, pd.DataFrame]]) -> Dict[str, pd.DataFrame]:
         """

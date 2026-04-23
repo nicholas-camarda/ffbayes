@@ -50,10 +50,8 @@ def test_unified_loader_prefers_runtime_dataset(monkeypatch, tmp_path):
     ).to_json(poison_dataset)
 
     loaded_default = load_unified_dataset()
-    loaded_legacy = load_unified_dataset('datasets')
 
     assert loaded_default.equals(expected)
-    assert loaded_legacy.equals(expected)
 
 
 def test_unified_loader_supports_explicit_override(monkeypatch, tmp_path):

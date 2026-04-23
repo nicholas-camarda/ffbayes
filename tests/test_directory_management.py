@@ -40,19 +40,35 @@ def test_create_all_required_directories_uses_runtime_only(tmp_path, monkeypatch
         tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'SideProjects' / 'ffbayes'
     )
 
-    assert (
-        runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'artifacts'
-    ).exists()
-    assert (
-        runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'diagnostics'
-    ).exists()
-    assert (runtime_root / 'data' / 'processed' / 'unified_dataset').exists()
+    assert (runtime_root / 'seasons' / str(current_year)).exists()
+    assert (runtime_root / 'seasons' / str(current_year) / 'diagnostics').exists()
+    assert (runtime_root / 'inputs' / 'processed' / 'unified_dataset').exists()
+    assert not (runtime_root / 'data').exists()
+    assert not (runtime_root / 'datasets').exists()
+    assert not (runtime_root / 'runs').exists()
     assert not (cloud_root / 'data').exists()
     assert not (cloud_root / 'results').exists()
     assert not (cloud_root / 'plots').exists()
     assert not (cloud_root / 'docs').exists()
     assert not (tmp_path / 'workspace' / 'results').exists()
     assert not (tmp_path / 'workspace' / 'plots').exists()
+
+
+def test_create_all_required_directories_rejects_legacy_runtime_roots(
+    tmp_path, monkeypatch
+):
+    (tmp_path / 'workspace').mkdir()
+    monkeypatch.chdir(tmp_path / 'workspace')
+    path_constants = _reload_path_constants(monkeypatch, tmp_path)
+    runtime_root = tmp_path / 'ProjectsRuntime' / 'ffbayes'
+    (runtime_root / 'data').mkdir(parents=True, exist_ok=True)
+
+    try:
+        path_constants.create_all_required_directories(2026)
+    except RuntimeError as exc:
+        assert 'Legacy runtime directories are still present' in str(exc)
+    else:
+        raise AssertionError('Expected legacy runtime directories to be rejected')
 
 
 def test_manage_visualizations_publishes_selected_phase(tmp_path, monkeypatch):
@@ -66,45 +82,43 @@ def test_manage_visualizations_publishes_selected_phase(tmp_path, monkeypatch):
         tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'SideProjects' / 'ffbayes'
     )
 
-    pre_draft_artifact_dir = (
-        runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'artifacts'
-    )
+    pre_draft_artifact_dir = runtime_root / 'seasons' / str(current_year)
     pre_draft_artifact_dir.mkdir(parents=True, exist_ok=True)
-    (runtime_root / 'data' / 'raw' / 'season_datasets').mkdir(parents=True, exist_ok=True)
-    (runtime_root / 'data' / 'raw' / 'season_datasets' / '2025season.csv').write_text(
+    (runtime_root / 'inputs' / 'raw' / 'season_datasets').mkdir(parents=True, exist_ok=True)
+    (runtime_root / 'inputs' / 'raw' / 'season_datasets' / '2025season.csv').write_text(
         'Name,Season\nPatrick Mahomes,2025\n', encoding='utf-8'
     )
-    (runtime_root / 'data' / 'raw' / 'collection_manifest.json').write_text(
+    (runtime_root / 'inputs' / 'raw' / 'collection_manifest.json').write_text(
         '{"ok": true}', encoding='utf-8'
     )
-    (runtime_root / 'data' / 'processed' / 'combined_datasets').mkdir(
+    (runtime_root / 'inputs' / 'processed' / 'combined_datasets').mkdir(
         parents=True, exist_ok=True
     )
     (
         runtime_root
-        / 'data'
+        / 'inputs'
         / 'processed'
         / 'combined_datasets'
         / '2021-2025season_modern.csv'
     ).write_text('Name,Season\nPatrick Mahomes,2025\n', encoding='utf-8')
-    (runtime_root / 'data' / 'processed' / 'snake_draft_datasets').mkdir(
+    (runtime_root / 'inputs' / 'processed' / 'snake_draft_datasets').mkdir(
         parents=True, exist_ok=True
     )
     (
         runtime_root
-        / 'data'
+        / 'inputs'
         / 'processed'
         / 'snake_draft_datasets'
         / 'snake-draft_ppr-0.5.csv'
     ).write_text('Name,VOR\nPatrick Mahomes,10\n', encoding='utf-8')
-    (runtime_root / 'data' / 'processed' / 'unified_dataset').mkdir(
+    (runtime_root / 'inputs' / 'processed' / 'unified_dataset').mkdir(
         parents=True, exist_ok=True
     )
     (
-        runtime_root / 'data' / 'processed' / 'unified_dataset' / 'unified_dataset.csv'
+        runtime_root / 'inputs' / 'processed' / 'unified_dataset' / 'unified_dataset.csv'
     ).write_text('Name,Season\nPatrick Mahomes,2025\n', encoding='utf-8')
     (
-        runtime_root / 'data' / 'processed' / 'unified_dataset' / 'unified_dataset.json'
+        runtime_root / 'inputs' / 'processed' / 'unified_dataset' / 'unified_dataset.json'
     ).write_text('{"rows": 1}', encoding='utf-8')
 
     (pre_draft_artifact_dir / 'vor_strategy' / 'example.json').parent.mkdir(
@@ -124,14 +138,12 @@ def test_manage_visualizations_publishes_selected_phase(tmp_path, monkeypatch):
     )
 
     pre_draft_plot_dir = (
-        runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'diagnostics' / 'visualizations'
+        runtime_root / 'seasons' / str(current_year) / 'diagnostics' / 'visualizations'
     )
     pre_draft_plot_dir.mkdir(parents=True, exist_ok=True)
     (pre_draft_plot_dir / 'chart.png').write_bytes(b'png')
 
-    pre_draft_dashboard_dir = (
-        runtime_root / 'runs' / str(current_year) / 'pre_draft' / 'artifacts' / 'draft_strategy'
-    )
+    pre_draft_dashboard_dir = runtime_root / 'seasons' / str(current_year) / 'draft_strategy'
     pre_draft_dashboard_dir.mkdir(parents=True, exist_ok=True)
     (pre_draft_dashboard_dir / 'notes.txt').write_text('do not publish', encoding='utf-8')
     (pre_draft_dashboard_dir / f'draft_board_{current_year}.xlsx').write_bytes(b'xlsx')

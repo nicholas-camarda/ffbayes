@@ -24,7 +24,7 @@ def main() -> int:
         '✅ Published '
         f'{len(results["synced_data_files"])} stable data files and '
         f'{len(results["published_snapshot_files"])} analysis snapshot files '
-        f'for {args.year} (pre_draft)\n'
+        f'for {args.year}\n'
         f'   Snapshot: {results["snapshot_dir"]}'
     )
     return 0

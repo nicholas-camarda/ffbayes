@@ -1,8 +1,8 @@
 {
   "schema_version": "publish_provenance_v1",
   "season_year": 2026,
-  "published_at": "2026-04-23T11:33:12",
-  "dashboard_generated_at": "2026-04-23T11:32:53",
+  "published_at": "2026-04-23T15:18:20",
+  "dashboard_generated_at": "2026-04-23T15:18:09",
   "source_html": "draft_board_2026.html",
   "source_payload": "dashboard_payload_2026.json",
   "analysis_freshness": {
@@ -10,11 +10,7 @@
     "override_used": false,
     "warnings": [],
     "available_sources": [
-      "backtest_inputs",
-      "board_inputs",
-      "collection_inputs",
-      "preprocess_inputs",
-      "validation_inputs"
+      "backtest_inputs"
     ]
   },
   "override_used": false,

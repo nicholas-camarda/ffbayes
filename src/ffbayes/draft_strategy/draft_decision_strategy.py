@@ -19,6 +19,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from ffbayes.analysis.bayesian_player_model import (
+    aggregate_season_player_table,
+    build_posterior_projection_table,
+)
 from ffbayes.draft_strategy.draft_decision_system import (
     DraftContext,
     DraftDecisionArtifacts,
@@ -29,13 +33,11 @@ from ffbayes.draft_strategy.draft_decision_system import (
     save_draft_decision_artifacts,
 )
 from ffbayes.utils.path_constants import (
-    SNAKE_DRAFT_DATASETS_DIR,
     get_draft_strategy_dir,
     get_pre_draft_diagnostics_dir,
     get_unified_dataset_csv_path,
     get_unified_dataset_path,
 )
-from ffbayes.utils.vor_filename_generator import get_vor_csv_filename
 
 logger = logging.getLogger(__name__)
 
@@ -198,107 +200,96 @@ class UncertaintyAwareSelector:
 
 
 def _load_player_frame() -> pd.DataFrame:
+    """Build the live board input from the canonical unified dataset."""
     current_year = datetime.now().year
-    vor_path = SNAKE_DRAFT_DATASETS_DIR / get_vor_csv_filename(current_year)
-    if vor_path.exists():
-        return _build_current_snapshot_from_vor(vor_path)
-
     csv_path = get_unified_dataset_csv_path()
     json_path = get_unified_dataset_path()
     if csv_path.exists():
-        return _collapse_latest_player_snapshot(pd.read_csv(csv_path))
+        history = pd.read_csv(csv_path)
+        return _build_current_posterior_snapshot_from_unified(history, current_year)
     if json_path.exists():
-        return _collapse_latest_player_snapshot(pd.read_json(json_path))
+        history = pd.read_json(json_path)
+        return _build_current_posterior_snapshot_from_unified(history, current_year)
     raise FileNotFoundError(
         f'No unified player dataset found at {csv_path} or {json_path}. '
         'Run the data pipeline first.'
     )
 
 
-def _build_current_snapshot_from_vor(vor_path: Path) -> pd.DataFrame:
-    """Build the canonical one-row-per-player snapshot from the VOR CSV."""
-    vor_df = pd.read_csv(vor_path)
-    rename_map = {
-        'PLAYER': 'player_name',
-        'POS': 'position',
-        'AVG': 'adp',
-        'FPTS': 'proj_points_mean',
-        'VOR': 'vor_value',
-        'VALUERANK': 'market_rank',
-    }
-    frame = vor_df.rename(columns=rename_map).copy()
-    if 'player_name' not in frame.columns or 'position' not in frame.columns:
-        raise ValueError(f'VOR file {vor_path} is missing player or position columns')
+def _build_current_posterior_snapshot_from_unified(
+    history_frame: pd.DataFrame, target_year: int
+) -> pd.DataFrame:
+    """Project the current draft board from unified historical data."""
+    if history_frame is None or history_frame.empty:
+        raise ValueError('Unified history is empty')
 
-    frame['player_name'] = frame['player_name'].astype(str)
-    frame['position'] = frame['position'].astype(str)
-    frame['source_name'] = vor_path.name
-    frame['source_updated_at'] = pd.Timestamp(vor_path.stat().st_mtime, unit='s')
-    frame['source_updated_at'] = pd.to_datetime(
-        frame['source_updated_at'], errors='coerce'
+    season_table = aggregate_season_player_table(history_frame)
+    if season_table.empty:
+        raise ValueError('Unified history did not produce any season-level rows')
+
+    ordered = history_frame.copy()
+    sort_columns = [
+        column for column in ['Name', 'Position', 'Season', 'G#'] if column in ordered.columns
+    ]
+    if sort_columns:
+        ordered = ordered.sort_values(sort_columns)
+    latest = (
+        ordered.groupby(['Name', 'Position'], as_index=False).tail(1).copy()
+        if {'Name', 'Position'}.issubset(ordered.columns)
+        else ordered.copy()
     )
-    frame['site_disagreement'] = (
-        1.0
-        - pd.to_numeric(frame.get('vor_match_confidence'), errors='coerce').fillna(0.5)
-        if 'vor_match_confidence' in frame.columns
-        else np.nan
+
+    fantasy_source = (
+        'FantPtPPR'
+        if 'FantPtPPR' in latest.columns
+        else ('FantPt' if 'FantPt' in latest.columns else None)
     )
-    frame['season_count'] = np.nan
-    frame['games_missed'] = np.nan
-    frame['team_change'] = np.nan
-    frame['role_volatility'] = np.nan
-    frame['adp_std'] = np.nan
+    if fantasy_source is None:
+        raise ValueError('Unified history is missing fantasy-point columns')
 
-    history_features = _load_history_features()
-    if history_features is not None and not history_features.empty:
-        frame = frame.merge(
-            history_features,
-            on=['player_name', 'position'],
-            how='left',
-            suffixes=('', '_history'),
-        )
-        for column in [
-            'team',
-            'season_count',
-            'games_missed',
-            'team_change',
-            'role_volatility',
-            'site_disagreement',
-            'adp_std',
-            'source_name',
-            'source_updated_at',
-        ]:
-            history_column = f'{column}_history'
-            if history_column in frame.columns:
-                if column in frame.columns:
-                    frame[column] = frame[column].combine_first(frame[history_column])
-                else:
-                    frame[column] = frame[history_column]
-                frame = frame.drop(columns=[history_column])
+    if 'current_team' not in latest.columns:
+        latest['current_team'] = np.nan
+    if 'Tm' in latest.columns:
+        latest['current_team'] = latest['current_team'].fillna(latest['Tm'])
+    if 'depth_chart_rank' not in latest.columns:
+        latest['depth_chart_rank'] = np.nan
+    for rookie_column in [
+        'rookie_draft_round',
+        'rookie_draft_pick',
+        'rookie_combine_score',
+    ]:
+        if rookie_column not in latest.columns:
+            latest[rookie_column] = np.nan
 
-    latest_unified_snapshot = _load_latest_unified_snapshot()
-    if latest_unified_snapshot is not None and not latest_unified_snapshot.empty:
-        scoring_columns = [
-            column
-            for column in ['FantPt', 'FantPtPPR', 'fantasy_points_ppr', 'REC']
-            if column in latest_unified_snapshot.columns
+    target_frame = latest.assign(
+        Season=int(target_year),
+        fantasy_points=lambda frame: pd.to_numeric(
+            frame[fantasy_source], errors='coerce'
+        ),
+    )[
+        [
+            'Season',
+            'Name',
+            'Position',
+            'fantasy_points',
+            'current_team',
+            'rookie_draft_round',
+            'rookie_draft_pick',
+            'rookie_combine_score',
+            'depth_chart_rank',
         ]
-        if scoring_columns:
-            frame = frame.merge(
-                latest_unified_snapshot[['player_name', 'position', *scoring_columns]],
-                on=['player_name', 'position'],
-                how='left',
-                suffixes=('', '_latest'),
-            )
-            for column in scoring_columns:
-                latest_column = f'{column}_latest'
-                if latest_column in frame.columns:
-                    if column in frame.columns:
-                        frame[column] = frame[column].combine_first(frame[latest_column])
-                    else:
-                        frame[column] = frame[latest_column]
-                    frame = frame.drop(columns=[latest_column])
-    return _collapse_latest_player_snapshot(frame)
+    ].reset_index(drop=True)
+
+    projections = build_posterior_projection_table(
+        train_history=season_table,
+        target_frame=target_frame,
+        holdout_year=target_year,
+        replacement_quantile=0.2,
+        min_history_seasons=0,
+    )
+    projections['source_name'] = 'hierarchical_empirical_bayes_live_projection'
+    projections['source_updated_at'] = pd.Timestamp.now().isoformat(timespec='seconds')
+    return projections
 
 
 def _load_history_features() -> pd.DataFrame | None:
@@ -794,7 +785,6 @@ def _run_single_slot(
         'artifacts': artifacts,
         'saved': saved,
         'comparison_path': saved['comparison_path'],
-        'compat_path': saved['compat_path'],
         'backtest_path': saved['backtest_path'],
     }
 
@@ -917,7 +907,6 @@ def main() -> int:
     if 'repo_dashboard_index' in result['saved']:
         logger.info('  repo dashboard: %s', result['saved']['repo_dashboard_index'])
     logger.info('  current-year comparison: %s', result['comparison_path'])
-    logger.info('  compatibility json: %s', result['compat_path'])
     if artifacts.backtest:
         logger.info('  backtest: %s', result['saved']['backtest_path'])
     return 0

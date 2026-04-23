@@ -44,12 +44,6 @@ COLUMN_MAPPINGS = {
         'FantPt': 'Fantasy_Points',
         'Season': 'Season',
         'Tm': 'Team'
-    },
-    'hybrid_mc_results': {
-        'name': 'Name',
-        'position': 'Position',
-        'mean': 'Mean_Projection',
-        'std': 'Std_Projection'
     }
 }
 

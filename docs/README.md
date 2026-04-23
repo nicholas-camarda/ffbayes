@@ -14,7 +14,8 @@ This guide suite explains the supported `pre-draft` workflow, the current dashbo
 
 ## Trust Model
 
-- authoritative runtime artifacts live under the configured runtime root, by default `~/ProjectsRuntime/ffbayes`
+- authoritative runtime artifacts live under the configured runtime root
+- use `<runtime-root>` as the generic local path label in this guide suite
 - repo `dashboard/` is a derived local shortcut for convenience
 - repo `site/` is a staged GitHub Pages copy for publishing, not the authoritative local draft surface
 - dashboard evidence is internal holdout evidence, not external validation
@@ -51,11 +52,16 @@ If you want the implemented math:
 
 ### Authoritative Runtime
 
-- `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
+- `seasons/<year>/draft_strategy/dashboard_payload_<year>.json`
+- `seasons/<year>/draft_strategy/draft_board_<year>.html`
+- `seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_<year>.json`
+- `seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_validation_<year_range>.json`
+- `seasons/<year>/diagnostics/validation/player_forecast_validation_summary_<year_range>.json`
 
 ### Derived Local Shortcut
 
+- `<runtime-root>/dashboard/index.html`
+- `<runtime-root>/dashboard/dashboard_payload.json`
 - `dashboard/index.html`
 - `dashboard/dashboard_payload.json`
 

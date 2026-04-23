@@ -1,6 +1,6 @@
-# FFBayes: Fantasy Football Analytics Pipeline
+# FFBayes: Fantasy Football Draft Engine
 
-A fantasy football analytics system that combines Monte Carlo simulations, Bayesian uncertainty modeling, and draft-utility decision modeling to generate draft-board recommendations.
+A fantasy football draft engine that builds season-total player forecasts, converts them into draft-day recommendations, and renders a live draft dashboard plus workbook.
 
 ## See It Live
 
@@ -76,7 +76,7 @@ ffbayes pre-draft
 - collect raw season data
 - validate freshness and completeness
 - preprocess the analysis-ready dataset
-- build VOR and hybrid model artifacts
+- build the VOR snapshot and the canonical player forecast inputs
 - generate the draft board workbook, dashboard payload, and dashboard HTML
 - run the internal draft-decision backtest used by the dashboard evidence surface
 
@@ -109,9 +109,9 @@ Do not treat `site/index.html` as your draft-day working dashboard. `site/` is t
 
 Primary artifacts:
 
-- workbook: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
-- authoritative payload: `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
-- authoritative HTML: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
+- workbook: `seasons/<year>/draft_strategy/draft_board_<year>.xlsx`
+- authoritative payload: `seasons/<year>/draft_strategy/dashboard_payload_<year>.json`
+- authoritative HTML: `seasons/<year>/draft_strategy/draft_board_<year>.html`
 - repo-local shortcut: `dashboard/index.html`
 
 During the draft:
@@ -183,7 +183,7 @@ ffbayes draft-retrospective \
 Imported finalized artifacts live under:
 
 ```text
-runs/<year>/pre_draft/artifacts/draft_strategy/finalized_drafts/
+seasons/<year>/draft_strategy/finalized_drafts/
 ```
 
 ### 9. Run The Retrospective When Real Outcomes Exist
@@ -216,28 +216,33 @@ The top-level `ffbayes` CLI is the main interface. Module-level scripts still ex
 
 Runtime outputs are written under the configured runtime root.
 
-- default runtime root: `~/ProjectsRuntime/ffbayes`
+- runtime root: `<runtime-root>`
 - override only when needed: `FFBAYES_RUNTIME_ROOT=/path/to/runtime`
 
 Main pre-draft runtime tree:
 
-- `runs/<year>/pre_draft/artifacts/vor_strategy/`
-- `runs/<year>/pre_draft/artifacts/hybrid_mc_bayesian/`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/`
-- `runs/<year>/pre_draft/diagnostics/`
+- `seasons/<year>/vor_strategy/`
+- `seasons/<year>/draft_strategy/`
+- `seasons/<year>/diagnostics/`
 
 Key draft artifacts:
 
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/finalized_drafts/`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_retrospective_<year>.json`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_retrospective_<year>.html`
+- `seasons/<year>/draft_strategy/draft_board_<year>.xlsx`
+- `seasons/<year>/draft_strategy/dashboard_payload_<year>.json`
+- `seasons/<year>/draft_strategy/draft_board_<year>.html`
+- `seasons/<year>/draft_strategy/draft_decision_backtest_<year_range>.json`
+- `seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_<year>.json`
+- `seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_diagnostics_<year>.json`
+- `seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_validation_<year_range>.json`
+- `seasons/<year>/diagnostics/validation/player_forecast_validation_summary_<year_range>.json`
+- `seasons/<year>/draft_strategy/finalized_drafts/`
+- `seasons/<year>/draft_strategy/draft_retrospective_<year>.json`
+- `seasons/<year>/draft_strategy/draft_retrospective_<year>.html`
 
 ### Derived Local And Published Surfaces
 
+- runtime-root dashboard shortcut: `<runtime-root>/dashboard/index.html`
+- runtime-root shortcut payload: `<runtime-root>/dashboard/dashboard_payload.json`
 - repo-local dashboard shortcut: `dashboard/index.html`
 - repo-local shortcut payload: `dashboard/dashboard_payload.json`
 - staged Pages root: `site/index.html`
@@ -247,7 +252,7 @@ Key draft artifacts:
 Authority levels:
 
 - authoritative: canonical runtime payload plus canonical runtime HTML
-- derived local shortcut: repo `dashboard/`
+- derived local shortcut: runtime-root `dashboard/` plus repo `dashboard/`
 - staged Pages copy: repo `site/`
 
 ### Optional Cloud Publish Surfaces
@@ -265,7 +270,7 @@ The supported draft board is not just a plain Monte Carlo ranking and not just a
 
 At a high level:
 
-- the player layer builds posterior projections and uncertainty estimates from historical player-season data plus draft-time-safe features
+- the player layer builds season-total posterior projections and uncertainty estimates from historical player performance, availability, and draft-time-safe features
 - the board layer converts those projections into starter edge, replacement edge, fragility, upside, and market-gap signals
 - the recommendation layer then decides whether to pick now or wait based on roster urgency, next-pick survival, and expected regret
 - the dashboard keeps `Simple VOR proxy` as an explicit baseline comparison instead of pretending the contextual board is the only view
@@ -289,17 +294,13 @@ Interpretation limits:
 - board value ordering is a decision-support heuristic, not a causal claim about what will happen
 - Pages staging is a derived copy, not the authoritative local working surface
 
-## Optional Analyses
+## Additional Commands
 
-These commands are available, but they are not the default `ffbayes pre-draft` operator path:
+These commands are available outside the default `ffbayes pre-draft` operator path:
 
-- `ffbayes bayesian-vor`: compare Bayesian and VOR approaches
-- `ffbayes mc`: run the Monte Carlo historical analysis directly
-- `ffbayes agg`: build team aggregation outputs
-- `ffbayes compare`: compare candidate models
+- `ffbayes bayesian-vor`: generate rolling holdout forecast validation summaries
+- `ffbayes mc`: run the standalone Monte Carlo roster analysis
 - `ffbayes publish --year <year>`: mirror selected runtime artifacts into cloud storage
-
-When these outputs are documented, they should be labeled optional rather than presented as default pre-draft artifacts.
 
 ## Documentation
 

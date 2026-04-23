@@ -8,8 +8,11 @@ import { chromium } from 'playwright';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, '..');
 const repoRoot = resolve(__dirname, '..');
-const siteDir = resolve(repoRoot, 'site');
+const siteDir = process.env.FFBAYES_SMOKE_SITE_DIR
+  ? resolve(process.env.FFBAYES_SMOKE_SITE_DIR)
+  : resolve(repoRoot, 'site');
 const siteIndexPath = resolve(siteDir, 'index.html');
+const smokeMode = process.env.FFBAYES_SMOKE_MODE || 'full';
 
 async function startStaticServer(rootDir) {
   const resolvedRoot = resolve(rootDir);
@@ -165,6 +168,24 @@ async function runSmoke() {
     });
     return row ? row.getAttribute('data-player-row') : null;
   }, position);
+  const findFirstAvailablePlayerExcluding = async (excludedNames = []) => page.evaluate((excluded) => {
+    const blocked = new Set(excluded);
+    const rows = Array.from(document.querySelectorAll('#board-table tr[data-player-row]'));
+    const row = rows.find((node) => {
+      const status = node.querySelector('td:nth-child(2) .status-badge')?.textContent?.trim();
+      const playerName = node.getAttribute('data-player-row');
+      return status === 'available' && playerName && !blocked.has(playerName);
+    });
+    return row ? row.getAttribute('data-player-row') : null;
+  }, excludedNames);
+  const findFirstAvailablePlayer = async () => page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('#board-table tr[data-player-row]'));
+    const row = rows.find((node) => {
+      const status = node.querySelector('td:nth-child(2) .status-badge')?.textContent?.trim();
+      return status === 'available';
+    });
+    return row ? row.getAttribute('data-player-row') : null;
+  });
 
   const waitForPillText = async (expectedText) => {
     await page.waitForFunction(
@@ -218,6 +239,27 @@ async function runSmoke() {
 
     if ((await readText('h1')) !== 'FFBayes Draft War Room') {
       throw new Error('Dashboard did not load the expected title');
+    }
+    if (smokeMode === 'minimal') {
+      const firstPlayer = await findFirstAvailablePlayer();
+      if (!firstPlayer) {
+        throw new Error('Minimal smoke could not find an available player row');
+      }
+      await clickBoardRow(firstPlayer);
+      await waitForInspectorText(firstPlayer);
+      const inspectorText = await page.locator(selectors.inspector).textContent();
+      const evidenceText = await page.locator('body').textContent();
+      const result = {
+        title: await readText('h1'),
+        mode: smokeMode,
+        selectedPlayer: firstPlayer,
+        boardRows: await page.locator('#board-table tr[data-player-row]').count(),
+        hasDecisionEvidence: evidenceText.includes('Decision evidence'),
+        hasFreshness: evidenceText.includes('Freshness and provenance'),
+        inspectorContainsPlayer: inspectorText.includes(firstPlayer),
+      };
+      console.log(JSON.stringify(result, null, 2));
+      return;
     }
     const bodyText = (await page.textContent('body')) || '';
     if (!bodyText.includes('Decision evidence') || !bodyText.includes('Freshness and provenance')) {
@@ -379,9 +421,10 @@ async function runSmoke() {
       throw new Error('Inspector did not render the contextual-versus-baseline explainer');
     }
 
-    const blockerPlayer = await findFirstAvailablePlayerByPosition('RB');
+    const blockerPlayer = await findFirstAvailablePlayerByPosition('RB')
+      || await findFirstAvailablePlayerExcluding([stickyCandidate]);
     if (!blockerPlayer) {
-      throw new Error('Could not find an RB candidate to trigger a state change');
+      throw new Error('Could not find an available candidate to trigger a state change');
     }
 
     await clickAction('taken', blockerPlayer);
@@ -400,9 +443,10 @@ async function runSmoke() {
       throw new Error('Inspector did not fall back to the current pick recommendation');
     }
 
-    const queueCandidate = await findFirstAvailablePlayerByPosition('TE');
+    const queueCandidate = await findFirstAvailablePlayerByPosition('TE')
+      || await findFirstAvailablePlayerExcluding([stickyCandidate, blockerPlayer]);
     if (!queueCandidate) {
-      throw new Error('Could not find a TE candidate for queue testing');
+      throw new Error('Could not find an available candidate for queue testing');
     }
     await clickAction('queue', queueCandidate);
     if ((await rowStatus(queueCandidate)) !== 'queued') {
@@ -424,9 +468,10 @@ async function runSmoke() {
       throw new Error('Undo should restore the queued player before redo invalidation testing');
     }
 
-    const redoInvalidationPlayer = await findFirstAvailablePlayerByPosition('QB');
+    const redoInvalidationPlayer = await findFirstAvailablePlayerByPosition('QB')
+      || await findFirstAvailablePlayerExcluding([stickyCandidate, blockerPlayer, queueCandidate]);
     if (!redoInvalidationPlayer) {
-      throw new Error('Could not find a QB candidate for redo invalidation testing');
+      throw new Error('Could not find an available candidate for redo invalidation testing');
     }
     await clickAction('taken', redoInvalidationPlayer);
     if (!(await isDisabled(selectors.redoButton))) {

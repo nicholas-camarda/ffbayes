@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""
-unified_data_loader.py - Unified Data Loading Utility
-Simple module for all models to load the unified dataset.
+"""Helpers for reading the canonical unified dataset.
 
-Usage:
-    from ffbayes.data_pipeline.unified_data_loader import load_unified_dataset
-    
-    data = load_unified_dataset()
+The supported workflow writes the unified dataset under
+`inputs/processed/unified_dataset/` as both JSON and CSV. These helpers read
+that canonical output or a caller-specified override path and provide simple
+selection helpers for player, position, and season slices.
 """
 
 
@@ -16,12 +14,18 @@ import pandas as pd
 
 
 def load_unified_dataset(data_directory=None):
-    """Load the unified dataset created by create_unified_dataset.py."""
+    """Load the canonical unified dataset or an explicit override path.
+
+    Args:
+        data_directory: Optional runtime root, explicit unified dataset
+            directory, or direct file path. When omitted, the canonical
+            `inputs/processed/unified_dataset/` location is used.
+    """
     from ffbayes.utils.path_constants import (
         get_unified_dataset_path,
     )
 
-    if data_directory in (None, '', 'datasets'):
+    if data_directory in (None, ''):
         json_path = get_unified_dataset_path()
         csv_path = json_path.with_suffix('.csv')
     else:
@@ -47,38 +51,41 @@ def load_unified_dataset(data_directory=None):
         data = pd.read_json(dataset_path)
     return data
 
+
 def get_player_data(player_name, data=None):
-    """Get all data for a specific player from the unified dataset."""
+    """Return all unified-dataset rows for one player."""
     if data is None:
         data = load_unified_dataset()
-    
+
     player_data = data[data['Name'] == player_name]
-    
+
     if len(player_data) == 0:
         raise ValueError(f"Player '{player_name}' not found in unified dataset")
-    
+
     return player_data
 
+
 def get_position_data(position, data=None):
-    """Get all data for a specific position from the unified dataset."""
+    """Return all unified-dataset rows for one fantasy position."""
     if data is None:
         data = load_unified_dataset()
-    
+
     position_data = data[data['Position'] == position]
-    
+
     if len(position_data) == 0:
         raise ValueError(f"Position '{position}' not found in unified dataset")
-    
+
     return position_data
 
+
 def get_season_data(season, data=None):
-    """Get all data for a specific season from the unified dataset."""
+    """Return all unified-dataset rows for one historical season."""
     if data is None:
         data = load_unified_dataset()
-    
+
     season_data = data[data['Season'] == season]
-    
+
     if len(season_data) == 0:
         raise ValueError(f"Season {season} not found in unified dataset")
-    
+
     return season_data

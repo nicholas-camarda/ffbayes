@@ -38,40 +38,28 @@
       "parallel_group": "data_processing"
     },
     {
-      "name": "vor_draft_strategy",
-      "script": "ffbayes.draft_strategy.traditional_vor_draft",
-      "description": "Generate traditional VOR-based draft strategy FIRST to create rankings",
-      "timeout": 300,
+      "name": "create_unified_dataset",
+      "script": "ffbayes.data_pipeline.create_unified_dataset",
+      "description": "Create the canonical unified dataset for the supported player-model stack",
+      "timeout": 120,
       "retry_count": 2,
       "dependencies": [
         "data_preprocessing"
       ],
       "critical": true,
-      "parallel_group": "strategy"
-    },
-    {
-      "name": "create_unified_dataset",
-      "script": "ffbayes.data_pipeline.create_unified_dataset",
-      "description": "Create unified dataset with VOR rankings for all models",
-      "timeout": 120,
-      "retry_count": 2,
-      "dependencies": [
-        "vor_draft_strategy"
-      ],
-      "critical": true,
       "parallel_group": "data_processing"
     },
     {
-      "name": "hybrid_mc_analysis",
-      "script": "ffbayes.analysis.hybrid_mc_bayesian",
-      "description": "Run Hybrid Monte Carlo + Bayesian analysis with uncertainty layers",
-      "timeout": 900,
+      "name": "vor_draft_strategy",
+      "script": "ffbayes.draft_strategy.traditional_vor_draft",
+      "description": "Generate the optional traditional VOR baseline artifacts",
+      "timeout": 300,
       "retry_count": 2,
       "dependencies": [
         "create_unified_dataset"
       ],
-      "critical": true,
-      "parallel_group": "modeling"
+      "critical": false,
+      "parallel_group": "analysis"
     },
     {
       "name": "draft_decision_strategy",
@@ -81,7 +69,7 @@
       "timeout": 300,
       "retry_count": 2,
       "dependencies": [
-        "hybrid_mc_analysis"
+        "create_unified_dataset"
       ],
       "critical": true,
       "parallel_group": "strategy"
@@ -93,7 +81,6 @@
       "timeout": 300,
       "retry_count": 2,
       "dependencies": [
-        "vor_draft_strategy",
         "draft_decision_strategy"
       ],
       "critical": false,

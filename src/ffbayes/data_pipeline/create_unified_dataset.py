@@ -1,23 +1,11 @@
 #!/usr/bin/env python3
-"""
-create_unified_dataset.py - Unified Data Pipeline
-Single source of truth for all fantasy football data loading, validation, and cleaning.
+"""Create the canonical unified dataset used by supported draft workflows.
 
-This script:
-1. SCRAPES ADP data from FantasyPros
-2. SCRAPES projection data from FantasyPros for all positions
-3. Calculates VOR rankings
-4. Loads historical NFL data
-5. Creates a clean, validated unified dataset
-
-This unified dataset will be used by:
-- Baseline (naive) model
-- Monte Carlo model
-- Hybrid MC + Bayesian model
-- VOR snake draft strategy
-- Any other analysis requiring fantasy football data
-
-No side effects - only creates the unified dataset.
+The unified dataset is built from the combined historical analysis dataset plus
+the current-year market snapshot and player-context inputs needed by the draft
+engine. The supported output lives under `inputs/processed/unified_dataset/`
+and is the single machine-readable source consumed by forecasting and
+draft-strategy code.
 """
 
 import logging
@@ -361,6 +349,208 @@ def _attach_market_snapshot(data: pd.DataFrame, market_snapshot: pd.DataFrame) -
     return df.drop(columns=['__match_name', '__match_position'], errors='ignore')
 
 
+def _combine_score_from_frame(frame: pd.DataFrame) -> pd.Series:
+    metrics = []
+    metric_specs = [
+        ('forty_time', True),
+        ('vertical_jump', False),
+        ('broad_jump', False),
+        ('bench_press', False),
+    ]
+    for column, invert in metric_specs:
+        if column not in frame.columns:
+            continue
+        values = pd.to_numeric(frame[column], errors='coerce')
+        if values.notna().sum() == 0:
+            continue
+        mean = values.mean(skipna=True)
+        std = values.std(ddof=0, skipna=True)
+        if pd.isna(std) or np.isclose(std, 0.0):
+            z = pd.Series(np.zeros(len(values)), index=frame.index)
+        else:
+            z = (values - mean) / std
+        metrics.append(-z if invert else z)
+    if not metrics:
+        return pd.Series(np.nan, index=frame.index, dtype=float)
+    return pd.concat(metrics, axis=1).mean(axis=1, skipna=True)
+
+
+def _load_player_context_snapshot(current_year: int) -> pd.DataFrame:
+    """Load current-team and rookie-prior context from nflverse sources."""
+    from ffbayes.data_pipeline import nflverse_backend
+
+    context_columns = [
+        '__match_name',
+        '__match_position',
+        'current_team',
+        'rookie_draft_round',
+        'rookie_draft_pick',
+        'rookie_combine_score',
+        'depth_chart_rank',
+        'context_available',
+    ]
+    try:
+        players = nflverse_backend.load_players()
+        rosters = nflverse_backend.load_rosters([current_year])
+        draft_picks = nflverse_backend.load_draft_picks([current_year])
+        combine = nflverse_backend.load_combine_results([current_year])
+        depth = nflverse_backend.load_depth_charts([current_year])
+    except Exception as exc:
+        logger.warning('⚠️ Current-player context unavailable: %s', exc)
+        return pd.DataFrame(columns=context_columns)
+
+    def _base_snapshot(frame: pd.DataFrame, name_col: str = 'player_display_name') -> pd.DataFrame:
+        if frame is None or frame.empty:
+            return pd.DataFrame(columns=['__match_name', '__match_position'])
+        snapshot = frame.copy()
+        snapshot['__match_name'] = snapshot[name_col].map(_normalize_player_name)
+        snapshot['__match_position'] = snapshot['position'].map(_normalize_match_position)
+        return snapshot
+
+    players_snapshot = _base_snapshot(players)
+    rosters_snapshot = _base_snapshot(rosters)
+    draft_snapshot = _base_snapshot(draft_picks)
+    combine_snapshot = _base_snapshot(combine)
+    depth_snapshot = _base_snapshot(depth)
+
+    if not combine_snapshot.empty:
+        combine_snapshot['rookie_combine_score'] = _combine_score_from_frame(
+            combine_snapshot
+        )
+
+    context = pd.DataFrame(
+        columns=['__match_name', '__match_position']
+    )
+    for frame in [players_snapshot, rosters_snapshot, draft_snapshot, combine_snapshot, depth_snapshot]:
+        if frame.empty:
+            continue
+        context = pd.concat(
+            [context, frame[['__match_name', '__match_position']]],
+            ignore_index=True,
+        )
+    if context.empty:
+        return pd.DataFrame(columns=context_columns)
+    context = context.drop_duplicates(
+        subset=['__match_name', '__match_position'], keep='last'
+    )
+
+    if not rosters_snapshot.empty:
+        roster_current = (
+            rosters_snapshot.sort_values('season')
+            .drop_duplicates(subset=['__match_name', '__match_position'], keep='last')
+            [['__match_name', '__match_position', 'recent_team']]
+            .rename(columns={'recent_team': 'current_team'})
+        )
+        context = context.merge(
+            roster_current, on=['__match_name', '__match_position'], how='left'
+        )
+
+    if not players_snapshot.empty and 'recent_team' in players_snapshot.columns:
+        players_current = players_snapshot[
+            ['__match_name', '__match_position', 'recent_team']
+        ].rename(columns={'recent_team': 'player_recent_team'})
+        context = context.merge(
+            players_current,
+            on=['__match_name', '__match_position'],
+            how='left',
+        )
+        context['current_team'] = context['current_team'].combine_first(
+            context['player_recent_team']
+        )
+        context = context.drop(columns=['player_recent_team'])
+
+    if not draft_snapshot.empty:
+        draft_cols = [
+            '__match_name',
+            '__match_position',
+            'draft_round',
+            'draft_pick',
+        ]
+        draft_current = draft_snapshot[draft_cols].rename(
+            columns={
+                'draft_round': 'rookie_draft_round',
+                'draft_pick': 'rookie_draft_pick',
+            }
+        )
+        context = context.merge(
+            draft_current, on=['__match_name', '__match_position'], how='left'
+        )
+
+    if not combine_snapshot.empty:
+        combine_current = combine_snapshot[
+            ['__match_name', '__match_position', 'rookie_combine_score']
+        ]
+        context = context.merge(
+            combine_current, on=['__match_name', '__match_position'], how='left'
+        )
+
+    if not depth_snapshot.empty:
+        depth_current = (
+            depth_snapshot.sort_values(['season', 'depth_chart_rank'])
+            .drop_duplicates(subset=['__match_name', '__match_position'], keep='first')
+            [['__match_name', '__match_position', 'depth_chart_rank']]
+        )
+        context = context.merge(
+            depth_current, on=['__match_name', '__match_position'], how='left'
+        )
+
+    context['context_available'] = (
+        context[
+            [
+                column
+                for column in [
+                    'current_team',
+                    'rookie_draft_round',
+                    'rookie_draft_pick',
+                    'rookie_combine_score',
+                    'depth_chart_rank',
+                ]
+                if column in context.columns
+            ]
+        ]
+        .notna()
+        .any(axis=1)
+    )
+    for column in context_columns:
+        if column not in context.columns:
+            context[column] = np.nan if column != 'context_available' else False
+    return context[context_columns]
+
+
+def _attach_player_context(data: pd.DataFrame, current_year: int) -> pd.DataFrame:
+    """Attach current-team and rookie/context fields to the unified dataset."""
+    if data is None or data.empty:
+        return data.copy()
+
+    context = _load_player_context_snapshot(current_year)
+    if context.empty:
+        result = data.copy()
+        for column in [
+            'current_team',
+            'rookie_draft_round',
+            'rookie_draft_pick',
+            'rookie_combine_score',
+            'depth_chart_rank',
+        ]:
+            if column not in result.columns:
+                result[column] = np.nan
+        result['context_available'] = False
+        return result
+
+    df = data.copy()
+    df['__match_name'] = df['Name'].map(_normalize_player_name)
+    df['__match_position'] = df['Position'].map(_normalize_match_position)
+    df = df.merge(context, on=['__match_name', '__match_position'], how='left')
+    df['current_team'] = df.get('current_team').combine_first(df.get('Tm'))
+    df['team_change_indicator'] = (
+        (df['current_team'].fillna('') != df.get('Tm', pd.Series('', index=df.index)).fillna(''))
+        & df['current_team'].notna()
+        & df.get('Tm', pd.Series(np.nan, index=df.index)).notna()
+    ).astype(float)
+    df = df.drop(columns=['__match_name', '__match_position'], errors='ignore')
+    return df
+
+
 def load_config() -> Dict:
     """Load VOR configuration from centralized config."""
     try:
@@ -588,7 +778,7 @@ def load_combined_dataset(data_directory=None):
     )
     from ffbayes.utils.path_constants import COMBINED_DATASETS_DIR, RAW_DATA_DIR
 
-    if data_directory in (None, '', 'datasets'):
+    if data_directory in (None, ''):
         output_dir = COMBINED_DATASETS_DIR
     else:
         data_root = Path(data_directory).expanduser()
@@ -1137,7 +1327,7 @@ def add_adp_data(data: pd.DataFrame, adp_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def create_unified_dataset(data_directory=None):
-    """Create unified, clean dataset for all models."""
+    """Create the canonical unified dataset for the supported draft workflow."""
     logger.info('=' * 60)
     logger.info('Creating Unified Fantasy Football Dataset')
     logger.info('=' * 60)
@@ -1177,6 +1367,13 @@ def create_unified_dataset(data_directory=None):
         logger.info(
             'Phase attach_current_market_snapshot merged snapshot onto %d rows in %.1fs',
             len(data),
+            time.perf_counter() - phase_start,
+        )
+
+        phase_start = time.perf_counter()
+        data = _attach_player_context(data, current_year)
+        logger.info(
+            'Phase attach_player_context completed in %.1fs',
             time.perf_counter() - phase_start,
         )
 

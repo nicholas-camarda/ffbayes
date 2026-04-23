@@ -171,8 +171,8 @@ def validate_step_outputs(step_name):
         COMBINED_DATASETS_DIR,
         SEASON_DATASETS_DIR,
         SNAKE_DRAFT_DATASETS_DIR,
+        get_bayesian_model_dir,
         get_draft_strategy_dir,
-        get_hybrid_mc_dir,
         get_monte_carlo_dir,
         get_plots_dir,
     )
@@ -190,7 +190,7 @@ def validate_step_outputs(step_name):
             ),
         ],
         'Bayesian Analysis': [
-            str(get_hybrid_mc_dir(current_year) / 'hybrid_model_results.json')
+            str(get_bayesian_model_dir(current_year) / 'player_forecast_*.json')
         ],
         'Draft Strategy Generation': [
             str(get_draft_strategy_dir(current_year) / 'draft_board_*.xlsx'),
@@ -200,7 +200,6 @@ def validate_step_outputs(step_name):
                 get_draft_strategy_dir(current_year) / 'draft_decision_backtest_*.json'
             ),
             str(get_draft_strategy_dir(current_year) / 'draft_slot_sensitivity_*.json'),
-            str(get_draft_strategy_dir(current_year) / 'draft_board_*.json'),
         ],
         'Monte Carlo Validation': [str(get_monte_carlo_dir(current_year) / '*.tsv')],
         'Model Comparison': [

@@ -11,9 +11,12 @@ from typing import Any
 
 from ffbayes.utils.json_serialization import dumps_strict_json, to_strict_jsonable
 from ffbayes.utils.path_constants import (
+    get_cloud_root,
     get_dashboard_html_path,
     get_dashboard_payload_path,
     get_pages_site_dir,
+    get_project_root,
+    get_runtime_root,
 )
 
 PAYLOAD_ASSIGNMENT_PREFIX = 'window.FFBAYES_DASHBOARD = '
@@ -29,6 +32,31 @@ def _normalized_json_text(payload: dict[str, Any]) -> str:
     if isinstance(normalized, dict) and normalized.get('published_at') is not None:
         normalized['published_at'] = '<normalized>'
     return dumps_strict_json(normalized, sort_keys=True, indent=2)
+
+
+def _normalize_public_path_string(value: str) -> str:
+    replacements = {
+        str(get_runtime_root()): '<runtime-root>',
+        str(get_project_root()): '<project-root>',
+        str(get_cloud_root()): '<cloud-root>',
+    }
+    normalized = value
+    for absolute_root, public_root in replacements.items():
+        if absolute_root and absolute_root in normalized:
+            normalized = normalized.replace(absolute_root, public_root)
+    return normalized
+
+
+def _normalize_public_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: _normalize_public_payload(item) for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_normalize_public_payload(item) for item in value]
+    if isinstance(value, str):
+        return _normalize_public_path_string(value)
+    return value
 
 
 def _build_publish_provenance(
@@ -88,6 +116,22 @@ def stage_pages_site(
         Path(output_dir) if output_dir is not None else get_pages_site_dir()
     )
     resolved_output_dir.mkdir(parents=True, exist_ok=True)
+    allowed_site_entries = {
+        'index.html',
+        'dashboard_payload.json',
+        'publish_provenance.json',
+        '.nojekyll',
+        'CNAME',
+    }
+    for child in resolved_output_dir.iterdir():
+        if child.name in allowed_site_entries:
+            continue
+        if child.is_dir():
+            import shutil
+
+            shutil.rmtree(child)
+        else:
+            child.unlink(missing_ok=True)
 
     resolved_html = (
         Path(source_html)
@@ -114,6 +158,7 @@ def stage_pages_site(
     payload_data: dict[str, Any] | None = None
     if resolved_payload.exists():
         payload_data = json.loads(resolved_payload.read_text(encoding='utf-8'))
+        payload_data = _normalize_public_payload(payload_data)
         payload_data['publish_provenance'] = _build_publish_provenance(
             payload_data, resolved_year, resolved_html, resolved_payload
         )

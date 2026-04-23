@@ -49,18 +49,6 @@ def get_bayesian_strategy_filename(current_year=None, draft_position=None):
     
     return f"draft_strategy_pos{draft_position}_{current_year}.json"
 
-def get_hybrid_mc_results_path(current_year=None):
-    """Get the path to the Hybrid MC results file."""
-    if current_year is None:
-        current_year = datetime.now().year
-    
-    from ffbayes.utils.path_constants import get_hybrid_mc_dir
-    return str(get_hybrid_mc_dir(current_year) / "hybrid_model_results.json")
-
-def get_hybrid_mc_results_filename():
-    """Get just the Hybrid MC results filename."""
-    return "hybrid_model_results.json"
-
 
 def get_draft_board_path(current_year=None):
     """Get the workbook path for the draft board artifact."""
@@ -102,7 +90,6 @@ if __name__ == "__main__":
     
     print("\n🔗 Strategy Paths:")
     print(f"   Bayesian: {get_bayesian_strategy_path()}")
-    print(f"   Hybrid MC: {get_hybrid_mc_results_path()}")
     
     # Test with custom values
     print("\n📅 Custom Position (5):")
@@ -110,4 +97,3 @@ if __name__ == "__main__":
     
     print("\n📅 Custom Year (2024):")
     print(f"   Bayesian: {get_bayesian_strategy_path(2024)}")
-    print(f"   Hybrid MC: {get_hybrid_mc_results_path(2024)}")

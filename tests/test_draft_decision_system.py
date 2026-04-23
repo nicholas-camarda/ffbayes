@@ -482,12 +482,21 @@ def test_dashboard_payload_includes_preset_bundle_and_model_notes():
     assert payload['scoring_presets']['half_ppr']['available'] is True
     assert payload['scoring_presets']['ppr']['available'] is True
     assert 'draft_score' in payload['metric_glossary']
+    assert 'posterior_rate_mean' in payload['metric_glossary']
     assert 'headline' in payload['model_overview']
     assert 'decision_evidence' in payload
     assert payload['decision_evidence']['available'] is True
+    assert payload['player_forecast_validation']['status'] in {'available', 'unavailable'}
+    assert payload['decision_evidence']['player_forecast_validation']['status'] in {
+        'available',
+        'unavailable',
+    }
     assert 'top_disagreements' in payload['bayesian_vor_summary']
     assert payload['selected_player']
     assert payload['war_room_visuals']['schema_version'] == 'war_room_visuals_v1'
+    assert payload['war_room_visuals']['supported_model']['production_estimator'] == (
+        'hierarchical_empirical_bayes'
+    )
     assert payload['war_room_visuals']['timing_frontier']['available'] is True
     assert payload['war_room_visuals']['positional_cliffs']['available'] is True
     assert payload['war_room_visuals']['comparative_explainer']['available'] is True
@@ -678,15 +687,80 @@ def test_slot_specific_artifacts_use_prefixed_filenames():
         assert saved['workbook_path'].name == 'draft_board_pos03_2026.xlsx'
         assert saved['payload_path'].name == 'dashboard_payload_pos03_2026.json'
         assert saved['html_path'].name == 'draft_board_pos03_2026.html'
-        assert saved['compat_path'].name == 'draft_board_pos03_2026.json'
         assert saved['comparison_path'].parent.name == 'model_outputs'
+        assert saved['player_forecast_path'].parent.name == 'player_forecast'
+        assert saved['player_forecast_validation_path'].parent.name == 'player_forecast'
+        assert saved['player_forecast_diagnostics_path'].parent.name == 'player_forecast'
+        assert saved['validation_summary_path'].parent.name == 'validation'
         assert saved['backtest_path'].name.startswith('draft_decision_backtest_pos03_')
         assert 'repo_dashboard_index' not in saved
         assert 'runtime_dashboard_index' not in saved
-        for path_key in ['payload_path', 'compat_path', 'comparison_path']:
+        for path_key in [
+            'payload_path',
+            'comparison_path',
+            'player_forecast_path',
+            'player_forecast_validation_path',
+            'player_forecast_diagnostics_path',
+            'validation_summary_path',
+        ]:
             _loads_strict_json(saved[path_key].read_text(encoding='utf-8'))
         if saved['backtest_path'].exists():
             _loads_strict_json(saved['backtest_path'].read_text(encoding='utf-8'))
+
+
+def test_canonical_runtime_save_prunes_shortcut_surfaces(monkeypatch, tmp_path):
+    settings = LeagueSettings()
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
+
+    runtime_root = tmp_path / 'runtime'
+    project_root = tmp_path / 'project'
+    monkeypatch.setenv('FFBAYES_RUNTIME_ROOT', str(runtime_root))
+    monkeypatch.setenv('FFBAYES_PROJECT_ROOT', str(project_root))
+
+    runtime_dashboard = runtime_root / 'dashboard'
+    repo_dashboard = project_root / 'dashboard'
+    runtime_dashboard.mkdir(parents=True, exist_ok=True)
+    repo_dashboard.mkdir(parents=True, exist_ok=True)
+    (runtime_dashboard / 'draft_board_2026.xlsx').write_text('stale', encoding='utf-8')
+    (runtime_dashboard / 'model_outputs').mkdir()
+    (runtime_dashboard / 'model_outputs' / 'old.json').write_text(
+        'stale', encoding='utf-8'
+    )
+    (repo_dashboard / 'draft_decision_backtest_2023-2025.json').write_text(
+        'stale', encoding='utf-8'
+    )
+
+    output_dir = runtime_root / 'seasons' / '2026' / 'draft_strategy'
+    diagnostics_dir = runtime_root / 'seasons' / '2026' / 'diagnostics'
+    saved = save_draft_decision_artifacts(
+        artifacts,
+        output_dir=output_dir,
+        year=2026,
+        dashboard_dir=output_dir,
+        diagnostics_dir=diagnostics_dir,
+    )
+
+    assert sorted(path.name for path in runtime_dashboard.iterdir()) == [
+        'dashboard_payload.json',
+        'index.html',
+    ]
+    assert sorted(path.name for path in repo_dashboard.iterdir()) == [
+        'dashboard_payload.json',
+        'index.html',
+    ]
+    canonical_payload = _loads_strict_json(
+        saved['payload_path'].read_text(encoding='utf-8')
+    )
+    runtime_payload = _loads_strict_json(
+        saved['runtime_dashboard_payload'].read_text(encoding='utf-8')
+    )
+    repo_payload = _loads_strict_json(
+        saved['repo_dashboard_payload'].read_text(encoding='utf-8')
+    )
+    assert runtime_payload == canonical_payload
+    assert repo_payload == canonical_payload
 
 
 def test_exported_dashboard_html_contains_live_controls_and_full_board_renderer():
@@ -713,6 +787,7 @@ def test_exported_dashboard_html_contains_live_controls_and_full_board_renderer(
         assert 'Full Player Board' in html
         assert 'Draft Controls' in html
         assert 'Decision evidence' in html
+        assert 'Forecast validation' in html
         assert 'Freshness and provenance' in html
         assert 'ffbayes-dashboard-state-v2' in html
         assert 'advance-button' not in html

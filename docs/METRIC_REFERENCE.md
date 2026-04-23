@@ -49,6 +49,10 @@ Primary guide-facing payload fields:
 | `Market gap` | difference between model rank and market rank | where the board disagrees with cost | not proof the market is wrong |
 | `Decision evidence` | internal holdout comparison between contextual and baseline strategies | status, winner, season count, limitations | not external validation |
 | `Freshness and provenance` | run freshness plus source and staging metadata | status, warnings, override usage, source files | not proof the picks are correct |
+| `Season total mean` | central season-total forecast shown in the inspector | posterior mean for total points | not a pick-now instruction by itself |
+| `Rate when active` | expected scoring pace when the player is active | scoring-rate component of the player forecast | not full-season value without availability |
+| `Expected games` | expected availability over the fantasy season | games-played component of the player forecast | not a medical forecast |
+| `Availability rate` | expected-games fraction of the modeled season length | whether availability is dragging down total value | not draft-survival probability |
 
 ## Trust Surfaces
 
@@ -109,6 +113,6 @@ These are interpretation surfaces, not separate model outputs.
 
 Purpose: find the authoritative source for metric names and trust messaging.
 
-- authoritative runtime payload: `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
+- authoritative runtime payload: `seasons/<year>/draft_strategy/dashboard_payload_<year>.json`
 - staged Pages payload: `site/dashboard_payload.json`
 - staged Pages provenance: `site/publish_provenance.json`

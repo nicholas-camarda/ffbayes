@@ -52,10 +52,8 @@ def test_refresh_runtime_dashboard_rebuilds_html_and_stages_pages(tmp_path, monk
 
     payload_path = (
         runtime_root
-        / 'runs'
+        / 'seasons'
         / '2026'
-        / 'pre_draft'
-        / 'artifacts'
         / 'draft_strategy'
         / 'dashboard_payload_2026.json'
     )
@@ -193,13 +191,23 @@ def test_refresh_runtime_dashboard_rebuilds_html_and_stages_pages(tmp_path, monk
         output_html=html_path,
         stage_pages=True,
     )
+    freshness = refresh_dashboard.check_dashboard_freshness(
+        year=2026,
+        payload_path=payload_path,
+        output_html=html_path,
+    )
 
     html_text = html_path.read_text(encoding='utf-8')
     assert 'FFBayes Draft War Room' in html_text
     assert 'Decision evidence' in html_text
     assert 'Freshness and provenance' in html_text
+    assert 'Projection breakdown' in html_text
+    assert 'Season total mean' in html_text
+    assert 'Detailed evidence' in html_text
     assert result['html_path'] == html_path
     assert result['source_payload_path'] == payload_path
+    assert freshness['status'] == 'fresh'
+    assert freshness['surface_kind'] == 'canonical_runtime'
 
     runtime_index = runtime_root / 'dashboard' / 'index.html'
     repo_index = project_root / 'dashboard' / 'index.html'
@@ -235,10 +243,8 @@ def test_check_dashboard_freshness_reports_fresh_and_stale(tmp_path, monkeypatch
 
     payload_path = (
         runtime_root
-        / 'runs'
+        / 'seasons'
         / '2026'
-        / 'pre_draft'
-        / 'artifacts'
         / 'draft_strategy'
         / 'dashboard_payload_2026.json'
     )
@@ -351,10 +357,8 @@ def test_check_dashboard_freshness_accepts_staged_site_publish_provenance(
 
     payload_path = (
         runtime_root
-        / 'runs'
+        / 'seasons'
         / '2026'
-        / 'pre_draft'
-        / 'artifacts'
         / 'draft_strategy'
         / 'dashboard_payload_2026.json'
     )
@@ -415,10 +419,8 @@ def test_check_dashboard_freshness_reports_stale_repo_shortcut_payload(tmp_path,
 
     payload_path = (
         runtime_root
-        / 'runs'
+        / 'seasons'
         / '2026'
-        / 'pre_draft'
-        / 'artifacts'
         / 'draft_strategy'
         / 'dashboard_payload_2026.json'
     )

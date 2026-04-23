@@ -61,6 +61,11 @@ REQUIRED_CANONICAL_TERMS = [
     'Upside score',
     'Decision evidence',
     'Freshness and provenance',
+    'Projection breakdown',
+    'Season total mean',
+    'Rate when active',
+    'Expected games',
+    'Availability rate',
 ]
 
 COMMAND_SOURCE_ALLOWLIST = {
@@ -101,8 +106,6 @@ COMMAND_SOURCE_ALLOWLIST = {
     'validate': set(),
     'preprocess': set(),
     'mc': set(),
-    'agg': set(),
-    'compare': set(),
     'bayesian-vor': set(),
     'draft-backtest': set(),
 }
@@ -210,16 +213,35 @@ def test_docs_do_not_use_known_stale_command_examples():
     assert '--payload /path/to/dashboard_payload.json' not in combined
     assert '--payload ' not in combined
     assert 'Just get VOR rankings' not in combined
+    assert 'ffbayes agg' not in combined
+    assert 'ffbayes compare' not in combined
+    assert 'hybrid_mc_bayesian' not in combined
+    assert 'hybrid_model_results.json' not in combined
+    assert 'hierarchical_sampled_bayes' not in combined
+    assert 'sampled hierarchical bayes' not in combined.lower()
+
+
+def test_supported_cli_and_docs_do_not_expose_sampled_eval_lane():
+    cli_text = (REPO_ROOT / 'src' / 'ffbayes' / 'cli.py').read_text(encoding='utf-8')
+    combined = _all_doc_text()
+
+    assert 'sampled_bayes' not in cli_text
+    assert 'hierarchical_sampled_bayes' not in cli_text
+    assert 'sampled bayes' not in combined.lower()
 
 
 def test_docs_path_contract_and_authority_language_remain_explicit():
     combined = _all_doc_text()
 
     required_paths = [
-        'runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.xlsx',
-        'runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json',
-        'runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html',
-        'runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json',
+        'seasons/<year>/draft_strategy/draft_board_<year>.xlsx',
+        'seasons/<year>/draft_strategy/dashboard_payload_<year>.json',
+        'seasons/<year>/draft_strategy/draft_board_<year>.html',
+        'seasons/<year>/draft_strategy/draft_decision_backtest_<year_range>.json',
+        'seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_<year>.json',
+        'seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_validation_<year_range>.json',
+        'seasons/<year>/diagnostics/validation/player_forecast_validation_summary_<year_range>.json',
+        '<runtime-root>/dashboard/index.html',
         'dashboard/index.html',
         'dashboard/dashboard_payload.json',
         'site/index.html',
@@ -232,6 +254,9 @@ def test_docs_path_contract_and_authority_language_remain_explicit():
     assert 'authoritative runtime' in combined.lower()
     assert 'derived local shortcut' in combined.lower()
     assert 'derived publish surface' in combined.lower()
+    assert 'runs/<year>' not in combined
+    assert 'data/raw' not in combined
+    assert 'data/processed' not in combined
 
 
 def test_docs_use_canonical_terms_for_core_metrics_and_trust_surfaces():
@@ -243,6 +268,7 @@ def test_docs_use_canonical_terms_for_core_metrics_and_trust_surfaces():
         'overall model score',
         'validated universally',
         'proves the board',
+        'deprecated or compatibility-only',
     ]
     lowered = combined.lower()
     for term in conflicting_terms:
@@ -287,6 +313,12 @@ def test_committed_site_payload_contains_required_guide_fields_and_consistent_pr
     assert (
         payload['publish_provenance']['source_payload'] == provenance['source_payload']
     )
+    assert 'supported_model' in payload['model_overview']
+    payload_text = (SITE_DIR / 'dashboard_payload.json').read_text(encoding='utf-8')
+    assert '/Users/' not in payload_text
+    assert 'ProjectsRuntime' not in payload_text
+    assert 'data/raw' not in payload_text
+    assert 'data/processed' not in payload_text
 
 
 def test_metric_reference_terms_align_with_committed_payload_labels():

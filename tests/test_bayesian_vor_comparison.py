@@ -10,6 +10,7 @@ os.environ.setdefault('MPLCONFIGDIR', tempfile.mkdtemp(prefix='matplotlib-'))
 matplotlib.use('Agg')
 
 from ffbayes.analysis.bayesian_vor_comparison import (  # noqa: E402
+    build_player_forecast_validation_summary,
     build_season_player_table,
     evaluate_holdout_season,
     run_backtest,
@@ -88,3 +89,19 @@ def test_run_backtest_writes_scorecard_and_plot(monkeypatch, tmp_path):
     assert 'rank_correlation' in payload['overall']['winner']
     assert 'rank_correlation' in payload['overall']['season_win_counts']
     assert 'market' in payload['overall']
+
+
+def test_build_player_forecast_validation_summary_includes_slices():
+    history = _build_synthetic_history()
+
+    summary = build_player_forecast_validation_summary(
+        history,
+        holdout_years=[2024],
+        top_k=1,
+    )
+
+    assert summary['schema_version'] == 'player_forecast_validation_v2'
+    assert summary['estimator'] == 'hierarchical_empirical_bayes'
+    assert summary['overall_forecast']['holdout_years'] == [2024]
+    assert 'component_diagnostics' in summary
+    assert 'position_slices' in summary

@@ -174,3 +174,53 @@ def test_load_weekly_player_stats_raises_clear_schema_error(monkeypatch):
 
     with pytest.raises(backend.NFLVerseBackendError, match='player stats'):
         backend.load_weekly_player_stats([2025])
+
+
+def test_load_draft_picks_normalizes_columns(monkeypatch):
+    draft_frame = _FakePolarsFrame(
+        pd.DataFrame(
+            [
+                {
+                    'draft_year': 2025,
+                    'gsis_id': 'p1',
+                    'player_name': 'Alpha Rookie',
+                    'pos': 'WR',
+                    'team': 'NYG',
+                    'round': 1,
+                    'pick': 12,
+                }
+            ]
+        )
+    )
+    fake_backend = SimpleNamespace(load_draft_picks=lambda seasons: draft_frame)
+    monkeypatch.setattr(backend, '_get_backend_module', lambda: fake_backend)
+
+    result = backend.load_draft_picks([2025])
+
+    assert list(result.columns) == list(backend.DRAFT_PICK_COLUMNS)
+    assert result.loc[0, 'draft_round'] == 1
+    assert result.loc[0, 'draft_pick'] == 12
+
+
+def test_load_depth_charts_normalizes_rank_column(monkeypatch):
+    depth_frame = _FakePolarsFrame(
+        pd.DataFrame(
+            [
+                {
+                    'season': 2025,
+                    'gsis_id': 'p1',
+                    'player_name': 'Alpha Rookie',
+                    'pos': 'WR',
+                    'team': 'NYG',
+                    'depth_team_order': 2,
+                }
+            ]
+        )
+    )
+    fake_backend = SimpleNamespace(load_depth_charts=lambda seasons: depth_frame)
+    monkeypatch.setattr(backend, '_get_backend_module', lambda: fake_backend)
+
+    result = backend.load_depth_charts([2025])
+
+    assert list(result.columns) == list(backend.DEPTH_CHART_COLUMNS)
+    assert result.loc[0, 'depth_chart_rank'] == 2

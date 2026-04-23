@@ -37,6 +37,9 @@ from ffbayes.analysis.bayesian_player_model import (
     aggregate_season_player_table,
     build_posterior_projection_table,
 )
+from ffbayes.analysis.bayesian_vor_comparison import (
+    build_player_forecast_validation_summary,
+)
 from ffbayes.utils.json_serialization import dumps_strict_json
 
 POSITION_ORDER = ['QB', 'RB', 'WR', 'TE', 'DST', 'K']
@@ -70,6 +73,26 @@ CONSERVATIVE_WAIT_SURVIVAL_THRESHOLD = 0.74
 CONSERVATIVE_WAIT_LINEUP_LOSS_THRESHOLD = 0.28
 SECONDARY_QB_TE_VALUE_EDGE = 0.45
 METRIC_GLOSSARY = {
+    'posterior_mean': {
+        'label': 'Season total mean',
+        'summary': 'Posterior mean for season-total fantasy points.',
+        'detail': 'This is the main player forecast consumed by the draft board before roster urgency and wait-risk rules are applied.',
+    },
+    'posterior_rate_mean': {
+        'label': 'Rate when active',
+        'summary': 'Projected fantasy points per active game.',
+        'detail': 'This is the scoring-rate component of the two-part player forecast. It belongs in the inspector, not the main board.',
+    },
+    'posterior_games_mean': {
+        'label': 'Expected games',
+        'summary': 'Projected games played over the season.',
+        'detail': 'This is the availability component of the two-part player forecast. It helps explain why two players with similar weekly talent can have different season totals.',
+    },
+    'availability_rate_projection': {
+        'label': 'Availability rate',
+        'summary': 'Projected share of the season the player is available.',
+        'detail': 'Expected games divided by the season game count used by the player model. Lower values widen uncertainty and can drag down season-total value.',
+    },
     'draft_score': {
         'label': 'Board value score',
         'summary': 'Base player value before draft-slot action rules are applied.',
@@ -621,10 +644,16 @@ def _build_decision_evidence(
     backtest: dict[str, Any],
     analysis_provenance: dict[str, Any] | None,
     bayesian_vor_summary: dict[str, Any] | None = None,
+    player_forecast_validation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     bayesian_vor_summary = bayesian_vor_summary or _build_bayesian_vor_summary(
         decision_table, backtest
     )
+    player_forecast_validation = player_forecast_validation or {
+        'available': False,
+        'status': 'unavailable',
+        'reason_unavailable': 'No player forecast validation artifact was available for this board.',
+    }
     analysis_provenance = analysis_provenance or {}
     freshness_context = (
         analysis_provenance.get('backtest_inputs')
@@ -663,6 +692,11 @@ def _build_decision_evidence(
     return {
         'available': status != 'unavailable',
         'status': status,
+        'supported_model': {
+            'production_estimator': 'hierarchical_empirical_bayes',
+            'forecast_target': 'season_total_fantasy_points',
+            'decision_policy': 'posterior_contextual_policy',
+        },
         'headline': bayesian_vor_summary.get(
             'headline', 'Decision evidence is unavailable for this board.'
         ),
@@ -678,6 +712,7 @@ def _build_decision_evidence(
         ),
         'season_count': bayesian_vor_summary.get('season_count'),
         'holdout_years': bayesian_vor_summary.get('holdout_years', []),
+        'player_forecast_validation': player_forecast_validation,
         'limitations': limitations,
         'interpretation_guidance': [
             'Use this panel to judge whether the board has internal evidence, not to treat it as externally validated truth.',
@@ -1341,12 +1376,10 @@ def build_decision_table(
     computed_ceiling = (
         df['proj_points_mean'] + spread_from_std.fillna(fallback_spread) * 1.25
     )
-    df['proj_points_floor'] = pd.to_numeric(
-        df.get('proj_points_floor'), errors='coerce'
-    ).combine_first(computed_floor)
-    df['proj_points_ceiling'] = pd.to_numeric(
-        df.get('proj_points_ceiling'), errors='coerce'
-    ).combine_first(computed_ceiling)
+    existing_floor = pd.to_numeric(df.get('proj_points_floor'), errors='coerce')
+    existing_ceiling = pd.to_numeric(df.get('proj_points_ceiling'), errors='coerce')
+    df['proj_points_floor'] = existing_floor.fillna(computed_floor)
+    df['proj_points_ceiling'] = existing_ceiling.fillna(computed_ceiling)
 
     # Replacement and starter baselines depend on league structure.
     starter_slots = settings.starters_by_position()
@@ -2079,6 +2112,12 @@ def _build_war_room_visuals(
 
     return {
         'schema_version': 'war_room_visuals_v1',
+        'supported_model': {
+            'production_estimator': 'hierarchical_empirical_bayes',
+            'forecast_target': 'season_total_fantasy_points',
+            'validation_status': decision_evidence.get('player_forecast_validation', {})
+            .get('status', 'unknown'),
+        },
         'contextual': {'key': 'contextual_score', 'label': contextual_label},
         'baseline': {'key': 'baseline_score', 'label': baseline_label},
         'timing_frontier': {
@@ -2883,6 +2922,7 @@ def build_dashboard_payload(
     source_freshness: pd.DataFrame,
     league_settings: LeagueSettings,
     backtest: dict[str, Any] | None = None,
+    player_forecast_validation: dict[str, Any] | None = None,
     context: DraftContext | None = None,
     scoring_presets: dict[str, Any] | None = None,
     analysis_provenance: dict[str, Any] | None = None,
@@ -2946,6 +2986,7 @@ def build_dashboard_payload(
         backtest,
         analysis_provenance,
         bayesian_vor_summary=bayesian_vor_summary,
+        player_forecast_validation=player_forecast_validation,
     )
     selected_player = (
         _pick_first_row(recommendations['player_name'])
@@ -2998,14 +3039,20 @@ def build_dashboard_payload(
         'source_freshness': source_freshness.to_dict(orient='records'),
         'analysis_provenance': analysis_provenance,
         'decision_evidence': decision_evidence,
+        'player_forecast_validation': player_forecast_validation
+        or {
+            'available': False,
+            'status': 'unavailable',
+            'reason_unavailable': 'No player forecast validation artifact was available for this board.',
+        },
         'war_room_visuals': war_room_visuals,
         'backtest': backtest,
         'supporting_math': _dashboard_supporting_math(decision_table),
         'metric_glossary': METRIC_GLOSSARY,
         'model_overview': {
-            'headline': 'The draft board uses posterior player projections plus a starter-first decision policy.',
+            'headline': 'The draft board uses season-total posterior projections plus a starter-first decision policy.',
             'plain_english': [
-                'Each player starts with a posterior mean, floor, ceiling, and uncertainty estimate built from historical player performance plus local feature signals.',
+                'Each player starts with a season-total posterior built from scoring-rate and availability components, then local context such as team change and rookie inputs updates the draft-facing estimate.',
                 'The board value score is a clean posterior-based ranking, and the live recommendation layer separately decides whether to pick now or wait based on starter urgency and survival risk.',
                 'The simple VOR view is still available as a frozen baseline through replacement delta and rank-gap summaries.',
             ],
@@ -3013,6 +3060,10 @@ def build_dashboard_payload(
                 'This is still a decision policy layered on posterior player estimates, not a full structural model of the entire draft room.',
                 'Backtests here are internal holdout seasons and should be treated as directional evidence, not definitive proof.',
             ],
+            'supported_model': {
+                'production_estimator': 'hierarchical_empirical_bayes',
+                'validation_scope': 'rolling_internal_holdout',
+            },
         },
         'bayesian_vor_summary': bayesian_vor_summary,
     }
@@ -3418,7 +3469,7 @@ def export_dashboard_html(
             resolved_generated_label = None
     if resolved_generated_label is None:
         resolved_generated_label = datetime.now().strftime('%Y-%m-%d %H:%M')
-    html = """
+    html = r"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5188,6 +5239,12 @@ def export_dashboard_html(
         } else if (Number(row.upside_score) > 0.70) {
           reasons.push(`brings strong upside if you want ceiling`);
         }
+        if (Number(row.posterior_games_mean) > 0 && Number(row.posterior_rate_mean) > 0) {
+          reasons.push(`projects for about ${formatNumber(row.posterior_rate_mean)} points when active across ${formatNumber(row.posterior_games_mean)} games`);
+        }
+        if (Number(row.rookie_draft_pick) > 0) {
+          reasons.push(`has rookie context shaped by draft capital and current depth-chart opportunity`);
+        }
         return `${row.player_name} is recommended because ${reasons.slice(0, 3).join(', ')}.`.replace(' because .', '.');
       }
 
@@ -5613,6 +5670,24 @@ def export_dashboard_html(
             </div>
           </details>
           <details>
+            <summary>Projection breakdown</summary>
+            <div class="details-body">
+              <div class="metric-grid">
+                <div class="metric"><span class="label">Season total mean</span><span class="value">${formatNumber(row.posterior_mean || row.proj_points_mean)}</span></div>
+                <div class="metric"><span class="label">Rate when active</span><span class="value">${formatNumber(row.posterior_rate_mean)}</span></div>
+                <div class="metric"><span class="label">Expected games</span><span class="value">${formatNumber(row.posterior_games_mean)}</span></div>
+                <div class="metric"><span class="label">Availability rate</span><span class="value">${formatPercent(row.availability_rate_projection)}</span></div>
+                <div class="metric"><span class="label">Current team</span><span class="value">${row.current_team || row.team || 'n/a'}</span></div>
+                <div class="metric"><span class="label">Team change</span><span class="value">${Number(row.team_change) > 0 ? 'yes' : 'no'}</span></div>
+              </div>
+              ${(Number(row.rookie_draft_pick) > 0 || Number(row.depth_chart_rank) > 0 || Number(row.rookie_combine_score)) ? `
+                <div class="summary-box">
+                  Rookie/current-role context: draft pick ${row.rookie_draft_pick || 'n/a'}, depth rank ${row.depth_chart_rank || 'n/a'}, combine signal ${formatNumber(row.rookie_combine_score)}.
+                </div>
+              ` : ''}
+            </div>
+          </details>
+          <details>
             <summary>Contextual vs baseline</summary>
             <div class="details-body">
               ${comparative.available ? `
@@ -5679,6 +5754,7 @@ def export_dashboard_html(
       function renderModelNotes(boardState) {
         const modelOverview = data.model_overview || {};
         const decisionEvidence = data.decision_evidence || {};
+        const playerForecastValidation = data.player_forecast_validation || decisionEvidence.player_forecast_validation || {};
         const analysisProvenance = data.analysis_provenance || {};
         const publishProvenance = data.publish_provenance || {};
         const analysisFreshness = analysisProvenance.overall_freshness || decisionEvidence.freshness || {};
@@ -5703,58 +5779,103 @@ def export_dashboard_html(
             <div class="metric"><span class="label">Winner</span><span class="value">${decisionEvidence.winner || 'n/a'}</span></div>
             <div class="metric"><span class="label">Mean lineup delta</span><span class="value">${formatNumber(decisionEvidence.delta_mean_lineup_points)}</span></div>
           </div>
+          <div class="metric-grid">
+            <div class="metric"><span class="label">Forecast validation</span><span class="value">${playerForecastValidation.status || 'unknown'}</span></div>
+            <div class="metric"><span class="label">Forecast MAE</span><span class="value">${formatNumber((((playerForecastValidation.overall_forecast || {}).mae)))}</span></div>
+            <div class="metric"><span class="label">Forecast rank corr</span><span class="value">${formatNumber((((playerForecastValidation.overall_forecast || {}).spearman_rank_correlation)))}</span></div>
+            <div class="metric"><span class="label">80% interval coverage</span><span class="value">${formatPercent(((((playerForecastValidation.overall_forecast || {}).calibration || {}).interval_80_coverage)))}</span></div>
+          </div>
           ${renderFreshnessNotice(decisionEvidence.freshness || {})}
+          <div class="tiny">First view stays compact. Expand detailed evidence only when you need season-by-season or disagreement detail.</div>
           <div class="board-table-wrap" style="max-height: 220px;">
             <table>
               <thead>
-                <tr><th>Strategy</th><th>Mean lineup points</th><th>Seasons</th></tr>
+                <tr><th>Slice</th><th>Players</th><th>MAE</th><th>Rank corr</th></tr>
               </thead>
               <tbody>
-                ${backtestRows.map((row) => `
+                ${(playerForecastValidation.cohort_slices || []).map((row) => `
                   <tr>
-                    <td>${row.strategy}</td>
-                    <td>${formatNumber(row.mean_lineup_points)}</td>
-                    <td>${row.season_count ?? 'n/a'}</td>
+                    <td>${row.slice}</td>
+                    <td>${row.player_count}</td>
+                    <td>${formatNumber(row.mae)}</td>
+                    <td>${formatNumber(row.spearman_rank_correlation)}</td>
                   </tr>
-                `).join('') || '<tr><td colspan="3" class="empty">No strategy rows available.</td></tr>'}
+                `).join('') || '<tr><td colspan="4" class="empty">No cohort validation rows are available.</td></tr>'}
               </tbody>
             </table>
           </div>
-          <div class="board-table-wrap" style="max-height: 220px;">
-            <table>
-              <thead>
-                <tr><th>Year</th><th>Board value score</th><th>Simple VOR proxy</th><th>Delta</th></tr>
-              </thead>
-              <tbody>
-                ${(decisionEvidence.season_rows || []).map((row) => `
-                  <tr>
-                    <td>${row.holdout_year}</td>
-                    <td>${formatNumber(row.draft_score_lineup_points)}</td>
-                    <td>${formatNumber(row.historical_vor_proxy_lineup_points)}</td>
-                    <td>${formatNumber(row.delta_lineup_points)}</td>
-                  </tr>
-                `).join('') || '<tr><td colspan="4" class="empty">No season-level rows available.</td></tr>'}
-              </tbody>
-            </table>
-          </div>
-          <div class="board-table-wrap" style="max-height: 220px;">
-            <table>
-              <thead>
-                <tr><th>Player</th><th>Pos</th><th>Draft rank</th><th>VOR rank</th><th>Gap</th></tr>
-              </thead>
-              <tbody>
-                ${(decisionEvidence.top_disagreements || []).map((row) => `
-                  <tr>
-                    <td>${row.player_name}</td>
-                    <td>${row.position}</td>
-                    <td>${row.draft_rank}</td>
-                    <td>${row.simple_vor_rank}</td>
-                    <td>${row.rank_gap_vs_vor}</td>
-                  </tr>
-                `).join('') || '<tr><td colspan="5" class="empty">No disagreement rows available.</td></tr>'}
-              </tbody>
-            </table>
-          </div>
+          <details>
+            <summary>Detailed evidence</summary>
+            <div class="details-body">
+              <div class="summary-box">Use the validation slice table above for a quick read. These tables are the slower audit trail.</div>
+              <details>
+                <summary>Backtest strategy summary</summary>
+                <div class="details-body">
+                  <div class="board-table-wrap" style="max-height: 220px;">
+                    <table>
+                      <thead>
+                        <tr><th>Strategy</th><th>Mean lineup points</th><th>Seasons</th></tr>
+                      </thead>
+                      <tbody>
+                        ${backtestRows.map((row) => `
+                          <tr>
+                            <td>${row.strategy}</td>
+                            <td>${formatNumber(row.mean_lineup_points)}</td>
+                            <td>${row.season_count ?? 'n/a'}</td>
+                          </tr>
+                        `).join('') || '<tr><td colspan="3" class="empty">No strategy rows available.</td></tr>'}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </details>
+              <details>
+                <summary>Season-by-season deltas</summary>
+                <div class="details-body">
+                  <div class="board-table-wrap" style="max-height: 220px;">
+                    <table>
+                      <thead>
+                        <tr><th>Year</th><th>Board value score</th><th>Simple VOR proxy</th><th>Delta</th></tr>
+                      </thead>
+                      <tbody>
+                        ${(decisionEvidence.season_rows || []).map((row) => `
+                          <tr>
+                            <td>${row.holdout_year}</td>
+                            <td>${formatNumber(row.draft_score_lineup_points)}</td>
+                            <td>${formatNumber(row.historical_vor_proxy_lineup_points)}</td>
+                            <td>${formatNumber(row.delta_lineup_points)}</td>
+                          </tr>
+                        `).join('') || '<tr><td colspan="4" class="empty">No season-level rows available.</td></tr>'}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </details>
+              <details>
+                <summary>Contextual vs baseline disagreements</summary>
+                <div class="details-body">
+                  <div class="board-table-wrap" style="max-height: 220px;">
+                    <table>
+                      <thead>
+                        <tr><th>Player</th><th>Pos</th><th>Draft rank</th><th>VOR rank</th><th>Gap</th></tr>
+                      </thead>
+                      <tbody>
+                        ${(decisionEvidence.top_disagreements || []).map((row) => `
+                          <tr>
+                            <td>${row.player_name}</td>
+                            <td>${row.position}</td>
+                            <td>${row.draft_rank}</td>
+                            <td>${row.simple_vor_rank}</td>
+                            <td>${row.rank_gap_vs_vor}</td>
+                          </tr>
+                        `).join('') || '<tr><td colspan="5" class="empty">No disagreement rows available.</td></tr>'}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </details>
+            </div>
+          </details>
           ${(decisionEvidence.limitations || []).length ? `<div class="notice">${decisionEvidence.limitations.join(' ')}</div>` : ''}
         ` : `
           <div class="notice">${decisionEvidence.reason_unavailable || decisionEvidence.headline || 'No decision evidence is available in this payload.'}</div>
@@ -6366,6 +6487,11 @@ def build_draft_decision_artifacts(
     scoring_presets = _build_scoring_preset_bundle(player_frame, settings, context)
     analysis_provenance = analysis_provenance or {}
     backtest: dict[str, Any] = {}
+    player_forecast_validation: dict[str, Any] = {
+        'available': False,
+        'status': 'unavailable',
+        'reason_unavailable': 'No season history was available for player forecast validation.',
+    }
     if season_history is not None and not season_history.empty:
         if require_fresh_decision_evidence:
             backtest = run_draft_backtest(season_history, settings)
@@ -6383,6 +6509,23 @@ def build_draft_decision_artifacts(
                 analysis_provenance = _mark_backtest_unavailable(
                     analysis_provenance, reason
                 )
+        try:
+            validation_summary = build_player_forecast_validation_summary(
+                season_history
+            )
+            player_forecast_validation = {
+                'available': True,
+                'status': 'available',
+                **validation_summary,
+            }
+        except Exception as exc:
+            player_forecast_validation = {
+                'available': False,
+                'status': 'unavailable',
+                'reason_unavailable': f'{type(exc).__name__}: {exc}',
+                'forecast_target': 'held_out_season_fantasy_points',
+                'validation_scope': 'rolling_internal_holdout',
+            }
     elif require_fresh_decision_evidence:
         analysis_provenance = _mark_backtest_unavailable(
             analysis_provenance,
@@ -6396,6 +6539,7 @@ def build_draft_decision_artifacts(
         source_freshness,
         settings,
         backtest=backtest,
+        player_forecast_validation=player_forecast_validation,
         context=context,
         scoring_presets=scoring_presets,
         analysis_provenance=analysis_provenance,
@@ -6431,8 +6575,8 @@ def _stage_runtime_dashboard_shortcuts(
     """Copy dashboard artifacts into a shallow runtime location.
 
     Canonical, versioned artifacts stay under:
-    `<runtime_root>/runs/<year>/pre_draft/artifacts/draft_strategy/`, where
-    `<runtime_root>` defaults to `~/ProjectsRuntime/ffbayes`.
+    `<runtime_root>/seasons/<year>/draft_strategy/`, where `<runtime_root>`
+    defaults to `~/ProjectsRuntime/ffbayes`.
 
     For convenience, we also stage stable entrypoints:
     - runtime root: `<runtime_root>/dashboard/index.html`
@@ -6442,14 +6586,8 @@ def _stage_runtime_dashboard_shortcuts(
     from ffbayes.utils.path_constants import get_project_root, get_runtime_root
 
     shortcuts: dict[str, Path] = {}
-    canonical_artifact_dir = (
-        get_runtime_root()
-        / 'runs'
-        / str(year)
-        / 'pre_draft'
-        / 'artifacts'
-        / 'draft_strategy'
-    )
+    runtime_root = get_runtime_root()
+    canonical_artifact_dir = runtime_root / 'seasons' / str(year) / 'draft_strategy'
     canonical_html = (canonical_artifact_dir / f'draft_board_{year}.html').resolve()
     canonical_payload = (
         canonical_artifact_dir / f'dashboard_payload_{year}.json'
@@ -6460,19 +6598,25 @@ def _stage_runtime_dashboard_shortcuts(
     ):
         return shortcuts
 
+    def _prune_shortcut_surface(
+        target_dir: Path, allowed_names: set[str]
+    ) -> None:
+        for child in target_dir.iterdir():
+            if child.name in allowed_names:
+                continue
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink(missing_ok=True)
+
     def _write_payload_shortcut(target_path: Path) -> None:
         payload = json.loads(payload_path.read_text(encoding='utf-8'))
         target_path.write_text(dumps_strict_json(payload, indent=2), encoding='utf-8')
 
     try:
-        runtime_root = get_runtime_root()
         dashboard_dir = runtime_root / 'dashboard'
         dashboard_dir.mkdir(parents=True, exist_ok=True)
-
-        for legacy_path in list(dashboard_dir.glob('draft_board_*.html')) + list(
-            dashboard_dir.glob('dashboard_payload_*.json')
-        ):
-            legacy_path.unlink(missing_ok=True)
+        _prune_shortcut_surface(dashboard_dir, {'index.html', 'dashboard_payload.json'})
 
         index_path = dashboard_dir / 'index.html'
         if html_path.exists() and html_path.resolve() != index_path.resolve():
@@ -6496,11 +6640,9 @@ def _stage_runtime_dashboard_shortcuts(
         project_root = get_project_root()
         repo_dashboard_dir = project_root / 'dashboard'
         repo_dashboard_dir.mkdir(parents=True, exist_ok=True)
-
-        for legacy_path in list(repo_dashboard_dir.glob('draft_board_*.html')) + list(
-            repo_dashboard_dir.glob('dashboard_payload_*.json')
-        ):
-            legacy_path.unlink(missing_ok=True)
+        _prune_shortcut_surface(
+            repo_dashboard_dir, {'index.html', 'dashboard_payload.json'}
+        )
 
         repo_index = repo_dashboard_dir / 'index.html'
         if html_path.exists() and html_path.resolve() != repo_index.resolve():
@@ -6545,17 +6687,41 @@ def save_draft_decision_artifacts(
     workbook_path = output_dir / f'draft_board_{filename_prefix}{year}.xlsx'
     payload_path = dashboard_dir / f'dashboard_payload_{filename_prefix}{year}.json'
     html_path = dashboard_dir / f'draft_board_{filename_prefix}{year}.html'
-    compat_path = dashboard_dir / f'draft_board_{filename_prefix}{year}.json'
     backtest_years = artifacts.backtest.get('holdout_years', [])
     backtest_suffix = (
         f'{min(backtest_years)}-{max(backtest_years)}' if backtest_years else str(year)
+    )
+    validation_holdout_years = (
+        artifacts.dashboard_payload.get('player_forecast_validation', {}).get(
+            'holdout_years', []
+        )
+        or backtest_years
+    )
+    validation_suffix = (
+        f'{min(validation_holdout_years)}-{max(validation_holdout_years)}'
+        if validation_holdout_years
+        else str(year)
     )
     backtest_path = (
         output_dir / f'draft_decision_backtest_{filename_prefix}{backtest_suffix}.json'
     )
     model_output_dir = output_dir / 'model_outputs'
     model_output_dir.mkdir(parents=True, exist_ok=True)
+    player_forecast_dir = model_output_dir / 'player_forecast'
+    player_forecast_dir.mkdir(parents=True, exist_ok=True)
     comparison_path = model_output_dir / f'current_year_model_comparison_{year}.json'
+    player_forecast_path = player_forecast_dir / f'player_forecast_{year}.json'
+    player_forecast_diagnostics_path = (
+        player_forecast_dir / f'player_forecast_diagnostics_{year}.json'
+    )
+    player_forecast_validation_path = (
+        player_forecast_dir / f'player_forecast_validation_{validation_suffix}.json'
+    )
+    validation_dir = diagnostics_dir / 'validation'
+    validation_dir.mkdir(parents=True, exist_ok=True)
+    validation_summary_path = (
+        validation_dir / f'player_forecast_validation_summary_{validation_suffix}.json'
+    )
 
     export_workbook(
         artifacts.decision_table,
@@ -6571,6 +6737,7 @@ def save_draft_decision_artifacts(
     payload_path.write_text(
         dumps_strict_json(artifacts.dashboard_payload, indent=2), encoding='utf-8'
     )
+    canonical_payload = json.loads(payload_path.read_text(encoding='utf-8'))
     export_dashboard_html(
         artifacts.decision_table,
         artifacts.recommendations,
@@ -6578,10 +6745,7 @@ def save_draft_decision_artifacts(
         artifacts.league_settings,
         backtest=artifacts.backtest,
         source_freshness=artifacts.source_freshness,
-        dashboard_payload=artifacts.dashboard_payload,
-    )
-    compat_path.write_text(
-        dumps_strict_json(artifacts.dashboard_payload, indent=2), encoding='utf-8'
+        dashboard_payload=canonical_payload,
     )
     if artifacts.backtest:
         backtest_path.write_text(
@@ -6606,14 +6770,126 @@ def save_draft_decision_artifacts(
     comparison_path.write_text(
         dumps_strict_json(comparison_payload, indent=2), encoding='utf-8'
     )
+    forecast_columns = [
+        column
+        for column in [
+            'player_name',
+            'position',
+            'proj_points_mean',
+            'proj_points_floor',
+            'proj_points_ceiling',
+            'posterior_mean',
+            'posterior_std',
+            'posterior_rate_mean',
+            'posterior_rate_std',
+            'posterior_games_mean',
+            'posterior_games_std',
+            'availability_rate_projection',
+            'replacement_baseline',
+            'starter_baseline',
+            'replacement_delta',
+            'starter_delta',
+            'posterior_prob_beats_replacement',
+            'team_change',
+            'current_team',
+            'rookie_draft_round',
+            'rookie_draft_pick',
+            'rookie_combine_score',
+            'depth_chart_rank',
+        ]
+        if column in artifacts.decision_table.columns
+    ]
+    player_forecast_payload = {
+        'schema_version': 'player_forecast_v1',
+        'season_year': int(year),
+        'forecast_target': 'season_total_fantasy_points',
+        'forecast_method': 'empirical_bayes_rate_games_composition',
+        'players': artifacts.decision_table[forecast_columns].to_dict(orient='records'),
+    }
+    player_forecast_path.write_text(
+        dumps_strict_json(player_forecast_payload, indent=2), encoding='utf-8'
+    )
+    player_forecast_diagnostics = {
+        'schema_version': 'player_forecast_diagnostics_v1',
+        'season_year': int(year),
+        'player_count': int(len(artifacts.decision_table)),
+        'mean_projection': float(
+            pd.to_numeric(
+                artifacts.decision_table.get('proj_points_mean'), errors='coerce'
+            ).mean()
+        )
+        if not artifacts.decision_table.empty
+        else 0.0,
+        'mean_posterior_std': float(
+            pd.to_numeric(
+                artifacts.decision_table.get('posterior_std'), errors='coerce'
+            ).mean()
+        )
+        if not artifacts.decision_table.empty
+        else 0.0,
+        'mean_rate_projection': float(
+            pd.to_numeric(
+                artifacts.decision_table.get('posterior_rate_mean'), errors='coerce'
+            ).mean()
+        )
+        if not artifacts.decision_table.empty
+        else 0.0,
+        'mean_games_projection': float(
+            pd.to_numeric(
+                artifacts.decision_table.get('posterior_games_mean'), errors='coerce'
+            ).mean()
+        )
+        if not artifacts.decision_table.empty
+        else 0.0,
+    }
+    player_forecast_diagnostics_path.write_text(
+        dumps_strict_json(player_forecast_diagnostics, indent=2), encoding='utf-8'
+    )
+    player_forecast_validation = artifacts.dashboard_payload.get(
+        'player_forecast_validation',
+        {
+            'available': False,
+            'status': 'unavailable',
+            'reason_unavailable': 'No player forecast validation payload was available for this export.',
+        },
+    )
+    player_forecast_validation_path.write_text(
+        dumps_strict_json(player_forecast_validation, indent=2), encoding='utf-8'
+    )
+    validation_summary_path.write_text(
+        dumps_strict_json(
+            {
+                'schema_version': 'player_forecast_validation_summary_v1',
+                'season_year': int(year),
+                'holdout_years': player_forecast_validation.get(
+                    'holdout_years', backtest_years
+                ),
+                'overall_forecast': player_forecast_validation.get(
+                    'overall_forecast', {}
+                ),
+                'component_diagnostics': player_forecast_validation.get(
+                    'component_diagnostics', {}
+                ),
+                'cohort_slices': player_forecast_validation.get('cohort_slices', []),
+                'position_slices': player_forecast_validation.get(
+                    'position_slices', []
+                ),
+            },
+            indent=2,
+        ),
+        encoding='utf-8',
+    )
 
     shortcuts = _stage_runtime_dashboard_shortcuts(html_path, payload_path, year)
     return {
         'workbook_path': workbook_path,
         'payload_path': payload_path,
         'html_path': html_path,
-        'compat_path': compat_path,
         'backtest_path': backtest_path,
         'comparison_path': comparison_path,
+        'player_forecast_path': player_forecast_path,
+        'player_forecast_diagnostics_path': player_forecast_diagnostics_path,
+        'player_forecast_validation_path': player_forecast_validation_path,
+        'validation_summary_path': validation_summary_path,
         **shortcuts,
     }

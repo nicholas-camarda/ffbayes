@@ -6,7 +6,6 @@ import random
 from datetime import date, datetime
 from functools import partial
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -25,9 +24,6 @@ current_year = datetime.now().year
 QUICK_TEST = os.getenv('QUICK_TEST', 'false').lower() == 'true'
 USE_MULTIPROCESSING = os.getenv('USE_MULTIPROCESSING', 'true').lower() == 'true'
 MAX_CORES = int(os.getenv('MAX_CORES', str(mp.cpu_count())))
-
-# Hybrid model predictions fallback store
-HYBRID_PREDICTIONS = None
 
 if QUICK_TEST:
     print("🚀 QUICK TEST MODE ENABLED")
@@ -71,41 +67,6 @@ def get_combined_data(directory_path):
     except Exception as e:
         print(f"   ❌ Error loading unified dataset: {e}")
         raise ValueError(f"Failed to load unified dataset: {e}")
-
-
-def load_hybrid_predictions() -> dict:
-    """Load Hybrid MC Bayesian predictions for fallback sampling."""
-    try:
-        from ffbayes.utils.path_constants import get_hybrid_mc_dir
-        hyb_dir = get_hybrid_mc_dir(current_year)
-        hyb_path = hyb_dir / 'hybrid_model_results.json'
-        if not hyb_path.exists():
-            print(f"   ⚠️  Hybrid predictions not found at {hyb_path}")
-            return {}
-        import json
-        with open(hyb_path, 'r') as f:
-            data = json.load(f)
-        print(f"   ✅ Loaded Hybrid MC predictions for {len(data)} players")
-        return data
-    except Exception as e:
-        print(f"   ⚠️  Failed to load Hybrid MC predictions: {e}")
-        return {}
-
-
-def sample_from_hybrid(player_name: str) -> Optional[float]:
-    """Sample a score for a player from Hybrid MC predictive distribution."""
-    global HYBRID_PREDICTIONS
-    if not HYBRID_PREDICTIONS or player_name not in HYBRID_PREDICTIONS:
-        return None
-    pdata = HYBRID_PREDICTIONS[player_name]
-    mc = pdata.get('monte_carlo', {})
-    mean = mc.get('mean')
-    std = mc.get('adjusted_std') or mc.get('std')
-    if mean is None or std is None:
-        return None
-    # Draw from Normal(mean, std), truncated at 0
-    draw = float(np.random.normal(mean, max(std, 1e-6)))
-    return max(0.0, draw)
 
 
 def find_latest_team_file() -> str:
@@ -192,7 +153,7 @@ def make_team(team, db):
     my_team_names = set(team['Name'].tolist())
     valid_positions = set(['QB', 'WR', 'TE', 'RB', 'DEF', 'FLEX', 'BE'])
     
-    # Handle both 'Position' and 'position' column names for compatibility
+    # Normalize historical-table schemas that may surface either casing.
     position_col = 'Position' if 'Position' in db.columns else 'position'
     
     # Try exact matching first
@@ -218,7 +179,7 @@ def make_team(team, db):
         )
     
     # Remove duplicates and select only the required columns
-    # Handle different column names for compatibility
+    # Normalize the supported historical schema to the column names used here.
     position_col = 'Position' if 'Position' in filtered_db.columns else 'position'
     team_col = 'Tm' if 'Tm' in filtered_db.columns else 'recent_team'
     
@@ -257,7 +218,7 @@ def validate_team(db_team, my_team):
     """
     ### Check which members of my team actually have historical data to simulate on ###
     # get the column names of team using team.dtype.names
-    # Handle both 'Position' and 'position' column names for compatibility
+    # Normalize the historical-table position column before comparison.
     position_col = 'Position' if 'Position' in db_team.columns else 'position'
     unique_teams = db_team.loc[:, ['Name', position_col, 'Tm']].drop_duplicates()
 
@@ -408,16 +369,7 @@ def simulate_batch(team, db, years, batch_size, batch_id=0):
         player_scores = {}
         
         for player in team.itertuples():
-            try:
-                score = get_score_for_player(db, player, years)
-            except Exception:
-                # Fallback to Hybrid MC predictive distribution
-                fallback_score = sample_from_hybrid(player.Name)
-                if fallback_score is None:
-                    # If still unavailable, propagate error
-                    raise
-                print(f"   🔁 Fallback (Hybrid MC) used for {player.Name}: {fallback_score:.2f}")
-                score = fallback_score
+            score = get_score_for_player(db, player, years)
             team_score += score
             player_scores[player.Name] = score
         
@@ -496,7 +448,7 @@ def simulate(team, db, years, exps=10):
     # Initialize tracking variables
     total_operations = exps * len(team)
     successful_scores = 0
-    fallback_scores = 0
+    zero_scores = 0
     errors = 0
     simulation_scores = []
     
@@ -518,23 +470,17 @@ def simulate(team, db, years, exps=10):
             for player in team.itertuples():
                 try:
                     score = get_score_for_player(db, player, years)
-                    # Track success/fallback
+                    # Track success/zero-score cases
                     if score > 0:
                         successful_scores += 1
                     else:
-                        fallback_scores += 1
+                        zero_scores += 1
                 except Exception as e:
-                    # Fallback to Hybrid MC predictive distribution
-                    fallback_score = sample_from_hybrid(player.Name)
-                    if fallback_score is None:
-                        logging.warning(f"Error scoring {player.Name} and no Hybrid fallback: {e}")
-                        player_scores[player.Name] = 0
-                        errors += 1
-                        bar()
-                        continue
-                    print(f"   🔁 Fallback (Hybrid MC) used for {player.Name}: {fallback_score:.2f}")
-                    score = fallback_score
-                    fallback_scores += 1
+                    logging.warning(f"Error scoring {player.Name}: {e}")
+                    player_scores[player.Name] = 0
+                    errors += 1
+                    bar()
+                    continue
                 
                 team_score += score
                 player_scores[player.Name] = score
@@ -566,7 +512,7 @@ def simulate(team, db, years, exps=10):
     print(f"   Total time: {total_time:.1f}s")
     print(f"   Average time per simulation: {total_time/exps:.2f}s")
     print(f"   Successful scores: {successful_scores:,}")
-    print(f"   Fallback scores: {fallback_scores:,}")
+    print(f"   Zero scores: {zero_scores:,}")
     print(f"   Average team score: {avg_score:.1f}")
     
     return outcome
@@ -650,10 +596,6 @@ def main(args=None):
     global combined_data
     data_dir = interface.get_data_directory(args)
     combined_data = interface.handle_errors(get_combined_data, directory_path=str(data_dir))
-    
-    # Load Hybrid MC predictions for fallback
-    global HYBRID_PREDICTIONS
-    HYBRID_PREDICTIONS = load_hybrid_predictions()
     
     team = interface.handle_errors(make_team, team=my_team, db=combined_data)
     logger.info(f"Found {len(team)} players with historical data")

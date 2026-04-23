@@ -53,8 +53,8 @@ def _sync_stable_data(current_year: int) -> dict[str, list[str]]:
     from ffbayes.utils.path_constants import (
         CLOUD_PROCESSED_DATA_DIR,
         CLOUD_RAW_DATA_DIR,
-        PROCESSED_DATA_DIR,
-        RAW_DATA_DIR,
+        PROCESSED_INPUTS_DIR,
+        RAW_INPUTS_DIR,
     )
 
     copied_raw: list[str] = []
@@ -66,26 +66,26 @@ def _sync_stable_data(current_year: int) -> dict[str, list[str]]:
     processed_snake_dir = CLOUD_PROCESSED_DATA_DIR / 'snake_draft_datasets'
     processed_unified_dir = CLOUD_PROCESSED_DATA_DIR / 'unified_dataset'
 
-    for file_path in sorted((RAW_DATA_DIR / 'season_datasets').glob('*.csv')):
+    for file_path in sorted((RAW_INPUTS_DIR / 'season_datasets').glob('*.csv')):
         copied_raw.append(_copy_file(file_path, raw_season_dir / file_path.name))
 
-    for file_path in sorted(RAW_DATA_DIR.glob('*.json')):
+    for file_path in sorted(RAW_INPUTS_DIR.glob('*.json')):
         copied_raw.append(
             _copy_file(file_path, raw_manifest_dir / _manifest_target_name(file_path, current_year))
         )
 
-    for file_path in sorted((PROCESSED_DATA_DIR / 'combined_datasets').glob('*season_modern.csv')):
+    for file_path in sorted((PROCESSED_INPUTS_DIR / 'combined_datasets').glob('*season_modern.csv')):
         copied_processed.append(
             _copy_file(file_path, processed_combined_dir / file_path.name)
         )
 
-    for file_path in sorted((PROCESSED_DATA_DIR / 'snake_draft_datasets').glob('*')):
+    for file_path in sorted((PROCESSED_INPUTS_DIR / 'snake_draft_datasets').glob('*')):
         if file_path.is_file():
             copied_processed.append(
                 _copy_file(file_path, processed_snake_dir / file_path.name)
             )
 
-    unified_dir = PROCESSED_DATA_DIR / 'unified_dataset'
+    unified_dir = PROCESSED_INPUTS_DIR / 'unified_dataset'
     unified_targets = {
         unified_dir / 'unified_dataset.csv': processed_unified_dir / f'unified_dataset_{current_year}.csv',
         unified_dir / 'unified_dataset.json': processed_unified_dir / f'unified_dataset_{current_year}.json',
@@ -107,7 +107,6 @@ def _publish_analysis_snapshot(current_year: int) -> dict[str, Any]:
         get_dashboard_html_path,
         get_dashboard_payload_path,
         get_draft_strategy_dir,
-        get_hybrid_mc_dir,
         get_pre_draft_diagnostics_dir,
         get_vor_strategy_dir,
     )
@@ -115,14 +114,12 @@ def _publish_analysis_snapshot(current_year: int) -> dict[str, Any]:
     snapshot_dir = get_cloud_analysis_snapshot_dir()
     dashboard_dir = snapshot_dir / 'dashboard'
     draft_strategy_dir = snapshot_dir / 'draft_strategy'
-    hybrid_dir = snapshot_dir / 'hybrid_mc_bayesian'
     vor_dir = snapshot_dir / 'vor_strategy'
     diagnostics_dir = snapshot_dir / 'diagnostics'
 
     for target_dir in (
         dashboard_dir,
         draft_strategy_dir,
-        hybrid_dir,
         vor_dir,
         diagnostics_dir,
     ):
@@ -149,12 +146,10 @@ def _publish_analysis_snapshot(current_year: int) -> dict[str, Any]:
             skip_names={
                 dashboard_html.name,
                 dashboard_payload.name,
-                f'draft_board_{current_year}.json',
             },
             skip_globs=('finalized_drafts/*_test.*',),
         )
     )
-    copied_analysis.extend(_copy_tree(get_hybrid_mc_dir(current_year), hybrid_dir))
     copied_analysis.extend(_copy_tree(get_vor_strategy_dir(current_year), vor_dir))
     copied_analysis.extend(
         _copy_tree(get_pre_draft_diagnostics_dir(current_year), diagnostics_dir)

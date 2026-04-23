@@ -53,11 +53,14 @@ def get_cloud_root() -> Path:
 BASE_DIR = get_project_root()
 RUNTIME_DIR = get_runtime_root()
 PROJECTS_ROOT_DIR = Path.home() / 'Projects'
-RUNTIME_DATA_DIR = RUNTIME_DIR / 'data'
-RAW_DATA_DIR = RUNTIME_DATA_DIR / 'raw'
-PROCESSED_DATA_DIR = RUNTIME_DATA_DIR / 'processed'
-RAW_SEASON_DATASETS_DIR = RAW_DATA_DIR / 'season_datasets'
-RAW_COMBINED_DATASETS_DIR = RAW_DATA_DIR / 'combined_datasets'
+INPUTS_DIR = RUNTIME_DIR / 'inputs'
+RAW_INPUTS_DIR = INPUTS_DIR / 'raw'
+PROCESSED_INPUTS_DIR = INPUTS_DIR / 'processed'
+RUNTIME_DATA_DIR = INPUTS_DIR
+RAW_DATA_DIR = RAW_INPUTS_DIR
+PROCESSED_DATA_DIR = PROCESSED_INPUTS_DIR
+RAW_SEASON_DATASETS_DIR = RAW_INPUTS_DIR / 'season_datasets'
+RAW_COMBINED_DATASETS_DIR = RAW_INPUTS_DIR / 'combined_datasets'
 RUNTIME_RESULTS_DIR = RUNTIME_DIR / 'results'
 RUNTIME_PLOTS_DIR = RUNTIME_DIR / 'plots'
 RUNTIME_DASHBOARD_DIR = RUNTIME_DIR / 'dashboard'
@@ -72,8 +75,7 @@ CONFIG_DIR = BASE_DIR / 'config'
 LOGS_DIR = RUNTIME_DIR / 'logs'
 PLOTS_DIR = RUNTIME_PLOTS_DIR
 
-# Data directories
-DATASETS_DIR = RUNTIME_DATA_DIR
+# Canonical local working input directories
 SEASON_DATASETS_DIR = RAW_SEASON_DATASETS_DIR
 COMBINED_DATASETS_DIR = PROCESSED_DATA_DIR / 'combined_datasets'
 SNAKE_DRAFT_DATASETS_DIR = PROCESSED_DATA_DIR / 'snake_draft_datasets'
@@ -96,7 +98,7 @@ def get_phase_name(phase: str | None = None) -> str:
 
 
 def get_run_root(year: int = None) -> Path:
-    """Get the root directory for a specific (pre-draft) run."""
+    """Get the canonical root directory for a specific season."""
     if year is None:
         env_year = os.getenv('FFBAYES_PIPELINE_YEAR')
         if env_year:
@@ -110,42 +112,42 @@ def get_run_root(year: int = None) -> Path:
 
         year = datetime.now().year
 
-    return RUNTIME_DIR / 'runs' / str(year) / 'pre_draft'
+    return RUNTIME_DIR / 'seasons' / str(year)
 
 
 def get_pre_draft_run_root(year: int = None) -> Path:
-    """Get the canonical pre-draft run root."""
+    """Return the canonical season root for the supported workflow."""
     return get_run_root(year)
 
 
 def get_pre_draft_artifacts_dir(year: int = None) -> Path:
-    """Get the canonical pre-draft artifacts directory."""
-    path = get_pre_draft_run_root(year) / 'artifacts'
+    """Get the canonical season output root for the supported workflow."""
+    path = get_pre_draft_run_root(year)
     ensure_dir_exists(path)
     return path
 
 
 def get_pre_draft_diagnostics_dir(year: int = None) -> Path:
-    """Get the canonical pre-draft diagnostics directory."""
+    """Get the canonical diagnostics directory for a season."""
     path = get_pre_draft_run_root(year) / 'diagnostics'
     ensure_dir_exists(path)
     return path
 
 
 def get_results_dir(year: int = None) -> Path:
-    """Get the canonical results root for a given year (pre-draft artifacts)."""
+    """Get the canonical season output root for a given year."""
     path = get_pre_draft_artifacts_dir(year)
     ensure_dir_exists(path)
     return path
 
 
 def get_pre_draft_dir(year: int = None) -> Path:
-    """Get the canonical pre-draft output directory."""
+    """Return the canonical season output root for the supported workflow."""
     return get_pre_draft_artifacts_dir(year)
 
 
 def get_pre_draft_analysis_dir(year: int = None) -> Path:
-    """Get pre-draft analysis directory (for features CSVs, etc.)."""
+    """Return the season-scoped analysis support directory."""
     path = get_pre_draft_dir(year) / 'analysis'
     ensure_dir_exists(path)
     return path
@@ -155,13 +157,6 @@ def get_pre_draft_analysis_dir(year: int = None) -> Path:
 def get_vor_strategy_dir(year: int = None) -> Path:
     """Get VOR strategy directory."""
     path = get_pre_draft_artifacts_dir(year) / 'vor_strategy'
-    ensure_dir_exists(path)
-    return path
-
-
-def get_hybrid_mc_dir(year: int = None) -> Path:
-    """Get Hybrid MC results directory."""
-    path = get_pre_draft_artifacts_dir(year) / 'hybrid_mc_bayesian'
     ensure_dir_exists(path)
     return path
 
@@ -250,14 +245,14 @@ def get_validation_dir(year: int = None) -> Path:
 
 
 def get_team_aggregation_dir(year: int = None) -> Path:
-    """Get team aggregation directory (pre-draft artifacts tree)."""
+    """Return the season-scoped team aggregation directory."""
     path = get_results_dir(year) / 'team_aggregation'
     ensure_dir_exists(path)
     return path
 
 
 def get_monte_carlo_dir(year: int = None) -> Path:
-    """Get Monte Carlo results directory (pre-draft artifacts tree)."""
+    """Return the season-scoped Monte Carlo results directory."""
     path = get_results_dir(year) / 'montecarlo_results'
     ensure_dir_exists(path)
     return path
@@ -272,7 +267,7 @@ def get_plots_dir(year: int = None) -> Path:
 
 
 def get_pre_draft_plots_dir(year: int = None) -> Path:
-    """Get pre-draft plots directory."""
+    """Return the season-scoped diagnostics directory."""
     return get_pre_draft_diagnostics_dir(year)
 
 
@@ -308,7 +303,7 @@ def get_teams_dir() -> Path:
     explicit `--team-file` inputs or finalized draft artifacts instead of an
     implicit team-file home.
     """
-    return RAW_DATA_DIR / 'my_ff_teams'
+    return RAW_INPUTS_DIR / 'my_ff_teams'
 
 
 def get_logs_dir() -> Path:
@@ -320,7 +315,7 @@ def get_logs_dir() -> Path:
 
 def get_misc_datasets_dir() -> Path:
     """Get directory for user-managed raw helper datasets."""
-    path = RAW_DATA_DIR / 'misc-datasets'
+    path = RAW_INPUTS_DIR / 'misc-datasets'
     ensure_dir_exists(path)
     return path
 
@@ -389,6 +384,19 @@ def ensure_dir_exists(path: Path) -> Path:
     return path
 
 
+def reject_legacy_runtime_layout(runtime_root: Path | None = None) -> None:
+    """Fail closed when deprecated runtime-root siblings are still populated."""
+    root = runtime_root or get_runtime_root()
+    legacy_dirs = [root / 'data', root / 'datasets', root / 'runs']
+    existing = [path.name for path in legacy_dirs if path.exists()]
+    if existing:
+        raise RuntimeError(
+            'Legacy runtime directories are still present under '
+            f'{root}: {existing}. Remove them before continuing with the '
+            'supported `inputs/` and `seasons/` layout.'
+        )
+
+
 def get_relative_path(path: Path) -> str:
     """Get relative path from base directory."""
     try:
@@ -420,7 +428,7 @@ def get_unified_dataset_excel_path() -> Path:
 
 
 def get_unified_dataset_csv_path() -> Path:
-    """Get unified dataset CSV path (compatibility)."""
+    """Get the CSV companion to the canonical unified dataset JSON export."""
     # Ensure the directory exists before returning the path
     ensure_dir_exists(UNIFIED_DATASET_DIR)
     return UNIFIED_DATASET_DIR / 'unified_dataset.csv'
@@ -439,8 +447,10 @@ def get_latest_combined_dataset() -> Path:
 
 
 def get_bayesian_model_dir(year: int = None) -> Path:
-    """Get directory for Bayesian/Hybrid model outputs (pre-draft)."""
-    return get_hybrid_mc_dir(year)
+    """Get directory for canonical player-forecast outputs."""
+    path = get_draft_model_outputs_dir(year) / 'player_forecast'
+    ensure_dir_exists(path)
+    return path
 
 
 def create_all_required_directories(year: int = None) -> None:
@@ -458,12 +468,13 @@ def create_all_required_directories(year: int = None) -> None:
 
     print('📁 Creating all required directories...')
 
+    reject_legacy_runtime_layout(RUNTIME_DIR)
+
     # Core directories
     ensure_dir_exists(LOGS_DIR)
-    ensure_dir_exists(RUNTIME_DATA_DIR)
-    ensure_dir_exists(RAW_DATA_DIR)
-    ensure_dir_exists(PROCESSED_DATA_DIR)
-    ensure_dir_exists(DATASETS_DIR)
+    ensure_dir_exists(INPUTS_DIR)
+    ensure_dir_exists(RAW_INPUTS_DIR)
+    ensure_dir_exists(PROCESSED_INPUTS_DIR)
     ensure_dir_exists(RAW_SEASON_DATASETS_DIR)
     ensure_dir_exists(RAW_COMBINED_DATASETS_DIR)
     ensure_dir_exists(SEASON_DATASETS_DIR)
@@ -473,14 +484,13 @@ def create_all_required_directories(year: int = None) -> None:
     ensure_dir_exists(RUNTIME_DASHBOARD_DIR)
     ensure_dir_exists(REPO_DASHBOARD_DIR)
 
-    # Year-based pre-draft directories
+    # Year-based season directories
     ensure_dir_exists(get_pre_draft_run_root(year))
-    ensure_dir_exists(get_pre_draft_artifacts_dir(year))
     ensure_dir_exists(get_pre_draft_diagnostics_dir(year))
     ensure_dir_exists(get_vor_strategy_dir(year))
-    ensure_dir_exists(get_hybrid_mc_dir(year))
     ensure_dir_exists(get_draft_strategy_dir(year))
     ensure_dir_exists(get_draft_model_outputs_dir(year))
+    ensure_dir_exists(get_bayesian_model_dir(year))
     ensure_dir_exists(get_finalized_drafts_dir(year))
     ensure_dir_exists(get_draft_retrospective_json_path(year).parent)
     ensure_dir_exists(get_validation_dir(year))

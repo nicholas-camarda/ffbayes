@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""
-Standardized script interface for ffbayes package.
-Provides consistent argument parsing, error handling, logging, and progress monitoring.
+"""Shared CLI interface utilities for `ffbayes` entrypoints.
+
+The supported command surface still spans a mix of newer and older scripts. This
+module keeps their public argument parsing, logging, error handling, and
+runtime-path resolution aligned with the canonical `inputs/` and `seasons/`
+layout without forcing a full rewrite of each command.
 """
 
 import argparse
@@ -250,7 +253,7 @@ class StandardizedScriptInterface:
             sys.exit(self.EXIT_ERROR)
 
     def get_output_directory(self, args: argparse.Namespace) -> Path:
-        """Get standardized output directory.
+        """Resolve the script output directory.
 
         Args:
             args: Parsed arguments
@@ -270,19 +273,20 @@ class StandardizedScriptInterface:
         return output_dir
 
     def get_data_directory(self, args: argparse.Namespace) -> Path:
-        """Get standardized data directory.
+        """Resolve the working input directory for a script.
 
         Args:
             args: Parsed arguments
 
         Returns:
-            Data directory path
+            Data directory path. When no explicit override is supplied this
+            points to the canonical local `inputs/` root.
         """
         if args.data_dir:
             data_dir = Path(args.data_dir)
         else:
             paths = get_standard_paths()
-            data_dir = paths.datasets_root
+            data_dir = paths.inputs_root
 
         return data_dir
 
@@ -391,7 +395,7 @@ class StandardizedScriptInterface:
 def create_standardized_interface(
     script_name: str, description: str = ''
 ) -> StandardizedScriptInterface:
-    """Create a standardized script interface.
+    """Construct a standardized script interface for one command entrypoint.
 
     Args:
         script_name: Name of the script
@@ -406,7 +410,7 @@ def create_standardized_interface(
 def run_with_standardized_interface(
     script_name: str, main_func: callable, description: str = ''
 ):
-    """Run a script with standardized interface.
+    """Run a script under the standardized CLI wrapper.
 
     Args:
         script_name: Name of the script

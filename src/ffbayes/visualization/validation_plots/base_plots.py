@@ -49,7 +49,7 @@ class BasePlot(ABC):
             title: Plot title
             output_dir: Directory to save plots (defaults to the runtime
                 diagnostics tree under
-                `runs/<year>/pre_draft/diagnostics/visualizations/`)
+                `seasons/<year>/diagnostics/visualizations/`)
         """
         self.title = title
         self.output_dir = output_dir or self._get_default_output_dir()

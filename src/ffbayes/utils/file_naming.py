@@ -56,19 +56,6 @@ def get_baseline_filename(current_year: int) -> str:
     return "baseline_model_results.json"
 
 
-def get_hybrid_mc_filename(current_year: int) -> str:
-    """
-    Generate consistent filename for hybrid MC model results.
-    
-    Args:
-        current_year: The year being projected
-    
-    Returns:
-        Consistent filename like "hybrid_mc_model_results.json"
-    """
-    return "hybrid_mc_model_results.json"
-
-
 def get_team_aggregation_filename(current_year: int, team_name: Optional[str] = None) -> str:
     """
     Generate consistent filename for team aggregation results.
@@ -220,21 +207,6 @@ def get_baseline_file_path(current_year: int) -> Path:
     """
     output_dir = get_output_directory("baseline_results", current_year)
     filename = get_baseline_filename(current_year)
-    return output_dir / filename
-
-
-def get_hybrid_mc_file_path(current_year: int) -> Path:
-    """
-    Get the full path for hybrid MC model results.
-    
-    Args:
-        current_year: The year being projected
-    
-    Returns:
-        Full path to hybrid MC results file
-    """
-    output_dir = get_output_directory("hybrid_mc_bayesian", current_year)
-    filename = get_hybrid_mc_filename(current_year)
     return output_dir / filename
 
 

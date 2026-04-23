@@ -59,7 +59,7 @@ The project collects recent season data and builds a cleaned dataset.
 
 Plain-language version:
 
-- get recent player-season fantasy results
+- get recent fantasy results
 - align names, positions, and related features
 - build one analysis-ready table that the board can use
 
@@ -282,6 +282,18 @@ Look for:
 - fragility
 - explanation flags
 
+If you want the forecast details, open `Projection breakdown`. That is where the dashboard separates:
+
+- total season expectation
+- scoring rate when active
+- expected games
+- availability rate
+
+Example interpretations:
+
+- a team-changing veteran RB can still have a strong season-total forecast, but the `Team change` flag and the breakdown make it easier to see why uncertainty widened
+- a rookie WR can show a thinner history and more prior-driven uncertainty because draft capital, combine signal, and depth-chart rank are doing more of the work
+
 ### Decision Evidence
 
 Use it to ask:
@@ -340,7 +352,7 @@ ffbayes draft-retrospective --year 2026
 
 Important paths:
 
-- authoritative local payload: `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
-- authoritative local HTML: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
+- authoritative local payload: `seasons/<year>/draft_strategy/dashboard_payload_<year>.json`
+- authoritative local HTML: `seasons/<year>/draft_strategy/draft_board_<year>.html`
 - easy local shortcut: `dashboard/index.html`
 - staged GitHub Pages copy: `site/index.html`

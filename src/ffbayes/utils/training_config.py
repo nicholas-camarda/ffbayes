@@ -99,16 +99,6 @@ def get_bayesian_training_years() -> List[int]:
     return get_default_training_years()
 
 
-def get_hybrid_training_years() -> List[int]:
-    """
-    Get training years specifically for hybrid models.
-
-    Returns:
-        Training years for hybrid models (same as default)
-    """
-    return get_default_training_years()
-
-
 # Configuration validation
 def validate_training_years(training_years: List[int]) -> bool:
     """

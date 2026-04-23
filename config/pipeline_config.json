@@ -2,7 +2,7 @@
   "pipeline": {
     "name": "Fantasy Football Analytics Pipeline",
     "version": "1.0.0",
-    "description": "Comprehensive fantasy football analytics pipeline with Monte Carlo and Bayesian analysis"
+      "description": "Comprehensive fantasy football analytics pipeline for the supported draft engine"
   },
   "pipeline_steps": [
     {
@@ -36,34 +36,24 @@
       "parallel_group": "data_processing"
     },
     {
-      "name": "vor_draft_strategy",
-      "script": "ffbayes.draft_strategy.traditional_vor_draft",
-      "description": "Generate traditional VOR-based draft strategy FIRST to create rankings",
-      "timeout": 300,
-      "retry_count": 2,
-      "dependencies": ["data_preprocessing"],
-      "critical": true,
-      "parallel_group": "strategy"
-    },
-    {
       "name": "create_unified_dataset",
       "script": "ffbayes.data_pipeline.create_unified_dataset",
-      "description": "Create unified dataset with VOR rankings for all models",
+      "description": "Create the canonical unified dataset for the supported player-model stack",
       "timeout": 120,
       "retry_count": 2,
-      "dependencies": ["vor_draft_strategy"],
+      "dependencies": ["data_preprocessing"],
       "critical": true,
       "parallel_group": "data_processing"
     },
     {
-      "name": "hybrid_mc_analysis",
-      "script": "ffbayes.analysis.hybrid_mc_bayesian",
-      "description": "Run Hybrid Monte Carlo + Bayesian analysis with uncertainty layers",
-      "timeout": 900,
+      "name": "vor_draft_strategy",
+      "script": "ffbayes.draft_strategy.traditional_vor_draft",
+      "description": "Generate the optional traditional VOR baseline artifacts",
+      "timeout": 300,
       "retry_count": 2,
       "dependencies": ["create_unified_dataset"],
-      "critical": true,
-      "parallel_group": "modeling"
+      "critical": false,
+      "parallel_group": "analysis"
     },
     {
       "name": "draft_decision_strategy",
@@ -72,7 +62,7 @@
       "description": "Generate the canonical draft decision board and dashboard",
       "timeout": 300,
       "retry_count": 2,
-      "dependencies": ["hybrid_mc_analysis"],
+      "dependencies": ["create_unified_dataset"],
       "critical": true,
       "parallel_group": "strategy"
     },
@@ -82,7 +72,7 @@
       "description": "Backtest market, VOR, consensus, and board-value strategies",
       "timeout": 300,
       "retry_count": 2,
-      "dependencies": ["vor_draft_strategy", "draft_decision_strategy"],
+      "dependencies": ["draft_decision_strategy"],
       "critical": false,
       "parallel_group": "analysis"
     }
@@ -140,9 +130,9 @@
     "progress_update_interval": 30
   },
   "output": {
-    "run_root": "~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft",
-    "artifacts_directory": "~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/artifacts",
-    "diagnostics_directory": "~/ProjectsRuntime/ffbayes/runs/<year>/pre_draft/diagnostics",
+    "run_root": "~/ProjectsRuntime/ffbayes/seasons/<year>",
+    "artifacts_directory": "~/ProjectsRuntime/ffbayes/seasons/<year>",
+    "diagnostics_directory": "~/ProjectsRuntime/ffbayes/seasons/<year>/diagnostics",
     "logs_directory": "~/ProjectsRuntime/ffbayes/logs",
     "cloud_results_directory": "~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results",
     "cloud_plots_directory": "~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/plots",

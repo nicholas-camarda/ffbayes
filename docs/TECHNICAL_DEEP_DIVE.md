@@ -4,7 +4,7 @@ Audience: statisticians, technical reviewers, and contributors who need the impl
 
 Scope: the supported `pre-draft` workflow, the implemented player-posterior model, the board-construction layer, the recommendation policy, and the current trust surfaces.
 
-Trust boundary: this document describes the implemented current board. Optional analyses and compatibility surfaces are labeled separately. Internal holdout backtests are directional evidence, not external validation.
+Trust boundary: this document describes the implemented current board. Additional non-default analyses are labeled explicitly. Internal holdout backtests are directional evidence, not external validation.
 
 ## What This Is
 
@@ -14,8 +14,7 @@ The key distinction is:
 
 - implemented current board behavior: what the supported `pre-draft` board actually does
 - conceptual intuition: simplified explanations for why the implemented math is structured that way
-- optional analyses: commands that exist but are not the default pre-draft operator path
-- deprecated or compatibility-only surfaces: outputs kept for compatibility, not as the primary supported workflow
+- additional non-default analyses: commands that exist but are not the default pre-draft operator path
 
 ## When To Use It
 
@@ -38,9 +37,9 @@ Primary implementation sources:
 
 Primary emitted artifacts:
 
-- `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
+- `seasons/<year>/draft_strategy/dashboard_payload_<year>.json`
+- `seasons/<year>/draft_strategy/draft_board_<year>.html`
+- `seasons/<year>/draft_strategy/draft_decision_backtest_<year_range>.json`
 - `site/dashboard_payload.json`
 - `site/publish_provenance.json`
 
@@ -80,19 +79,19 @@ The supported `pre-draft` runner in `config/pipeline_pre_draft.json` performs:
 1. data collection
 2. data validation
 3. preprocessing
-4. traditional VOR draft strategy
-5. unified dataset creation
-6. hybrid MC analysis artifacts
-7. draft decision strategy
-8. draft decision backtest
+4. unified dataset creation
+5. optional traditional VOR baseline artifact generation
+6. draft decision strategy
+7. draft decision backtest
 
-The default operator-facing board comes from step 7, with evidence supplied by step 8.
+The default operator-facing board comes from step 6. Player-forecast generation
+is internal to `draft_decision_strategy`, and evidence is supplied by step 7.
 
 ## Forecast Target And Decision Target
 
 ### Forecast Target
 
-The implemented player model in `bayesian_player_model.py` forecasts player-season fantasy points for the target season using lagged historical player-season information and draft-time-safe features.
+The implemented player model in `bayesian_player_model.py` forecasts season-total fantasy points for the target season by modeling scoring rate and availability separately, then composing them through posterior predictive simulation.
 
 The main exported player-level outputs are:
 
@@ -119,45 +118,45 @@ That second layer is what turns a projection table into a draft board.
 
 The prior features come from `_player_prior_features(...)` in `bayesian_player_model.py`.
 
-For a player with history, the prior mean is:
+For a player with history, the prior structure is built from separate rate and availability components.
+
+The rate prior mean is a shrinkage blend of recent player rate and position rate, with team-season context allowed to adjust it:
 
 ```math
-\mathrm{prior\_mean}
+\mathrm{prior\_rate\_mean}
 =
-\mathrm{shrinkage}\cdot \mathrm{recent\_mean}
-+ (1-\mathrm{shrinkage})\cdot \mathrm{position\_mean}
-+ 0.30\cdot \mathrm{player\_trend}
+\mathrm{shrinkage}\cdot \mathrm{recent\_rate}
++ (1-\mathrm{shrinkage})\cdot \mathrm{position\_rate\_mean}
 ```
 
 Where:
 
-- `recent_mean` is the recent player-season scoring average
-- `position_mean` is the historical average for the position
-- `player_trend` is the within-player season trend
+- `recent_rate` is the recent scoring rate when active
+- `position_rate_mean` is the historical rate average for the position
 - `shrinkage = season_count / (season_count + 2.5)`
 
-The prior standard deviation is widened or tightened from player volatility and position-level spread:
+The availability prior mean is built from weighted historical games played, with team-season context allowed to adjust it:
 
 ```math
-\mathrm{prior\_std}
+\mathrm{prior\_games\_mean}
 =
-\max\left(
-\mathrm{player\_weighted\_std}\cdot
-\max\left(0.75,\ 1.20 - 0.08\cdot \min(\mathrm{season\_count},4)\right),
-\ 0.55\cdot \mathrm{position\_std},
-\ 6.0
-\right)
+\mathrm{weighted\ historical\ games\ played}
 ```
 
-If a player has no usable history, the prior falls back to position-level values rather than pretending to know a player-specific mean.
+Season-total priors are then composed from those two components. The production season-total posterior is not a direct one-stage mean-only regression.
+
+If a player has no usable history, the prior is driven by position context plus explicit rookie inputs such as draft capital, combine-derived signal, and depth-chart context rather than pretending to know a player-specific NFL history.
 
 ### What Data Enters The Prior
 
 The prior is not built from one raw projection column. It is built from a draft-time-safe feature bundle that includes:
 
-- player-season fantasy points from prior seasons
+- season-total fantasy points from prior seasons
+- scoring rate from prior seasons
 - games played and games missed
 - age and years in league
+- team-season context and team-change indicators
+- rookie draft-capital, combine, and depth-chart context when available
 - team-change rate
 - role volatility
 - recent ADP and ADP rank
@@ -660,7 +659,7 @@ Terms used in the current board mean different things:
 If you want to understand one dashboard row from top to bottom, read it in this order:
 
 1. `proj_points_mean`
-   This is the posterior central estimate for player-season fantasy points.
+   This is the posterior central estimate for season-total fantasy points.
 2. `proj_points_floor` and `proj_points_ceiling`
    These are approximate posterior percentile endpoints, not a 95 percent confidence interval of the mean.
 3. `starter_delta`
@@ -680,6 +679,21 @@ If you want to understand one dashboard row from top to bottom, read it in this 
 
 If a reader cannot follow that chain, the document has not done its job.
 
+## Inspector Projection Breakdown
+
+The player inspector exposes the rate-and-availability decomposition in a dedicated `Projection breakdown` section rather than in the main board columns.
+
+The visible inspector fields are:
+
+- `Season total mean`
+- `Rate when active`
+- `Expected games`
+- `Availability rate`
+- `Current team`
+- `Team change`
+
+When available, the same section also shows rookie context such as draft pick, combine-derived signal, and depth-chart rank. That inspector section is explanatory. The canonical board ordering still comes from the season-total decision contract.
+
 ## War-Room Visual Semantics When Present
 
 If the current dashboard build includes `war_room_visuals`, the visuals are derived from existing recommendation, tier-cliff, and evidence semantics:
@@ -690,25 +704,23 @@ If the current dashboard build includes `war_room_visuals`, the visuals are deri
 
 These visuals do not create a separate model. They are interpretation surfaces built on top of the same board and evidence contract.
 
-## Optional Analyses
+## Additional Commands
 
-These commands exist, but they are optional rather than part of the default `ffbayes pre-draft` operator workflow:
+These commands exist outside the default `ffbayes pre-draft` operator workflow:
 
 - `ffbayes mc`
-- `ffbayes agg`
-- `ffbayes compare`
 - `ffbayes bayesian-vor`
 - `ffbayes publish --year <year>`
 
-They can still be useful, but they should not be described as the current board's primary math unless the output path and producing command are made explicit.
+They should not be described as the current board's primary math unless the output path and producing command are made explicit.
 
 ## Commands And Paths
 
 Authoritative runtime artifacts:
 
-- `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_decision_backtest_<year_range>.json`
+- `seasons/<year>/draft_strategy/dashboard_payload_<year>.json`
+- `seasons/<year>/draft_strategy/draft_board_<year>.html`
+- `seasons/<year>/draft_strategy/draft_decision_backtest_<year_range>.json`
 
 Derived surfaces:
 

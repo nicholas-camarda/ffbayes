@@ -34,8 +34,9 @@ Primary commands:
 
 Primary surfaces:
 
-- authoritative runtime HTML: `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html`
-- authoritative runtime payload: `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json`
+- authoritative runtime HTML: `seasons/<year>/draft_strategy/draft_board_<year>.html`
+- authoritative runtime payload: `seasons/<year>/draft_strategy/dashboard_payload_<year>.json`
+- derived runtime-root shortcut: `<runtime-root>/dashboard/index.html`
 - derived local shortcut: `dashboard/index.html`
 - staged Pages copy: `site/index.html`
 
@@ -49,8 +50,10 @@ Primary surfaces:
 
 | Surface | Purpose | Authority |
 | --- | --- | --- |
-| `runs/<year>/pre_draft/artifacts/draft_strategy/draft_board_<year>.html` | authoritative local HTML | authoritative |
-| `runs/<year>/pre_draft/artifacts/draft_strategy/dashboard_payload_<year>.json` | authoritative local payload | authoritative |
+| `seasons/<year>/draft_strategy/draft_board_<year>.html` | authoritative local HTML | authoritative |
+| `seasons/<year>/draft_strategy/dashboard_payload_<year>.json` | authoritative local payload | authoritative |
+| `<runtime-root>/dashboard/index.html` | easy local shortcut beside runtime artifacts | derived local shortcut |
+| `<runtime-root>/dashboard/dashboard_payload.json` | paired runtime shortcut payload | derived local shortcut |
 | `dashboard/index.html` | easy local shortcut from the repo root | derived local shortcut |
 | `dashboard/dashboard_payload.json` | paired shortcut payload | derived local shortcut |
 | `site/index.html` | staged GitHub Pages copy | derived publish surface |
@@ -181,6 +184,17 @@ What to inspect:
 - `starter_delta`
 - `why_flags`
 
+Projection detail stays behind the `Projection breakdown` disclosure. That is where the dashboard shows:
+
+- `Season total mean`
+- `Rate when active`
+- `Expected games`
+- `Availability rate`
+- `Current team`
+- `Team change`
+
+When relevant, the same section also surfaces rookie context such as draft pick, combine signal, and depth-chart rank. Keep that detail in the inspector; the main board should stay lean.
+
 ### Decision Evidence
 
 Purpose: show internal backtest evidence and interpretation limits.
@@ -206,12 +220,21 @@ What to inspect:
 
 - evidence status should be `available` on production dashboards
 - the winner label and season count
+- the compact cohort validation table in the first view
 - interpretation limits and freshness status
 
 What not to infer:
 
 - this is not external validation
 - degraded or unavailable evidence belongs in non-production investigation only
+
+The first visible evidence surface is intentionally compact:
+
+- one summary block
+- summary metrics
+- one compact validation table
+
+Season-level deltas, strategy rows, and disagreement tables live under the nested `Detailed evidence` disclosure.
 
 ### Freshness And Provenance
 
@@ -251,7 +274,7 @@ During the draft:
 Canonical runtime destination after import:
 
 ```text
-runs/<year>/pre_draft/artifacts/draft_strategy/finalized_drafts/
+seasons/<year>/draft_strategy/finalized_drafts/
 ```
 
 The import and autodiscovery paths exclude finalized files named like `*_test.*`.
@@ -280,8 +303,8 @@ ffbayes draft-retrospective --year 2026
 
 Runtime-local retrospective artifacts:
 
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_retrospective_<year>.json`
-- `runs/<year>/pre_draft/artifacts/draft_strategy/draft_retrospective_<year>.html`
+- `seasons/<year>/draft_strategy/draft_retrospective_<year>.json`
+- `seasons/<year>/draft_strategy/draft_retrospective_<year>.html`
 
 ## Publish Pages Only When Needed
 

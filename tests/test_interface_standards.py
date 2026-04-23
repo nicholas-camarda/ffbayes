@@ -29,7 +29,7 @@ def test_standard_paths_with_explicit_root(tmp_path):
 
     assert paths.plots_root == tmp_path / 'plots'
     assert paths.results_root == tmp_path / 'results'
-    assert paths.datasets_root == tmp_path / 'datasets'
+    assert paths.inputs_root == tmp_path / 'inputs'
     assert paths.monte_carlo_results == tmp_path / 'results' / 'montecarlo_results'
     assert paths.bayesian_results == tmp_path / 'results' / 'bayesian-hierarchical-results'
     assert paths.team_aggregation_plots == tmp_path / 'plots' / 'team_aggregation'

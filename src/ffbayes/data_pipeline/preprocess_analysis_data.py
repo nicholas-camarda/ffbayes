@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""
-03_preprocess_analysis_data.py - Data Preprocessing for Analysis
-Third step in the fantasy football analytics pipeline.
-Prepares data specifically for analysis scripts.
+"""Build the canonical combined historical dataset for analysis.
+
+This step reads season-level weekly inputs from
+`inputs/raw/season_datasets/`, enforces the supported rolling five-season
+analysis window, computes core derived columns such as the seven-game rolling
+average, and writes the machine-readable combined dataset under
+`inputs/processed/combined_datasets/`.
 """
 
 import glob
@@ -34,7 +37,7 @@ def _encode_team_codes(values: pd.Series, team_names: pd.Index) -> pd.Series:
 
 
 def create_analysis_dataset(path_to_data_directory):
-    """Create and preprocess the fantasy football dataset for analysis."""
+    """Create the canonical combined analysis dataset from raw season files."""
     print('Loading and preprocessing data for analysis...')
 
     # Read in the datasets and combine - look for season.csv files in season_datasets subdirectory

@@ -43,10 +43,6 @@ ffbayes-collect = "ffbayes.data_pipeline.collect_data:main"
 ffbayes-validate = "ffbayes.data_pipeline.validate_data:main"
 ffbayes-preprocess = "ffbayes.data_pipeline.preprocess_analysis_data:main"
 ffbayes-mc = "ffbayes.analysis.montecarlo_historical_ff:main"
-# Use the current hybrid MC + Bayesian implementation for core Bayesian analysis
-ffbayes-bayes = "ffbayes.analysis.hybrid_mc_bayesian:main"
-ffbayes-agg = "ffbayes.analysis.bayesian_team_aggregation:main"
-ffbayes-compare = "ffbayes.analysis.model_comparison_framework:main"
 ffbayes-draft-strategy = "ffbayes.draft_strategy.draft_decision_strategy:main"
 ffbayes-draft-backtest = "ffbayes.analysis.draft_decision_backtest:main"
 ffbayes-draft-retrospective = "ffbayes.analysis.draft_retrospective:main"
@@ -95,13 +91,8 @@ module = [
   "ffbayes.utils.enhanced_pipeline_orchestrator",
   "ffbayes.draft_strategy.traditional_vor_draft",
   "ffbayes.utils.error_handling",
-  "ffbayes.draft_strategy.risk_adjusted_rankings",
   "ffbayes.utils.validation_metrics",
-  "ffbayes.draft_strategy.bayesian_draft_strategy",
-  "ffbayes.analysis.build_team_aggregation_results",
-  "ffbayes.analysis.bayesian_team_aggregation",
   "ffbayes.data_pipeline.create_unified_dataset",
-  "ffbayes.analysis.model_comparison_framework",
   "ffbayes.analysis.bayesian_vor_comparison",
   "ffbayes.utils.model_validation",
   "ffbayes.utils.script_interface",

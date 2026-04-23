@@ -63,21 +63,6 @@ COMMANDS: tuple[CommandSpec, ...] = (
         help_text='Run the Monte Carlo historical analysis.',
     ),
     CommandSpec(
-        name='bayes',
-        module='ffbayes.analysis.hybrid_mc_bayesian',
-        help_text='Run the hybrid Monte Carlo + Bayesian analysis.',
-    ),
-    CommandSpec(
-        name='agg',
-        module='ffbayes.analysis.bayesian_team_aggregation',
-        help_text='Build team aggregation outputs.',
-    ),
-    CommandSpec(
-        name='compare',
-        module='ffbayes.analysis.model_comparison_framework',
-        help_text='Compare candidate models.',
-    ),
-    CommandSpec(
         name='draft-strategy',
         module='ffbayes.draft_strategy.draft_decision_strategy',
         help_text='Generate the live draft command center and workbook.',

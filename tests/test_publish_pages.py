@@ -118,6 +118,64 @@ def test_stage_pages_site_removes_stale_payload_when_missing(tmp_path):
     assert not stale_provenance.exists()
 
 
+def test_stage_pages_site_prunes_noncanonical_surface_entries(tmp_path):
+    from ffbayes.publish_pages import stage_pages_site
+
+    source_html = tmp_path / 'draft_board_2026.html'
+    source_payload = tmp_path / 'dashboard_payload_2026.json'
+    source_html.write_text('<html><body>dashboard</body></html>', encoding='utf-8')
+    source_payload.write_text(
+        '{"dashboard": true, "generated_at": "2026-04-04T18:35:49", "analysis_provenance": {"overall_freshness": {"status": "fresh", "override_used": false, "warnings": []}}}',
+        encoding='utf-8',
+    )
+
+    output_dir = tmp_path / 'site'
+    output_dir.mkdir(parents=True, exist_ok=True)
+    (output_dir / 'old_chart.png').write_text('stale', encoding='utf-8')
+    (output_dir / 'draft_board_2026.html').write_text('stale', encoding='utf-8')
+    (output_dir / 'nested').mkdir()
+    (output_dir / 'nested' / 'debug.json').write_text('stale', encoding='utf-8')
+
+    stage_pages_site(
+        year=2026,
+        source_html=source_html,
+        source_payload=source_payload,
+        output_dir=output_dir,
+    )
+
+    assert sorted(path.name for path in output_dir.iterdir()) == [
+        '.nojekyll',
+        'dashboard_payload.json',
+        'index.html',
+        'publish_provenance.json',
+    ]
+
+
+def test_stage_pages_site_normalizes_local_paths_from_public_payload(tmp_path):
+    from ffbayes.publish_pages import stage_pages_site
+
+    source_html = tmp_path / 'draft_board_2026.html'
+    source_payload = tmp_path / 'dashboard_payload_2026.json'
+    source_html.write_text('<html><body>dashboard</body></html>', encoding='utf-8')
+    source_payload.write_text(
+        '{"generated_at": "2026-04-04T18:35:49", "analysis_provenance": {"sources": {"season_history": {"source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/inputs/raw/season_datasets"}}}, "decision_evidence": {"freshness": {"source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/inputs/processed/unified_dataset/unified_dataset.csv"}}, "war_room_visuals": {"schema_version": "war_room_visuals_v1"}}',
+        encoding='utf-8',
+    )
+
+    output_dir = tmp_path / 'site'
+    stage_pages_site(
+        year=2026,
+        source_html=source_html,
+        source_payload=source_payload,
+        output_dir=output_dir,
+    )
+
+    payload_text = (output_dir / 'dashboard_payload.json').read_text(encoding='utf-8')
+    assert '/Users/' not in payload_text
+    assert '<runtime-root>/inputs/raw/season_datasets' in payload_text
+    assert '<runtime-root>/inputs/processed/unified_dataset/unified_dataset.csv' in payload_text
+
+
 def test_stage_pages_site_surfaces_stale_paths_without_timestamp_false_positive(
     tmp_path,
 ):

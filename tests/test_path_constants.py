@@ -20,7 +20,7 @@ def test_get_runtime_root_defaults_to_projects_runtime(monkeypatch):
     assert path_constants.get_runtime_root() == expected
 
 
-def test_pre_draft_paths_live_under_artifacts_and_diagnostics(monkeypatch, tmp_path):
+def test_pre_draft_paths_live_under_seasons_and_diagnostics(monkeypatch, tmp_path):
     monkeypatch.delenv('FFBAYES_RUNTIME_ROOT', raising=False)
     monkeypatch.setattr(path_constants, 'RUNTIME_DIR', tmp_path / 'runtime', raising=False)
     monkeypatch.setattr(path_constants, 'BASE_DIR', tmp_path / 'project', raising=False)
@@ -29,13 +29,13 @@ def test_pre_draft_paths_live_under_artifacts_and_diagnostics(monkeypatch, tmp_p
     diagnostics_dir = path_constants.get_pre_draft_diagnostics_dir(2026)
     pages_dir = path_constants.get_pages_site_dir()
 
-    assert artifacts_dir == tmp_path / 'runtime' / 'runs' / '2026' / 'pre_draft' / 'artifacts'
-    assert diagnostics_dir == tmp_path / 'runtime' / 'runs' / '2026' / 'pre_draft' / 'diagnostics'
+    assert artifacts_dir == tmp_path / 'runtime' / 'seasons' / '2026'
+    assert diagnostics_dir == tmp_path / 'runtime' / 'seasons' / '2026' / 'diagnostics'
     assert path_constants.get_dashboard_payload_path(2026).parent == (
-        tmp_path / 'runtime' / 'runs' / '2026' / 'pre_draft' / 'artifacts' / 'draft_strategy'
+        tmp_path / 'runtime' / 'seasons' / '2026' / 'draft_strategy'
     )
     assert path_constants.get_dashboard_html_path(2026).parent == (
-        tmp_path / 'runtime' / 'runs' / '2026' / 'pre_draft' / 'artifacts' / 'draft_strategy'
+        tmp_path / 'runtime' / 'seasons' / '2026' / 'draft_strategy'
     )
     assert pages_dir == tmp_path / 'project' / 'site'
     assert path_constants.get_results_dir(2026) == artifacts_dir

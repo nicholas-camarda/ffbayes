@@ -71,6 +71,43 @@ ROSTER_REQUIRED_COLUMNS = (
     'week',
 )
 
+PLAYER_CONTEXT_COLUMNS = (
+    'player_id',
+    'player_display_name',
+    'position',
+    'recent_team',
+)
+
+DRAFT_PICK_COLUMNS = (
+    'season',
+    'player_id',
+    'player_display_name',
+    'position',
+    'draft_team',
+    'draft_round',
+    'draft_pick',
+)
+
+COMBINE_COLUMNS = (
+    'season',
+    'player_id',
+    'player_display_name',
+    'position',
+    'forty_time',
+    'vertical_jump',
+    'broad_jump',
+    'bench_press',
+)
+
+DEPTH_CHART_COLUMNS = (
+    'season',
+    'player_id',
+    'player_display_name',
+    'position',
+    'recent_team',
+    'depth_chart_rank',
+)
+
 
 @lru_cache(maxsize=1)
 def _get_backend_module():
@@ -381,3 +418,130 @@ def load_weekly_defense_stats(years: list[int]) -> pd.DataFrame:
         },
         context='defense stats',
     )
+
+
+def load_players() -> pd.DataFrame:
+    """Load player master data as a pandas DataFrame."""
+    backend = _get_backend_module()
+    frame = _load_frame('load_players', backend.load_players)
+    normalized = _normalize_columns(
+        frame,
+        {
+            'player_id': ('player_id', 'gsis_id'),
+            'player_display_name': (
+                'player_display_name',
+                'display_name',
+                'player_name',
+                'full_name',
+                'name',
+            ),
+            'position': ('position', 'pos'),
+            'recent_team': ('recent_team', 'team', 'current_team'),
+        },
+        context='players',
+    )
+    return _ensure_columns(normalized, PLAYER_CONTEXT_COLUMNS)
+
+
+def load_draft_picks(years: list[int]) -> pd.DataFrame:
+    """Load draft picks as a pandas DataFrame."""
+    backend = _get_backend_module()
+    frame = _load_frame('load_draft_picks', backend.load_draft_picks, seasons=years)
+    normalized = _normalize_columns(
+        frame,
+        {
+            'season': ('season', 'draft_year'),
+            'player_id': ('player_id', 'gsis_id'),
+            'player_display_name': (
+                'player_display_name',
+                'display_name',
+                'player_name',
+                'pfr_player_name',
+                'name',
+            ),
+            'position': ('position', 'pos'),
+            'draft_team': ('draft_team', 'team', 'club'),
+            'draft_round': ('draft_round', 'round'),
+            'draft_pick': ('draft_pick', 'pick', 'pick_number', 'overall_pick'),
+        },
+        context='draft picks',
+    )
+    return _ensure_columns(normalized, DRAFT_PICK_COLUMNS)
+
+
+def load_combine_results(years: list[int]) -> pd.DataFrame:
+    """Load combine results as a pandas DataFrame."""
+    backend = _get_backend_module()
+    frame = _load_frame('load_combine', backend.load_combine, seasons=years)
+    normalized = _normalize_columns(
+        frame,
+        {
+            'season': ('season', 'draft_year'),
+            'player_id': ('player_id', 'gsis_id'),
+            'player_display_name': (
+                'player_display_name',
+                'display_name',
+                'player_name',
+                'name',
+            ),
+            'position': ('position', 'pos'),
+            'forty_time': ('forty_time', 'forty', 'forty_yard'),
+            'vertical_jump': ('vertical_jump', 'vertical', 'vert'),
+            'broad_jump': ('broad_jump', 'broad'),
+            'bench_press': ('bench_press', 'bench'),
+        },
+        context='combine',
+    )
+    return _ensure_columns(normalized, COMBINE_COLUMNS)
+
+
+def load_depth_charts(years: list[int]) -> pd.DataFrame:
+    """Load depth charts as a pandas DataFrame."""
+    backend = _get_backend_module()
+    frame = _load_frame('load_depth_charts', backend.load_depth_charts, seasons=years)
+    normalized = _normalize_columns(
+        frame,
+        {
+            'season': ('season',),
+            'player_id': ('player_id', 'gsis_id'),
+            'player_display_name': (
+                'player_display_name',
+                'player_name',
+                'display_name',
+                'name',
+            ),
+            'position': ('position', 'pos'),
+            'recent_team': ('recent_team', 'team'),
+            'depth_chart_rank': (
+                'depth_chart_rank',
+                'depth_team_order',
+                'depth_position_rank',
+                'depth_rank',
+            ),
+        },
+        context='depth chart',
+    )
+    return _ensure_columns(normalized, DEPTH_CHART_COLUMNS)
+
+
+def load_rosters(years: list[int]) -> pd.DataFrame:
+    """Load season rosters as a pandas DataFrame."""
+    backend = _get_backend_module()
+    frame = _load_frame('load_rosters', backend.load_rosters, seasons=years)
+    normalized = _normalize_columns(
+        frame,
+        {
+            'season': ('season',),
+            'player_id': ('player_id', 'gsis_id'),
+            'player_display_name': (
+                'player_display_name',
+                'player_name',
+                'display_name',
+                'name',
+            ),
+            'position': ('position', 'pos'),
+            'recent_team': ('recent_team', 'team'),
+        },
+        context='roster',
+    )
+    return _ensure_columns(normalized, PLAYER_CONTEXT_COLUMNS + ('season',))

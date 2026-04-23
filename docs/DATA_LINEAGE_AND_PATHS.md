@@ -45,11 +45,12 @@ Primary commands that create or move artifacts:
 
 | Category | Example path | Purpose | Authority |
 | --- | --- | --- | --- |
-| runtime root | `~/ProjectsRuntime/ffbayes` | main local working tree | authoritative base |
-| raw runtime data | `data/raw/season_datasets/` under runtime root | collected season-level inputs | authoritative runtime input |
-| processed runtime data | `data/processed/` under runtime root | cleaned and derived inputs | authoritative runtime input |
-| unified dataset | `data/processed/unified_dataset/unified_dataset.csv` under runtime root | analysis-ready player dataset | authoritative runtime input |
-| canonical pre-draft artifacts | `runs/<year>/pre_draft/artifacts/` under runtime root | main analysis outputs | authoritative runtime output |
+| runtime root | `<runtime-root>` | main local working tree | authoritative base |
+| raw runtime data | `inputs/raw/season_datasets/` under runtime root | collected season-level inputs | authoritative runtime input |
+| processed runtime data | `inputs/processed/` under runtime root | cleaned and derived inputs | authoritative runtime input |
+| unified dataset | `inputs/processed/unified_dataset/unified_dataset.csv` under runtime root | analysis-ready player dataset | authoritative runtime input |
+| canonical pre-draft artifacts | `seasons/<year>/` under runtime root | main analysis outputs | authoritative runtime output |
+| runtime dashboard shortcut | `<runtime-root>/dashboard/index.html` | local shortcut beside runtime artifacts | derived local shortcut |
 | repo dashboard shortcut | `dashboard/index.html` | easy local opening path | derived local shortcut |
 | staged Pages copy | `site/index.html` | repo-tracked publishing surface | derived publish surface |
 | cloud mirror | `data/` under cloud root | mirrored selected runtime artifacts | derived mirror |
@@ -64,7 +65,7 @@ Purpose: collect source season data into the runtime raw-data tree.
 Typical area:
 
 ```text
-<runtime-root>/data/raw/season_datasets/
+<runtime-root>/inputs/raw/season_datasets/
 ```
 
 ### 2. Validation
@@ -82,7 +83,7 @@ Purpose: build analysis-ready datasets from collected raw inputs.
 Typical area:
 
 ```text
-<runtime-root>/data/processed/
+<runtime-root>/inputs/processed/
 ```
 
 ### 4. Unified Dataset Construction
@@ -92,7 +93,7 @@ Purpose: produce the player-level dataset used by the board and retrospective.
 Canonical path:
 
 ```text
-<runtime-root>/data/processed/unified_dataset/unified_dataset.csv
+<runtime-root>/inputs/processed/unified_dataset/unified_dataset.csv
 ```
 
 ### 5. Pre-Draft Artifact Generation
@@ -102,7 +103,7 @@ Purpose: create the board workbook, payload, HTML, and required decision backtes
 Canonical area:
 
 ```text
-<runtime-root>/runs/<year>/pre_draft/artifacts/draft_strategy/
+<runtime-root>/seasons/<year>/draft_strategy/
 ```
 
 Typical files:
@@ -111,6 +112,10 @@ Typical files:
 - `dashboard_payload_<year>.json`
 - `draft_board_<year>.html`
 - `draft_decision_backtest_<year_range>.json`
+- `model_outputs/player_forecast/player_forecast_<year>.json`
+- `model_outputs/player_forecast/player_forecast_diagnostics_<year>.json`
+- `model_outputs/player_forecast/player_forecast_validation_<year_range>.json`
+- `../diagnostics/validation/player_forecast_validation_summary_<year_range>.json`
 
 Production dashboard generation requires the decision backtest evidence to be
 available and fresh. If that evidence is missing, degraded, or unavailable, the
@@ -122,6 +127,8 @@ Purpose: make the current board easy to open from the repo root.
 
 Derived paths:
 
+- `<runtime-root>/dashboard/index.html`
+- `<runtime-root>/dashboard/dashboard_payload.json`
 - `dashboard/index.html`
 - `dashboard/dashboard_payload.json`
 
@@ -156,7 +163,7 @@ Purpose: move browser-downloaded finalized artifacts into the canonical runtime 
 Canonical finalized import path:
 
 ```text
-<runtime-root>/runs/<year>/pre_draft/artifacts/draft_strategy/finalized_drafts/
+<runtime-root>/seasons/<year>/draft_strategy/finalized_drafts/
 ```
 
 Files named like `*_test.*` are test artifacts. They are not imported,
