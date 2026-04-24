@@ -44,10 +44,14 @@ def _normalize_player_name(value) -> str:
 def _normalize_match_position(value) -> str:
     """Normalize positions so common aliases compare consistently."""
     position = ' '.join(str(value).strip().upper().split())
+    position_tokens = set(position.replace('/', ' ').replace('-', ' ').split())
     if position in {'D/ST', 'DEF', 'DEFENSE'}:
         return 'DST'
     if position in {'SAF', 'S'}:
         return 'S'
+    for fantasy_position in ['QB', 'RB', 'WR', 'TE', 'K']:
+        if fantasy_position in position_tokens:
+            return fantasy_position
     if position.startswith('RB'):
         return 'RB'
     if position.startswith('WR'):
@@ -385,19 +389,23 @@ def _load_player_context_snapshot(current_year: int) -> pd.DataFrame:
         'current_team',
         'rookie_draft_round',
         'rookie_draft_pick',
+        'rookie_draft_year',
         'rookie_combine_score',
         'depth_chart_rank',
         'context_available',
     ]
+    rookie_context_years = sorted({current_year - 1, current_year})
     try:
         players = nflverse_backend.load_players()
         rosters = nflverse_backend.load_rosters([current_year])
-        draft_picks = nflverse_backend.load_draft_picks([current_year])
-        combine = nflverse_backend.load_combine_results([current_year])
+        draft_picks = nflverse_backend.load_draft_picks(rookie_context_years)
+        combine = nflverse_backend.load_combine_results(rookie_context_years)
         depth = nflverse_backend.load_depth_charts([current_year])
     except Exception as exc:
-        logger.warning('⚠️ Current-player context unavailable: %s', exc)
-        return pd.DataFrame(columns=context_columns)
+        raise RuntimeError(
+            'Current-player context is required for dashboard generation, but '
+            f'nflreadpy context loading failed for {rookie_context_years}.'
+        ) from exc
 
     def _base_snapshot(frame: pd.DataFrame, name_col: str = 'player_display_name') -> pd.DataFrame:
         if frame is None or frame.empty:
@@ -463,23 +471,35 @@ def _load_player_context_snapshot(current_year: int) -> pd.DataFrame:
         draft_cols = [
             '__match_name',
             '__match_position',
+            'season',
             'draft_round',
             'draft_pick',
         ]
-        draft_current = draft_snapshot[draft_cols].rename(
-            columns={
-                'draft_round': 'rookie_draft_round',
-                'draft_pick': 'rookie_draft_pick',
-            }
+        draft_current = (
+            draft_snapshot[draft_cols]
+            .sort_values('season')
+            .drop_duplicates(
+                subset=['__match_name', '__match_position'], keep='last'
+            )
+            .rename(
+                columns={
+                    'season': 'rookie_draft_year',
+                    'draft_round': 'rookie_draft_round',
+                    'draft_pick': 'rookie_draft_pick',
+                }
+            )
         )
         context = context.merge(
             draft_current, on=['__match_name', '__match_position'], how='left'
         )
 
     if not combine_snapshot.empty:
-        combine_current = combine_snapshot[
-            ['__match_name', '__match_position', 'rookie_combine_score']
-        ]
+        combine_current = (
+            combine_snapshot.sort_values('season')
+            .drop_duplicates(
+                subset=['__match_name', '__match_position'], keep='last'
+            )[['__match_name', '__match_position', 'rookie_combine_score']]
+        )
         context = context.merge(
             combine_current, on=['__match_name', '__match_position'], how='left'
         )
@@ -502,6 +522,7 @@ def _load_player_context_snapshot(current_year: int) -> pd.DataFrame:
                     'current_team',
                     'rookie_draft_round',
                     'rookie_draft_pick',
+                    'rookie_draft_year',
                     'rookie_combine_score',
                     'depth_chart_rank',
                 ]
@@ -514,7 +535,41 @@ def _load_player_context_snapshot(current_year: int) -> pd.DataFrame:
     for column in context_columns:
         if column not in context.columns:
             context[column] = np.nan if column != 'context_available' else False
+    if pd.to_numeric(context['rookie_draft_pick'], errors='coerce').notna().sum() == 0:
+        raise ValueError(
+            'Rookie draft-pick context is unavailable from nflreadpy for '
+            f'{rookie_context_years}; refusing to continue with silently null '
+            'rookie_draft_pick values.'
+        )
     return context[context_columns]
+
+
+def _require_rookie_context_coverage(data: pd.DataFrame, stage: str) -> None:
+    """Fail before publishing if rookie prior fields are absent or all null."""
+    required_columns = ['rookie_draft_pick', 'rookie_combine_score']
+    missing_columns = [
+        column for column in required_columns if column not in data.columns
+    ]
+    if missing_columns:
+        raise ValueError(
+            f'{stage} is missing required rookie context columns: '
+            f'{", ".join(missing_columns)}.'
+        )
+
+    coverage_counts = {
+        column: int(pd.to_numeric(data[column], errors='coerce').notna().sum())
+        for column in required_columns
+    }
+    null_columns = [
+        column for column, non_null_count in coverage_counts.items()
+        if non_null_count == 0
+    ]
+    if null_columns:
+        raise ValueError(
+            f'{stage} has no non-null values for required rookie context fields '
+            f'{", ".join(null_columns)}; refusing to continue because the '
+            'dashboard would silently publish null rookie prior context.'
+        )
 
 
 def _attach_player_context(data: pd.DataFrame, current_year: int) -> pd.DataFrame:
@@ -1372,6 +1427,10 @@ def create_unified_dataset(data_directory=None):
 
         phase_start = time.perf_counter()
         data = _attach_player_context(data, current_year)
+        _require_rookie_context_coverage(
+            data,
+            f'unified dataset for {current_year}',
+        )
         logger.info(
             'Phase attach_player_context completed in %.1fs',
             time.perf_counter() - phase_start,

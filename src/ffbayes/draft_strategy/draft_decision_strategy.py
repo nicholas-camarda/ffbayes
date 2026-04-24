@@ -42,6 +42,34 @@ from ffbayes.utils.path_constants import (
 logger = logging.getLogger(__name__)
 
 
+def _require_rookie_context_coverage(history_frame: pd.DataFrame, target_year: int) -> None:
+    """Block dashboard builds when rookie context was not attached upstream."""
+    required_columns = ['rookie_draft_pick', 'rookie_combine_score']
+    missing_columns = [
+        column for column in required_columns if column not in history_frame.columns
+    ]
+    if missing_columns:
+        raise ValueError(
+            f'Unified history for {target_year} is missing required rookie '
+            f'context columns: {", ".join(missing_columns)}.'
+        )
+
+    coverage_counts = {
+        column: int(pd.to_numeric(history_frame[column], errors='coerce').notna().sum())
+        for column in required_columns
+    }
+    null_columns = [
+        column for column, non_null_count in coverage_counts.items()
+        if non_null_count == 0
+    ]
+    if null_columns:
+        raise ValueError(
+            f'Unified history for {target_year} has no non-null values for '
+            f'required rookie context fields {", ".join(null_columns)}. '
+            'Regenerate the unified dataset before building the dashboard.'
+        )
+
+
 @dataclass
 class DraftConfig:
     """Compatibility configuration object for older callers."""
@@ -222,6 +250,8 @@ def _build_current_posterior_snapshot_from_unified(
     """Project the current draft board from unified historical data."""
     if history_frame is None or history_frame.empty:
         raise ValueError('Unified history is empty')
+
+    _require_rookie_context_coverage(history_frame, target_year)
 
     season_table = aggregate_season_player_table(history_frame)
     if season_table.empty:
