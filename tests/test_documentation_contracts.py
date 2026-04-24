@@ -48,7 +48,7 @@ REQUIRED_GUIDE_MARKERS = [
     '## What This Is',
     '## When To Use It',
     '## What To Inspect',
-    '## What Not To Infer',
+    '## Interpretation Boundaries',
     '## Commands And Paths',
 ]
 
@@ -228,7 +228,7 @@ def test_supported_cli_and_docs_do_not_expose_sampled_eval_lane():
     assert 'sampled_bayes' not in cli_text
     assert 'hierarchical_sampled_bayes' not in cli_text
     lowered = combined.lower()
-    assert 'no active sampled-bayes workflow' in lowered
+    assert 'hierarchical empirical-bayes estimator' in lowered
     assert 'diagnostics-only evaluation workflow' not in lowered
 
 

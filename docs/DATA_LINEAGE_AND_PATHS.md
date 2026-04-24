@@ -35,7 +35,7 @@ Primary commands that create or move artifacts:
 - `ffbayes draft-retrospective`
 - `ffbayes publish`
 
-## What Not To Infer
+## Interpretation Boundaries
 
 - Do not assume a repo path is authoritative just because it is easy to open.
 - Do not assume cloud-mirrored data is the working source of truth.

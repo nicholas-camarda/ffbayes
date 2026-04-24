@@ -40,7 +40,7 @@ Primary surfaces:
 - derived local shortcut: `dashboard/index.html`
 - staged Pages copy: `site/index.html`
 
-## What Not To Infer
+## Interpretation Boundaries
 
 - Do not treat `site/index.html` as the authoritative local dashboard.
 - Do not treat the recommendation lanes as externally validated truth.

@@ -158,7 +158,7 @@ and [docs/DATA_LINEAGE_AND_PATHS.md](docs/DATA_LINEAGE_AND_PATHS.md).
 
 The top-level `ffbayes` CLI is the main interface. Module-level scripts still exist, but the unified CLI is the intended operator surface.
 
-The repository uses the hierarchical empirical-Bayes estimator for player forecasts. There is no active sampled-Bayes workflow in the repository.
+The repository uses the hierarchical empirical-Bayes estimator for player forecasts.
 
 ## Output Organization
 
@@ -194,14 +194,14 @@ The full shortcut, Pages, and cloud publish path contract lives in
 
 ## Model At A Glance
 
-The supported draft board is not just a plain Monte Carlo ranking and not just a simple VOR list.
+The supported draft board has three layers: player projection, board construction, and draft-action policy.
 
 At a high level:
 
 - the player layer builds season-total posterior projections and uncertainty estimates from historical player performance, availability, and draft-time-safe features
 - the board layer converts those projections into starter edge, replacement edge, fragility, upside, and market-gap signals
 - the recommendation layer then decides whether to pick now or wait based on roster urgency, next-pick survival, and expected regret
-- the dashboard keeps `Simple VOR proxy` as an explicit baseline comparison instead of pretending the contextual board is the only view
+- the dashboard keeps `Simple VOR proxy` as an explicit baseline comparison beside the contextual board score
 
 The exact technical details live in [docs/TECHNICAL_DEEP_DIVE.md](docs/TECHNICAL_DEEP_DIVE.md).
 

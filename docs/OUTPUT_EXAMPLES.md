@@ -40,7 +40,7 @@ Additional outputs from explicit commands:
 - `seasons/<year>/model_evaluation/`
 - cloud `data/` and `Analysis/<date>/` after `ffbayes publish`
 
-## What Not To Infer
+## Interpretation Boundaries
 
 - Do not assume every file under `seasons/<year>/` comes from `ffbayes pre-draft`.
 - Do not assume a staged Pages file is the authoritative local draft surface.
@@ -175,7 +175,7 @@ What to notice:
 
 - this is evidence for comparative board behavior on holdout seasons
 - it is not a guarantee about your future league
-- the repository uses the empirical-Bayes player forecast and does not carry an active sampled-Bayes workflow
+- the repository uses the empirical-Bayes player forecast
 
 ### Staged GitHub Pages Copy
 

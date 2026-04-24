@@ -28,7 +28,7 @@ Primary guide-facing payload fields:
 - `analysis_provenance`
 - `publish_provenance`
 
-## What Not To Infer
+## Interpretation Boundaries
 
 - Do not rename primary metrics in other docs.
 - Do not treat a glossary summary as a full validation statement.

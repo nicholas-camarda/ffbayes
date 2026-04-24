@@ -45,27 +45,30 @@ Primary emitted artifacts:
 - `site/dashboard_payload.json`
 - `site/publish_provenance.json`
 
-## What Not To Infer
+## Interpretation Boundaries
 
-- Do not read the current board as a pure Monte Carlo ranking. The supported board is driven by posterior player projections plus a decision policy.
-- Do not read the current board as a pure VOR ranking. `Simple VOR proxy` is a baseline comparator, not the full contextual score.
-- Do not read sampled-Bayes diagnostic artifacts as an active production workflow. The supported board uses the hierarchical empirical-Bayes estimator.
-- Do not treat internal holdout backtests as external validity.
-- Do not conflate floor and ceiling with frequentist confidence intervals unless the range is explicitly defined that way.
+- The board is driven by posterior player projections plus a decision policy.
+- `Simple VOR proxy` is a baseline comparator; the contextual board score also uses starter advantage, replacement advantage, uncertainty, market gap, roster need, timing, and regret.
+- Player forecasts use the hierarchical empirical-Bayes estimator.
+- Internal holdout backtests are directional evidence, not external validity.
+- Floor and ceiling fields are posterior percentile summaries unless another range is explicitly defined.
 
 ## Under The Hood In One Pass
 
 If you want the shortest mathematically honest summary, the current board does this:
 
-```math
-\text{historical player-season table}
-\rightarrow \text{prior features for each target player}
-\rightarrow \text{recency-weighted empirical-Bayes regression}
-\rightarrow \text{posterior mean and posterior uncertainty}
-\rightarrow \text{starter and replacement baselines}
-\rightarrow \text{board-level contextual score}
-\rightarrow \text{draft-slot timing and regret policy}
-\rightarrow \text{recommendation lanes, evidence, and dashboard trust surfaces}
+```mermaid
+flowchart TD
+  A["Historical player-season table"]
+  B["Prior features<br/>for each target player"]
+  C["Recency-weighted<br/>empirical-Bayes regression"]
+  D["Posterior mean<br/>and posterior uncertainty"]
+  E["Starter and replacement<br/>baselines"]
+  F["Board-level<br/>contextual score"]
+  G["Draft-slot timing<br/>and regret policy"]
+  H["Recommendation lanes,<br/>evidence, and trust surfaces"]
+
+  A --> B --> C --> D --> E --> F --> G --> H
 ```
 
 The important thing to notice is that there are two different mathematical layers:
@@ -74,6 +77,108 @@ The important thing to notice is that there are two different mathematical layer
 2. a draft-decision policy layer
 
 That separation is the main reason the board can be confusing if the document only shows a few equations. A player can have a strong posterior projection but still be a weaker "pick now" recommendation if timing and roster context say waiting is fine.
+
+## Bayesian Terms Used Here
+
+This document uses Bayesian language because the board carries uncertainty
+forward instead of reducing every player to one fixed projection. The terms are
+technical, but the core idea is simple: start with what is known before the
+season, update that expectation using historical evidence, then keep both the
+central estimate and the uncertainty around it.
+
+### Prior
+
+A `prior` is the model's draft-time starting expectation before the final
+regression update. In this project, it is not a hand-written opinion and not a
+single projection column. It is a structured estimate built from draft-time-safe
+information such as recent player performance, scoring rate, games played,
+position context, age, team change, role volatility, ADP, market disagreement,
+and rookie context when a player has little or no NFL history.
+
+The prior answers:
+
+- what should this player probably score before the new season starts?
+- how uncertain should that expectation be?
+- how much should a thin or noisy player history move back toward the position
+  average?
+
+### Likelihood
+
+The `likelihood` is the part of the model that asks how compatible the historical
+training data are with a proposed relationship between features and future
+fantasy points. In implementation terms, the likelihood comes from a weighted
+regression over historical player-season examples. Recent seasons receive more
+weight than older seasons.
+
+The likelihood answers:
+
+- when players had features like this in past draft-time data, what happened in
+  the target season?
+- which features are consistently informative across historical examples?
+- how noisy is that relationship?
+
+### Posterior
+
+A `posterior` is the updated distribution after combining the prior and the
+historical regression evidence. It is a distribution, not just one number. That
+matters because two players can have similar central projections while one is
+much less certain.
+
+When the dashboard shows a posterior field, read it as:
+
+- `posterior_mean`: the central season-total fantasy-points estimate after the
+  model update
+- `posterior_std`: the width of uncertainty around that estimate
+- `posterior_floor` and `posterior_ceiling`: approximate lower and upper outcome
+  percentiles from simulated season-total posterior draws
+- `posterior_prob_beats_replacement`: the model-implied probability that the
+  player clears a replacement baseline
+
+### Posterior Mean
+
+The `posterior_mean` is the model's best central estimate for a player's
+season-total fantasy points after the prior and regression evidence have been
+combined. It is not a guarantee, not a median draft rank, and not by itself the
+draft recommendation.
+
+The draft board uses the posterior mean as an input to later board logic. The
+recommendation can still change after accounting for starter baselines,
+replacement baselines, roster need, next-pick availability, and expected regret.
+
+### Uncertainty
+
+`Uncertainty` means the model is less sure where the player's true season
+outcome will land. It can come from thin history, unstable role, injury or games
+missed history, team change, volatile scoring rate, noisy market signals, or
+weak historical comparability.
+
+Higher uncertainty does not automatically mean "avoid." It means the board
+should treat the projection as wider. That can create downside risk, but it can
+also preserve upside when the central estimate is strong and the ceiling is
+meaningful.
+
+### Shrinkage
+
+`Shrinkage` means pulling an estimate away from an extreme player-specific value
+and toward a broader reference point, usually a position average or a learned
+population pattern. This is useful when a player's own history is thin, noisy, or
+possibly misleading.
+
+For example, one explosive partial season should not be treated the same as five
+stable seasons. Shrinkage lets the model use the partial-season signal without
+pretending it is equally reliable.
+
+### Empirical Bayes
+
+`Empirical Bayes` means the model uses the data to estimate parts of the prior
+and update structure instead of relying entirely on subjective hand-set beliefs.
+Here, historical player-season data define the feature relationships and
+uncertainty behavior, while the player-specific prior features give each target
+player a draft-time starting point.
+
+In this project, posterior player fields come from a transparent hierarchical
+empirical-Bayes estimator with closed-form updates and explicit uncertainty
+fields.
 
 ## Implemented Workflow
 
@@ -136,7 +241,30 @@ Where:
 
 - `recent_rate` is the recent scoring rate when active
 - `position_rate_mean` is the historical rate average for the position
-- `shrinkage = season_count / (season_count + 2.5)`
+- `shrinkage` is:
+
+```math
+\mathrm{shrinkage}
+=
+\frac{\mathrm{season\_count}}{\mathrm{season\_count}+2.5}
+```
+
+The constant `2.5` is a prior-strength setting. It makes the position-level
+reference behave like roughly two and a half stabilizing seasons. With one NFL
+season of player history, the player-specific rate receives about:
+
+```math
+\frac{1}{1+2.5}\approx 0.29
+```
+
+of the blend. With five seasons, it receives about:
+
+```math
+\frac{5}{5+2.5}\approx 0.67
+```
+
+That is deliberate: one season should move the prior, but it should not erase
+the position context.
 
 The availability prior mean is built from weighted historical games played, with team-season context allowed to adjust it:
 
@@ -166,16 +294,19 @@ The prior is not built from one raw projection column. It is built from a draft-
 - prior VOR-style values and market-proxy values
 - site disagreement and related market instability features
 
-In other words, the prior is trying to answer:
+The prior is trying to answer three linked questions:
 
-```math
-\text{Before this season starts,}
-\quad
-\text{what should I expect from this player,}
-\quad
-\text{how noisy should that expectation be,}
-\quad
-\text{and how much should I shrink toward the position average?}
+```mermaid
+flowchart TD
+  A["Before the season starts"]
+  B["What should I expect<br/>from this player?"]
+  C["How noisy is<br/>that expectation?"]
+  D["How much should<br/>the estimate shrink toward<br/>the position average?"]
+  E["Player-specific<br/>prior distribution"]
+
+  A --> B --> E
+  A --> C --> E
+  A --> D --> E
 ```
 
 ### Recency Weighting
@@ -183,16 +314,32 @@ In other words, the prior is trying to answer:
 Historical seasons are weighted with exponential decay:
 
 ```math
-w_s = \mathrm{decay}^{(\mathrm{target\_season} - \mathrm{season}_s)}
+w_s
+=
+d^{\mathrm{target\_season}-s}
 ```
 
-with `decay = 0.72` in `_recency_weights(...)`.
+where `d = 0.72` in `_recency_weights(...)`.
 
 That means:
 
 - last season gets the most weight
 - older seasons still matter
 - old seasons are down-weighted rather than thrown away entirely
+
+The value `0.72` means each additional year back keeps 72 percent of the prior
+year's weight. For example:
+
+```math
+w_{\mathrm{last\ year}} = 0.72
+\qquad
+w_{\mathrm{two\ years\ back}} = 0.72^2 \approx 0.52
+\qquad
+w_{\mathrm{three\ years\ back}} = 0.72^3 \approx 0.37
+```
+
+So the model favors recent form while still allowing older seasons to stabilize
+thin histories.
 
 ### Replacement Baseline In The Prior
 
@@ -201,12 +348,22 @@ Even before the draft board is built, `_player_prior_features(...)` computes a p
 ```math
 \mathrm{replacement\_baseline}
 =
-Q_{\mathrm{replacement\_quantile}}(\mathrm{position\_points})
+Q_{0.20}(\mathrm{position\_points})
 ```
 
-with the default `replacement_quantile = 0.2`.
+The default replacement quantile is:
+
+```math
+\mathrm{replacement\_quantile}=0.20
+```
 
 That gives the player model an early notion of "beats replacement" before the board later recomputes league-shape-specific baselines.
+
+The 20th percentile is intentionally a low position-specific reference point,
+not a median starter threshold. At this stage the model needs a broad
+"replacement-level" anchor for posterior probability calculations; the later
+draft-board layer computes league-shape-specific starter and replacement
+baselines again.
 
 ## Empirical-Bayes Regression Layer
 
@@ -224,8 +381,25 @@ Inputs include:
 Recent seasons are weighted more heavily with:
 
 ```math
-w = \exp(-0.18\cdot \mathrm{season\_gap})
+w
+=
+\exp(-0.18\cdot \mathrm{season\_gap})
 ```
+
+The `0.18` decay coefficient is the regression-layer recency penalty. It implies
+roughly:
+
+```math
+\exp(-0.18)\approx 0.84
+\qquad
+\exp(-0.36)\approx 0.70
+\qquad
+\exp(-0.54)\approx 0.58
+```
+
+for examples one, two, and three seasons behind the most recent training season.
+This is milder than dropping old examples outright. The regression still learns
+from older data, but the newest player-season relationships contribute more.
 
 This regression produces:
 
@@ -258,20 +432,21 @@ The implementation solves this in precision form:
 \Sigma
 =
 \left(
-\Lambda_{\mathrm{prior}} + \beta X^\top W X
+\Lambda_{\mathrm{prior}} + \tau X^\top W X
 \right)^{-1}
 ```
 
 ```math
 \mu_\beta
 =
-\beta \Sigma X^\top W y
+\tau \Sigma X^\top W y
 ```
 
 where:
 
 - `W` is the diagonal matrix of recency weights
-- `beta = 1 / observation_variance`
+- `\tau = 1 / observation_variance`
+- `\Lambda_{\mathrm{prior}}` is the coefficient-prior precision matrix
 
 This is why the document calls it empirical Bayes rather than a fully hand-tuned subjective prior: the regression structure is learned from the historical examples, then combined with shrinkage and coefficient regularization.
 
@@ -285,10 +460,21 @@ The prior layer alone would mostly say:
 
 The regression layer adds a second question:
 
-```math
-\text{Across many historical examples, how do age, injury history, role volatility,}
-\quad
-\text{market features, and position-specific patterns shift the target outcome?}
+```mermaid
+flowchart TD
+  A["Historical player-season<br/>training examples"]
+  B["Age and experience"]
+  C["Injury and availability<br/>history"]
+  D["Role volatility"]
+  E["Market and ADP<br/>features"]
+  F["Position-specific<br/>patterns"]
+  G["Estimated shift in<br/>target-season outcome"]
+
+  A --> B --> G
+  A --> C --> G
+  A --> D --> G
+  A --> E --> G
+  A --> F --> G
 ```
 
 That is what allows the board to generalize beyond a naive "last season plus shrinkage" rule.
@@ -320,13 +506,62 @@ The final posterior combines the prior distribution with the empirical-Bayes reg
 
 The player table then exports:
 
-- `posterior_std = sqrt(posterior_var)`
-- `posterior_floor = posterior_mean - 1.2816 * posterior_std`
-- `posterior_ceiling = posterior_mean + 1.2816 * posterior_std`
+- `posterior_rate_mean` and `posterior_rate_std`
+- `posterior_games_mean` and `posterior_games_std`
+- `posterior_mean`
+- `posterior_std`
+- `posterior_floor`
+- `posterior_ceiling`
 
-Under the Normal approximation used here, those floor and ceiling values are approximately 10th and 90th posterior percentile points, not a 95 percent confidence interval of the mean.
+The season-total posterior is composed by simulation:
 
-`posterior_prob_beats_replacement` is the posterior probability that the player clears the position replacement baseline.
+```math
+r^{(m)} \sim \mathcal{N}(\mu_{\mathrm{rate}},\sigma^2_{\mathrm{rate}})
+\qquad
+g^{(m)} \sim \mathcal{N}(\mu_{\mathrm{games}},\sigma^2_{\mathrm{games}})
+```
+
+```math
+y^{(m)} = \max(r^{(m)},0)\cdot \mathrm{clip}(g^{(m)},0,\mathrm{expected\_games})
+```
+
+with `512` draws per player. The exported summaries are:
+
+```math
+\mathrm{posterior\_mean}
+=
+\frac{1}{512}\sum_{m=1}^{512} y^{(m)}
+```
+
+```math
+\mathrm{posterior\_floor}
+=
+Q_{0.10}\!\left(y^{(1)},\ldots,y^{(512)}\right)
+\qquad
+\mathrm{posterior\_ceiling}
+=
+Q_{0.90}\!\left(y^{(1)},\ldots,y^{(512)}\right)
+```
+
+The 10th and 90th percentiles are chosen as a readable downside/upside band.
+They are not a 95 percent confidence interval of the mean. The draw count `512`
+is an implementation balance: enough draws to produce stable dashboard
+summaries, small enough to keep repeated backtests and dashboard generation
+fast.
+
+`posterior_prob_beats_replacement` is the posterior probability that the player clears the position replacement baseline:
+
+```math
+\Pr(Y > R)
+=
+\Phi\left(
+\frac{\mathrm{posterior\_mean}-R}{\max(\mathrm{posterior\_std},1)}
+\right)
+```
+
+where `R` is the replacement baseline and `\Phi` is the standard Normal CDF. The
+`\max(\mathrm{posterior\_std},1)` denominator prevents unstable probabilities
+when a simulated posterior spread is extremely small.
 
 ### Intuition For The Posterior Combination
 
@@ -452,7 +687,7 @@ The implemented board foundation is `board_value_score`:
 + 0.24\,z(\mathrm{starter\_delta})
 + 0.18\,z(\mathrm{replacement\_delta})
 + 0.10\,z(\Pr[\text{beats replacement}])
-+ 0.05\,z(\mathrm{market\_gap})
++ 0.06\,z(\mathrm{market\_gap})
 + 0.03\,z(\mathrm{starter\_need})
 - \left(0.06\cdot \mathrm{risk\_multiplier}\right) z(\mathrm{fragility\_score})
 ```
@@ -464,6 +699,29 @@ Where `risk_multiplier` depends on risk tolerance:
 - high: `1.18`
 
 The exported `draft_score` is currently this `board_value_score`. The dashboard labels it `Board value score`.
+
+The board-value weights are policy weights, not regression coefficients learned
+directly from the backtest. They encode the intended ordering of concerns:
+
+```math
+0.40 > 0.24 > 0.18 > 0.10 > 0.06 > 0.03
+```
+
+The largest term keeps the board anchored to the central posterior projection.
+The next two terms give starter and replacement advantage real influence, so the
+board is not just a raw points sort. Smaller terms let replacement probability,
+market gap, and current starter need break ties or nudge close calls without
+dominating the core projection. The fragility penalty is deliberately modest and
+risk-adjusted:
+
+```math
+\mathrm{fragility\ penalty}
+=
+0.06\cdot \mathrm{risk\_multiplier}\cdot z(\mathrm{fragility\_score})
+```
+
+so changing risk tolerance changes how much shakiness hurts the score, while
+preserving the same base board-value structure.
 
 ### Why Everything Is Z-Scored Here
 
@@ -594,24 +852,19 @@ So a player can be strong on raw board value but still be de-prioritized by the 
 
 For one available player at your current draft slot, the action chain is:
 
-```math
-\text{posterior projection row}
-\rightarrow
-(\mathrm{starter\_delta},\mathrm{replacement\_delta})
-\rightarrow
-(\mathrm{fragility\_score},\mathrm{upside\_score})
-\rightarrow
-\mathrm{board\_value\_score}
-\rightarrow
-\mathrm{availability\_to\_next\_pick}
-\rightarrow
-(\mathrm{starter\_slot\_urgency},\mathrm{position\_run\_risk})
-\rightarrow
-\mathrm{expected\_regret}
-\rightarrow
-(\mathrm{current\_pick\_utility},\mathrm{wait\_utility})
-\rightarrow
-\text{recommendation lane}
+```mermaid
+flowchart TD
+  A["Posterior projection row"]
+  B["Starter delta<br/>and replacement delta"]
+  C["Fragility score<br/>and upside score"]
+  D["Board value score"]
+  E["Availability to<br/>next pick"]
+  F["Starter-slot urgency<br/>and position-run risk"]
+  G["Expected regret"]
+  H["Current-pick utility<br/>and wait utility"]
+  I["Recommendation lane"]
+
+  A --> B --> C --> D --> E --> F --> G --> H --> I
 ```
 
 That is the cleanest way to think about "what is happening under the hood" on draft day.
@@ -639,10 +892,17 @@ The evidence surface is not estimating a causal treatment effect of drafting one
 
 So the estimand is closer to:
 
-```math
-\text{average lineup-point difference between strategies}
-\quad
-\text{within the repo's internal holdout setup}
+```mermaid
+flowchart TD
+  A["Internal historical<br/>holdout seasons"]
+  B["Contextual board strategy"]
+  C["VOR-style baseline strategy"]
+  D["Compare lineup-point<br/>outputs"]
+  E["Average lineup-point<br/>difference between strategies"]
+
+  A --> B --> D
+  A --> C --> D
+  D --> E
 ```
 
 That is useful for calibration and trust-building, but it should not be interpreted as a universal external estimate.
@@ -651,7 +911,7 @@ That is useful for calibration and trust-building, but it should not be interpre
 
 Terms used in the current board mean different things:
 
-- `posterior_floor` and `posterior_ceiling`: approximate 10th and 90th posterior percentile points under the Normal approximation
+- `posterior_floor` and `posterior_ceiling`: approximate 10th and 90th percentile points from simulated season-total posterior draws
 - `uncertainty_score`: a normalized uncertainty-width score, not a probability
 - `Availability to next pick`: a survival probability for draft timing, not a predictive interval for fantasy points
 - `Expected regret`: a heuristic wait penalty, not a calibrated expected-value estimate in the causal-inference sense

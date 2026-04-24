@@ -34,7 +34,7 @@ Main dashboard sections to inspect:
 - `Decision evidence`
 - `Freshness and provenance`
 
-## What Not To Infer
+## Interpretation Boundaries
 
 - Do not treat the board as a promise about the future.
 - Do not treat `Decision evidence` as proof that the model is correct in every league.
@@ -359,4 +359,4 @@ Important paths:
 - easy local shortcut: `dashboard/index.html`
 - staged GitHub Pages copy: `site/index.html`
 
-The repository uses the empirical-Bayes player forecast. There is no active sampled-Bayes workflow in the repo or the live dashboard.
+The repository uses the empirical-Bayes player forecast in the repo and live dashboard.
