@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from pathlib import Path
 
@@ -240,6 +241,17 @@ def test_docs_explain_unavailable_validation_metrics():
     combined = _all_doc_text().lower()
     assert 'not estimable' in combined
     assert 'does not mean a measured zero relationship' in combined
+
+
+def test_technical_math_avoids_implementation_names_inside_tex_text_macros():
+    technical = _read(DOCS_DIR / 'TECHNICAL_DEEP_DIVE.md')
+
+    fragile_patterns = [
+        r'\\mathrm\{[^}]*_[^}]*\}',
+        r'\\text\{[^}]*_[^}]*\}',
+    ]
+    for pattern in fragile_patterns:
+        assert not re.search(pattern, technical), pattern
 
 
 def test_docs_path_contract_and_authority_language_remain_explicit():

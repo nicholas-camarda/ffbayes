@@ -160,9 +160,9 @@ The rate prior mean is a shrinkage blend of recent player rate and position rate
 
 $$
 \begin{aligned}
-\mathrm{prior\_rate\_mean}
-&= \mathrm{shrinkage}\cdot \mathrm{recent\_rate} \\
-&\quad + (1-\mathrm{shrinkage})\cdot \mathrm{position\_rate\_mean}
+\mu_{\text{rate prior}}
+&= \alpha\,r_{\text{recent}} \\
+&\quad + (1-\alpha)\,r_{\text{position}}
 \end{aligned}
 $$
 
@@ -173,8 +173,8 @@ Where:
 - `shrinkage` is:
 
 $$
-\mathrm{shrinkage} =
-\frac{\mathrm{season\_count}}{\mathrm{season\_count}+2.5}
+\alpha =
+\frac{n_{\text{seasons}}}{n_{\text{seasons}}+2.5}
 $$
 
 The constant `2.5` is a prior-strength setting. It makes the position-level
@@ -197,8 +197,8 @@ the position context.
 The availability prior mean is built from weighted historical games played, with team-season context allowed to adjust it:
 
 $$
-\mathrm{prior\_games\_mean} =
-\mathrm{weighted\ historical\ games\ played}
+\mu_{\text{games prior}} =
+\text{weighted historical games played}
 $$
 
 Season-total priors are then composed from those two components. The production season-total posterior is not a direct one-stage mean-only regression.
@@ -244,7 +244,7 @@ Historical seasons are weighted with exponential decay:
 
 $$
 w_s =
-d^{\mathrm{target\_season}-s}
+d^{t_{\text{target}}-s}
 $$
 
 where `d = 0.72` in `_recency_weights(...)`.
@@ -259,11 +259,11 @@ The value `0.72` means each additional year back keeps 72 percent of the prior
 year's weight. For example:
 
 $$
-w_{\mathrm{last\ year}} = 0.72
+w_{\text{last year}} = 0.72
 \qquad
-w_{\mathrm{two\ years\ back}} = 0.72^2 \approx 0.52
+w_{\text{two years back}} = 0.72^2 \approx 0.52
 \qquad
-w_{\mathrm{three\ years\ back}} = 0.72^3 \approx 0.37
+w_{\text{three years back}} = 0.72^3 \approx 0.37
 $$
 
 So the model favors recent form while still allowing older seasons to stabilize
@@ -274,14 +274,14 @@ thin histories.
 Even before the draft board is built, `_player_prior_features(...)` computes a position-level replacement baseline from the position scoring distribution:
 
 $$
-\mathrm{replacement\_baseline} =
-Q_{0.20}(\mathrm{position\_points})
+B_{\text{replacement}} =
+Q_{0.20}(Y_{\text{position points}})
 $$
 
 The default replacement quantile is:
 
 $$
-\mathrm{replacement\_quantile}=0.20
+q_{\text{replacement}}=0.20
 $$
 
 That gives the player model an early notion of "beats replacement" before the board later recomputes league-shape-specific baselines.
@@ -309,7 +309,7 @@ Recent seasons are weighted more heavily with:
 
 $$
 w =
-\exp(-0.18\cdot \mathrm{season\_gap})
+\exp(-0.18\cdot \Delta_{\text{season}})
 $$
 
 The `0.18` decay coefficient is the regression-layer recency penalty. It implies
@@ -341,9 +341,9 @@ y = X\beta + \varepsilon
 $$
 
 $$
-\varepsilon \sim \mathcal{N}(0,\ \sigma^2_{\mathrm{obs}})
+\varepsilon \sim \mathcal{N}(0,\ \sigma^2_{\text{obs}})
 \qquad
-\beta \sim \mathcal{N}\!\left(0,\ \Lambda_{\mathrm{prior}}^{-1}\right)
+\beta \sim \mathcal{N}\!\left(0,\ \Lambda_{\text{prior}}^{-1}\right)
 $$
 
 Where:
@@ -356,7 +356,7 @@ The implementation solves this in precision form:
 
 $$
 \Sigma =
-\left(\Lambda_{\mathrm{prior}} + \tau X^\top W X\right)^{-1}
+\left(\Lambda_{\text{prior}} + \tau X^\top W X\right)^{-1}
 $$
 
 $$
@@ -367,8 +367,8 @@ $$
 where:
 
 - $W$ is the diagonal matrix of recency weights
-- $\tau = 1 / \mathrm{observation\_variance}$
-- $\Lambda_{\mathrm{prior}}$ is the coefficient-prior precision matrix
+- $\tau = 1 / \sigma^2_{\text{obs}}$
+- $\Lambda_{\text{prior}}$ is the coefficient-prior precision matrix
 
 This is why the document calls it empirical Bayes rather than a fully hand-tuned subjective prior: the regression structure is learned from the historical examples, then combined with shrinkage and coefficient regularization.
 
@@ -393,16 +393,16 @@ That is what allows the board to generalize beyond a naive "last season plus shr
 The final posterior combines the prior distribution with the empirical-Bayes regression estimate in closed form:
 
 $$
-\mathrm{posterior\_var} =
+\sigma^2_{\text{post}} =
 \left(
-\frac{1}{\mathrm{prior\_var}} + \frac{1}{\mathrm{regression\_var}}
+\frac{1}{\sigma^2_{\text{prior}}} + \frac{1}{\sigma^2_{\text{reg}}}
 \right)^{-1}
 $$
 
 $$
-\mathrm{posterior\_mean} =
-\mathrm{posterior\_var}\left(
-\frac{\mathrm{prior\_mean}}{\mathrm{prior\_var}} + \frac{\mathrm{regression\_mean}}{\mathrm{regression\_var}}
+\mu_{\text{post}} =
+\sigma^2_{\text{post}}\left(
+\frac{\mu_{\text{prior}}}{\sigma^2_{\text{prior}}} + \frac{\mu_{\text{reg}}}{\sigma^2_{\text{reg}}}
 \right)
 $$
 
@@ -418,27 +418,27 @@ The player table then exports:
 The season-total posterior is composed by simulation:
 
 $$
-r^{(m)} \sim \mathcal{N}(\mu_{\mathrm{rate}},\sigma^2_{\mathrm{rate}})
+r^{(m)} \sim \mathcal{N}(\mu_{\text{rate}},\sigma^2_{\text{rate}})
 \qquad
-g^{(m)} \sim \mathcal{N}(\mu_{\mathrm{games}},\sigma^2_{\mathrm{games}})
+g^{(m)} \sim \mathcal{N}(\mu_{\text{games}},\sigma^2_{\text{games}})
 $$
 
 $$
-y^{(m)} = \max(r^{(m)},0)\cdot \mathrm{clip}(g^{(m)},0,\mathrm{expected\_games})
+y^{(m)} = \max(r^{(m)},0)\cdot \operatorname{clip}(g^{(m)},0,G_{\text{season}})
 $$
 
 with `512` draws per player. The exported summaries are:
 
 $$
-\mathrm{posterior\_mean} =
+\mu_{\text{post}} =
 \frac{1}{512}\sum_{m=1}^{512} y^{(m)}
 $$
 
 $$
 \begin{aligned}
-\mathrm{posterior\_floor}
+Q_{\text{floor}}
 &= Q_{0.10}\!\left(y^{(1)},\ldots,y^{(512)}\right) \\
-\mathrm{posterior\_ceiling}
+Q_{\text{ceiling}}
 &= Q_{0.90}\!\left(y^{(1)},\ldots,y^{(512)}\right)
 \end{aligned}
 $$
@@ -454,13 +454,13 @@ fast.
 $$
 \Pr(Y > R) =
 \Phi\left(
-\frac{\mathrm{posterior\_mean}-R}{\max(\mathrm{posterior\_std},1)}
+\frac{\mu_{\text{post}}-R}{\max(\sigma_{\text{post}},1)}
 \right)
 $$
 
 where $R$ is the replacement baseline and $\Phi$ is the standard Normal CDF. The
-$\max(\mathrm{posterior\_std},1)$ denominator prevents unstable probabilities
-when a simulated posterior spread is extremely small.
+$\max(\sigma_{\text{post}},1)$ denominator prevents unstable probabilities when
+a simulated posterior spread is extremely small.
 
 ### Intuition For The Posterior Combination
 
@@ -495,13 +495,13 @@ The board uses two distinct baselines in `draft_decision_system.py`:
 These create:
 
 $$
-\mathrm{starter\_delta} =
-\mathrm{proj\_points\_mean} - \mathrm{starter\_baseline}
+D_{\text{starter}} =
+\mu_{\text{proj}} - B_{\text{starter}}
 $$
 
 $$
-\mathrm{replacement\_delta} =
-\mathrm{proj\_points\_mean} - \mathrm{replacement\_baseline}
+D_{\text{replacement}} =
+\mu_{\text{proj}} - B_{\text{replacement}}
 $$
 
 The dashboard label for `replacement_delta` is `Simple VOR proxy`. That is a baseline comparator, not the full contextual board.
@@ -511,8 +511,8 @@ The dashboard label for `replacement_delta` is `Simple VOR proxy`. That is a bas
 The board recomputes league-shape-specific baselines using `_position_baseline(...)`:
 
 $$
-\mathrm{baseline}(\mathrm{position},\mathrm{slot\_count}) =
-\text{projection of the player ranked at slot\_count within that position}
+B(p,k) =
+\text{projection of the player ranked } k \text{ within position } p
 $$
 
 So if the league shape changes, the starter and replacement baselines can move even when the player posterior table does not.
@@ -565,14 +565,14 @@ The implemented board foundation is `board_value_score`:
 
 $$
 \begin{aligned}
-\mathrm{board\_value\_score}
-&= 0.40\,z(\mathrm{proj\_points\_mean}) \\
-&\quad + 0.24\,z(\mathrm{starter\_delta}) \\
-&\quad + 0.18\,z(\mathrm{replacement\_delta}) \\
+B_{\text{value}}
+&= 0.40\,z(\mu_{\text{proj}}) \\
+&\quad + 0.24\,z(D_{\text{starter}}) \\
+&\quad + 0.18\,z(D_{\text{replacement}}) \\
 &\quad + 0.10\,z(\Pr[\text{beats replacement}]) \\
-&\quad + 0.05\,z(\mathrm{market\_gap}) \\
-&\quad + 0.03\,z(\mathrm{starter\_need}) \\
-&\quad - \left(0.06\cdot \mathrm{risk\_multiplier}\right) z(\mathrm{fragility\_score})
+&\quad + 0.05\,z(M_{\text{gap}}) \\
+&\quad + 0.03\,z(N_{\text{starter}}) \\
+&\quad - \left(0.06\cdot R_{\text{risk}}\right) z(F_{\text{fragility}})
 \end{aligned}
 $$
 
@@ -599,8 +599,8 @@ dominating the core projection. The fragility penalty is deliberately modest and
 risk-adjusted:
 
 $$
-\mathrm{fragility\ penalty} =
-0.06\cdot \mathrm{risk\_multiplier}\cdot z(\mathrm{fragility\_score})
+P_{\text{fragility}} =
+0.06\cdot R_{\text{risk}}\cdot z(F_{\text{fragility}})
 $$
 
 so changing risk tolerance changes how much shakiness hurts the score, while
@@ -642,11 +642,11 @@ The recommendation layer is separate from the raw board value ordering.
 The implementation uses a logistic transform:
 
 $$
-z = \frac{\mathrm{ADP} - \mathrm{target\_pick}}{\mathrm{spread}}
+z = \frac{\mathrm{ADP} - P_{\text{target}}}{S_{\text{spread}}}
 $$
 
 $$
-\mathrm{availability\_to\_next\_pick} =
+A_{\text{next pick}} =
 \frac{1}{1+\exp(-z)}
 $$
 
@@ -684,13 +684,13 @@ Those terms are why the action policy can differ from pure player value even whe
 
 $$
 \begin{aligned}
-\mathrm{expected\_regret}
+R_{\text{wait}}
 &= \left(
-0.55\cdot \mathrm{lineup\_gain\_percentile}
-{}+ 0.25\cdot \mathrm{starter\_slot\_urgency}
-{}+ 0.20\cdot \mathrm{position\_run\_risk}
+0.55\cdot G_{\text{lineup}}
+{}+ 0.25\cdot U_{\text{starter slot}}
+{}+ 0.20\cdot R_{\text{position run}}
 \right) \\
-&\quad \cdot \left(1-\mathrm{availability\_to\_next\_pick}\right)
+&\quad \cdot \left(1-A_{\text{next pick}}\right)
 \end{aligned}
 $$
 
@@ -700,23 +700,23 @@ The board computes separate utilities for acting now versus waiting:
 
 $$
 \begin{aligned}
-\mathrm{current\_pick\_utility}
-&= \mathrm{draft\_score}
-{}+ \mathrm{specialist\ bonuses} \\
-&\quad + 0.32\cdot \mathrm{starter\_slot\_urgency}
-{}+ 0.22\cdot \mathrm{lineup\_gain\_percentile} \\
+U_{\text{pick now}}
+&= S_{\text{draft}}
+{}+ B_{\text{specialist}} \\
+&\quad + 0.32\cdot U_{\text{starter slot}}
+{}+ 0.22\cdot G_{\text{lineup}} \\
 &\quad + 0.08\cdot \Pr[\text{beats replacement}]
-{}+ 0.06\cdot \mathrm{position\_run\_risk} \\
-&\quad + \mathrm{risk\_bias}\cdot \mathrm{upside\_score}
+{}+ 0.06\cdot R_{\text{position run}} \\
+&\quad + B_{\text{risk}}\cdot S_{\text{upside}}
 \end{aligned}
 $$
 
 $$
 \begin{aligned}
-\mathrm{wait\_utility}
-&= \mathrm{draft\_score}\cdot \mathrm{availability\_to\_next\_pick} \\
-&\quad + 0.06\cdot \mathrm{upside\_score}
-{}- 0.85\cdot \mathrm{expected\_regret}
+U_{\text{wait}}
+&= S_{\text{draft}}\cdot A_{\text{next pick}} \\
+&\quad + 0.06\cdot S_{\text{upside}}
+{}- 0.85\cdot R_{\text{wait}}
 \end{aligned}
 $$
 
