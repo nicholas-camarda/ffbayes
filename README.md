@@ -15,7 +15,7 @@ If you are trying to understand the product before reading the workflow docs, st
 1. Run the pre-draft pipeline.
 2. Open the local dashboard shortcut.
 3. Use the workbook and dashboard during the draft.
-4. Use one command to refresh and stage the public dashboard when needed.
+4. Add one flag when you also want to stage the public dashboard.
 5. Import the finalized draft bundle after the draft.
 6. Run the retrospective once realized outcomes are available.
 
@@ -26,6 +26,12 @@ ffbayes pre-draft
 ```
 
 That command refreshes the full pre-draft analysis stack and regenerates the live draft artifacts.
+
+When you also want to refresh the GitHub Pages copy, use:
+
+```bash
+ffbayes pre-draft --stage-pages
+```
 
 ## Quick Start
 
@@ -148,11 +154,13 @@ That command auto-discovers imported finalized JSON and writes retrospective JSO
 Use these commands by intent:
 
 - `ffbayes pre-draft`: full pre-draft workflow
+- `ffbayes pre-draft --stage-pages`: full pre-draft workflow plus GitHub Pages staging
 - `ffbayes draft-strategy`: regenerate the board and dashboard from current processed inputs and league settings
+- `ffbayes stage-dashboard --year <year>`: refresh and stage the dashboard when only dashboard/template changes need iteration
 - `ffbayes draft-retrospective`: import finalized draft bundles and later evaluate them against realized outcomes
 - `ffbayes collect`, `ffbayes validate`, `ffbayes preprocess`: lower-level debugging or recovery steps
 
-Internal developer dashboard refresh, Pages staging, and publish-surface checks are
+Internal developer dashboard refresh helpers and publish-surface checks are
 covered in [docs/DASHBOARD_OPERATOR_GUIDE.md](docs/DASHBOARD_OPERATOR_GUIDE.md)
 and [docs/DATA_LINEAGE_AND_PATHS.md](docs/DATA_LINEAGE_AND_PATHS.md).
 
@@ -225,7 +233,7 @@ These commands are available outside the default `ffbayes pre-draft` operator pa
 
 - `ffbayes bayesian-vor`: generate rolling holdout forecast validation summaries
 - `ffbayes mc`: run the standalone Monte Carlo roster analysis
-- `ffbayes publish --year <year>`: mirror selected runtime artifacts into cloud storage
+- `ffbayes publish --year <year>`: stage GitHub Pages and mirror selected runtime artifacts into cloud storage
 
 ## Documentation
 

@@ -2,7 +2,7 @@
 
 Audience: operators and contributors who need to know where artifacts come from, where they live, and which path is authoritative.
 
-Scope: the supported `pre-draft` workflow, runtime roots, repo-local shortcuts, staged Pages files, and optional cloud publish targets.
+Scope: the supported `pre-draft` workflow, runtime roots, repo-local shortcuts, staged Pages files, and optional public publish targets.
 
 Trust boundary: authoritative runtime artifacts live under the configured runtime root. Repo `dashboard/`, repo `site/`, and cloud mirrors are derived surfaces with different purposes.
 
@@ -16,7 +16,7 @@ Use this guide when:
 
 - you need to find a generated artifact
 - you want to know whether a path is authoritative or derived
-- you need to understand what `stage-dashboard`, `publish-pages`, or `publish` changes
+- you need to understand what `pre-draft --stage-pages`, `stage-dashboard`, or `publish` changes
 - you are auditing lineage from raw data to final board
 
 ## What To Inspect
@@ -29,9 +29,8 @@ Primary commands that create or move artifacts:
 
 - `ffbayes pre-draft`
 - `ffbayes draft-strategy`
+- `ffbayes pre-draft --stage-pages`
 - `ffbayes stage-dashboard`
-- `ffbayes refresh-dashboard`
-- `ffbayes publish-pages`
 - `ffbayes draft-retrospective`
 - `ffbayes publish`
 
@@ -138,16 +137,16 @@ These are derived convenience copies, not the source of truth.
 
 Purpose: copy the current dashboard into repo-tracked `site/`.
 
-Command:
+Full pre-draft refresh plus Pages staging:
+
+```bash
+ffbayes pre-draft --stage-pages
+```
+
+Dashboard-only refresh and Pages staging:
 
 ```bash
 ffbayes stage-dashboard --year 2026
-```
-
-Lower-level compatibility command:
-
-```bash
-ffbayes publish-pages --year 2026
 ```
 
 Derived paths:
@@ -214,9 +213,8 @@ Purpose: pair common commands with the surface they mutate.
 | Command | Purpose | Main authority level |
 | --- | --- | --- |
 | `ffbayes pre-draft` | rebuild the supported workflow | authoritative runtime |
+| `ffbayes pre-draft --stage-pages` | rebuild the supported workflow and stage `site/` | authoritative runtime, then derived publish surface |
 | `ffbayes draft-strategy` | rebuild board artifacts from current processed inputs | authoritative runtime |
 | `ffbayes stage-dashboard --year <year>` | regenerate HTML from authoritative payload and stage `site/` | authoritative runtime, then derived publish surface |
-| `ffbayes refresh-dashboard --year <year>` | regenerate HTML from authoritative payload | authoritative runtime, then derived shortcuts |
-| `ffbayes publish-pages --year <year>` | stage `site/` from existing runtime dashboard | derived publish surface |
 | `ffbayes draft-retrospective --import-finalized ... --ingest-only --year <year>` | import finalized artifacts | authoritative runtime |
-| `ffbayes publish --year <year>` | mirror selected runtime artifacts into cloud storage | derived cloud mirror |
+| `ffbayes publish --year <year>` | stage `site/` and mirror selected runtime artifacts into cloud storage | derived publish surface and derived cloud mirror |

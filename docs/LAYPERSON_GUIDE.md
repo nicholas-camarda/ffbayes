@@ -348,6 +348,7 @@ Purpose: use the supported workflow without needing the internal code details.
 
 ```bash
 ffbayes pre-draft
+ffbayes pre-draft --stage-pages
 ffbayes stage-dashboard --year 2026
 ffbayes draft-retrospective --year 2026
 ```

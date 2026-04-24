@@ -365,6 +365,11 @@ def main():
         default=None,
         help='Season year to use for logging and artifact naming.',
     )
+    parser.add_argument(
+        '--stage-pages',
+        action='store_true',
+        help='After a successful pre-draft run, stage the public GitHub Pages copy.',
+    )
     args, _ = parser.parse_known_args()
 
     try:
@@ -372,6 +377,17 @@ def main():
         success = runner.run_pipeline()
 
         if success:
+            if args.stage_pages:
+                try:
+                    from ffbayes.stage_dashboard import stage_dashboard
+
+                    staged = stage_dashboard(year=runner.current_year)
+                    print('\n🌐 GitHub Pages staging complete')
+                    print(f'   staged site: {staged.get("staged_index_path")}')
+                    print(f'   staged payload: {staged.get("staged_payload_path")}')
+                except Exception as e:
+                    print(f'\n💥 GitHub Pages staging failed: {e}')
+                    sys.exit(1)
             sys.exit(0)
         else:
             print('\n💥 Pipeline completed with errors!')

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 import ffbayes.run_pipeline_split as run_pipeline_split
 
 
@@ -78,3 +80,50 @@ def test_split_runner_forwards_step_env_and_args(monkeypatch):
     assert captured['env']['FFBAYES_PIPELINE_PHASE'] == 'pre_draft'
     assert captured['env']['FFBAYES_ALLOW_STALE_SEASON'] == 'true'
     assert captured['env']['FFBAYES_PROCESS_DATASET_PROGRESS'] == 'summary'
+
+
+def test_pre_draft_stage_pages_runs_after_success(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeRunner:
+        current_year = 2026
+
+        def __init__(self, year=None):
+            captured['year'] = year
+
+        def run_pipeline(self):
+            captured['pipeline_ran'] = True
+            return True
+
+    def fake_stage_dashboard(year):
+        captured['stage_year'] = year
+        return {
+            'staged_index_path': Path('/tmp/site/index.html'),
+            'staged_payload_path': Path('/tmp/site/dashboard_payload.json'),
+        }
+
+    monkeypatch.setattr(run_pipeline_split, 'SplitPipelineRunner', FakeRunner)
+    monkeypatch.setitem(
+        run_pipeline_split.sys.modules,
+        'ffbayes.stage_dashboard',
+        type(
+            'FakeStageModule',
+            (),
+            {'stage_dashboard': staticmethod(fake_stage_dashboard)},
+        ),
+    )
+    monkeypatch.setattr(
+        run_pipeline_split.sys,
+        'argv',
+        ['ffbayes.run_pipeline_split', '--year', '2026', '--stage-pages'],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        run_pipeline_split.main()
+
+    assert exc.value.code == 0
+    assert captured == {
+        'year': 2026,
+        'pipeline_ran': True,
+        'stage_year': 2026,
+    }

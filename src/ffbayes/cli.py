@@ -85,12 +85,7 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec(
         name='publish',
         module='ffbayes.publish_artifacts',
-        help_text='Mirror selected runtime artifacts into cloud storage.',
-    ),
-    CommandSpec(
-        name='publish-pages',
-        module='ffbayes.publish_pages',
-        help_text='Stage the existing live dashboard into GitHub Pages.',
+        help_text='Stage GitHub Pages and mirror selected runtime artifacts into cloud storage.',
     ),
     CommandSpec(
         name='stage-dashboard',
@@ -128,16 +123,13 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             'Examples:\n'
-            '  ffbayes collect --years 2021,2022,2023\n'
-            '  ffbayes preprocess\n'
-            '  ffbayes split\n'
+            '  ffbayes pre-draft\n'
+            '  ffbayes pre-draft --stage-pages\n'
             '  ffbayes draft-strategy --draft-position 10\n'
+            '  ffbayes stage-dashboard --year 2025\n'
             '  ffbayes draft-retrospective --import-finalized ~/Downloads/ffbayes_finalized_*_2026_*\n'
             '  ffbayes draft-retrospective --year 2026\n'
-            '  ffbayes stage-dashboard --year 2025\n'
             '  ffbayes publish --year 2025\n\n'
-            '  ffbayes refresh-dashboard --year 2025 --stage-pages\n'
-            '  ffbayes publish-pages --year 2025\n\n'
             'Any extra arguments after the command are forwarded to the existing '
             'module-level CLI.'
         ),

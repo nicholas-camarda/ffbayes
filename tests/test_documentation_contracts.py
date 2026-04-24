@@ -8,7 +8,6 @@ import ffbayes.cli as cli
 from ffbayes.analysis.draft_retrospective import (
     build_parser as build_retrospective_parser,
 )
-from ffbayes.publish_pages import build_parser as build_publish_pages_parser
 from ffbayes.refresh_dashboard import build_parser as build_refresh_dashboard_parser
 from ffbayes.stage_dashboard import build_parser as build_stage_dashboard_parser
 
@@ -69,7 +68,7 @@ REQUIRED_CANONICAL_TERMS = [
 ]
 
 COMMAND_SOURCE_ALLOWLIST = {
-    'pre-draft': {'--year'},
+    'pre-draft': {'--year', '--stage-pages'},
     'draft-strategy': {
         '--draft-position',
         '--league-size',
@@ -87,12 +86,6 @@ COMMAND_SOURCE_ALLOWLIST = {
     'stage-dashboard': {
         option
         for action in build_stage_dashboard_parser()._actions
-        for option in action.option_strings
-        if option.startswith('--')
-    },
-    'publish-pages': {
-        option
-        for action in build_publish_pages_parser()._actions
         for option in action.option_strings
         if option.startswith('--')
     },

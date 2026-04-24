@@ -25,9 +25,8 @@ This guide suite explains the supported `pre-draft` workflow, the current dashbo
 
 ```bash
 ffbayes pre-draft
-ffbayes draft-strategy
+ffbayes pre-draft --stage-pages
 ffbayes stage-dashboard --year 2026
-ffbayes refresh-dashboard --year 2026
 ffbayes draft-retrospective --import-finalized ~/Downloads/ffbayes_finalized_*_2026_* --ingest-only --year 2026
 ```
 

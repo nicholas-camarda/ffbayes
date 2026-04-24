@@ -391,7 +391,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             'Regenerate dashboard HTML from the existing runtime payload. '
-            'Use `ffbayes stage-dashboard` when you also want to restage `site/`.'
+            'Use `ffbayes stage-dashboard` when iterating on dashboard changes '
+            'that should also restage `site/`.'
         )
     )
     parser.add_argument(
@@ -410,7 +411,7 @@ def build_parser() -> argparse.ArgumentParser:
         action='store_true',
         help=(
             'Also restage the GitHub Pages site from the refreshed HTML and payload. '
-            'For the normal one-step operator path, prefer `ffbayes stage-dashboard`.'
+            'For dashboard-only iteration, prefer `ffbayes stage-dashboard`.'
         ),
     )
     parser.add_argument(

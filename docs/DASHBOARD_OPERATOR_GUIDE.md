@@ -25,10 +25,9 @@ Use this guide when you need to:
 Primary commands:
 
 - `ffbayes pre-draft`
+- `ffbayes pre-draft --stage-pages`
 - `ffbayes draft-strategy`
 - `ffbayes stage-dashboard --year <year>`
-- `ffbayes refresh-dashboard --year <year>`
-- `ffbayes publish-pages --year <year>`
 - `ffbayes draft-retrospective --import-finalized ... --ingest-only --year <year>`
 - `ffbayes draft-retrospective --year <year>`
 
@@ -70,6 +69,12 @@ Purpose: rebuild the supported pre-draft stack from source data through dashboar
 ffbayes pre-draft
 ```
 
+To rebuild the full workflow and stage the public GitHub Pages copy in the same run:
+
+```bash
+ffbayes pre-draft --stage-pages
+```
+
 ### Board-Only Refresh
 
 Purpose: regenerate the board and dashboard from current processed inputs and current league settings.
@@ -78,15 +83,17 @@ Purpose: regenerate the board and dashboard from current processed inputs and cu
 ffbayes draft-strategy
 ```
 
-### One-Step Public Dashboard Refresh
+### Dashboard-Only Pages Refresh
 
-Purpose: rebuild HTML from the authoritative payload and restage the repo's GitHub Pages copy in one step.
+Purpose: rebuild dashboard HTML from the authoritative payload and restage the repo's GitHub Pages copy without rerunning collection, preprocessing, or player modeling. Use this when you are iterating on dashboard/template changes only.
 
 ```bash
 ffbayes stage-dashboard --year 2026
 ```
 
-### HTML-Only Refresh
+### Lower-Level Dashboard Helpers
+
+These are developer helpers for narrow checks or unusual staging cases, not the normal operator path.
 
 Purpose: rebuild HTML from an authoritative payload without rerunning the broader analysis stack.
 
@@ -102,14 +109,6 @@ Purpose: verify whether a target HTML file still matches regeneration from its a
 ffbayes refresh-dashboard --check --json \
   --payload-path /path/to/dashboard_payload.json \
   --output-html /path/to/index.html
-```
-
-### Stage GitHub Pages Directly
-
-Purpose: copy the current validated dashboard into repo-tracked `site/` without rerendering the dashboard first.
-
-```bash
-ffbayes publish-pages --year 2026
 ```
 
 ### Import Finalized Draft Artifacts
@@ -310,11 +309,11 @@ Runtime-local retrospective artifacts:
 - `seasons/<year>/draft_strategy/draft_retrospective_<year>.json`
 - `seasons/<year>/draft_strategy/draft_retrospective_<year>.html`
 
-## Publish Pages Only When Needed
+## Publish Public Surfaces Only When Needed
 
-Use `ffbayes stage-dashboard --year <year>` when you want the repo's public Pages copy updated and also want the dashboard HTML rerendered first.
+Use `ffbayes pre-draft --stage-pages` when you want a full data/model refresh and the repo's public Pages copy updated in one command.
 
-Use `ffbayes publish-pages --year <year>` only as a lower-level staging helper when you intentionally want to copy the current runtime dashboard into `site/` without rerendering it.
+Use `ffbayes stage-dashboard --year <year>` when you are only iterating on dashboard/template changes and do not need a full pre-draft rerun.
 
 What to inspect in the staged Pages payload:
 

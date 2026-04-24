@@ -38,7 +38,7 @@ Additional outputs from explicit commands:
 
 - `seasons/<year>/montecarlo_results/`
 - `seasons/<year>/model_evaluation/`
-- cloud `data/` and `Analysis/<date>/` after `ffbayes publish`
+- repo `site/` plus cloud `data/` and `Analysis/<date>/` after `ffbayes publish`
 
 ## Interpretation Boundaries
 
@@ -256,9 +256,9 @@ Typical additional artifact family:
 seasons/<year>/model_evaluation/
 ```
 
-### Cloud Publish
+### Public Publish
 
-Purpose: mirror selected runtime artifacts into cloud storage.
+Purpose: stage the GitHub Pages copy and mirror selected runtime artifacts into cloud storage.
 
 Command:
 
@@ -266,9 +266,10 @@ Command:
 ffbayes publish --year 2026
 ```
 
-Derived cloud paths:
+Derived publish paths:
 
 ```text
+site/
 data/
 Analysis/<date>/
 ```
@@ -279,9 +280,9 @@ Supported workflow commands:
 
 ```bash
 ffbayes pre-draft
+ffbayes pre-draft --stage-pages
 ffbayes draft-strategy
 ffbayes stage-dashboard --year 2026
-ffbayes refresh-dashboard --year 2026
 ffbayes draft-retrospective --year 2026
 ```
 

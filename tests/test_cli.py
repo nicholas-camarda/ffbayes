@@ -54,7 +54,7 @@ def test_split_command_forwards_without_phase_argument(monkeypatch):
     ]
 
 
-def test_publish_pages_command_forwards_extra_arguments(monkeypatch):
+def test_pre_draft_command_forwards_stage_pages_flag(monkeypatch):
     captured = {}
 
     def fake_import(module_name):
@@ -68,12 +68,38 @@ def test_publish_pages_command_forwards_extra_arguments(monkeypatch):
 
     monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
 
-    exit_code = cli.main(['publish-pages', '--year', '2026'])
+    exit_code = cli.main(['pre-draft', '--year', '2026', '--stage-pages'])
 
     assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.publish_pages'
+    assert captured['module_name'] == 'ffbayes.run_pipeline_split'
     assert captured['argv'] == [
-        'ffbayes.publish_pages',
+        'ffbayes.run_pipeline_split',
+        '--year',
+        '2026',
+        '--stage-pages',
+    ]
+
+
+def test_publish_command_forwards_extra_arguments(monkeypatch):
+    captured = {}
+
+    def fake_import(module_name):
+        captured['module_name'] = module_name
+
+        def fake_main():
+            captured['argv'] = sys.argv[:]
+            return 0
+
+        return SimpleNamespace(main=fake_main)
+
+    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
+
+    exit_code = cli.main(['publish', '--year', '2026'])
+
+    assert exit_code == 0
+    assert captured['module_name'] == 'ffbayes.publish_artifacts'
+    assert captured['argv'] == [
+        'ffbayes.publish_artifacts',
         '--year',
         '2026',
     ]
