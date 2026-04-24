@@ -232,6 +232,17 @@ def test_supported_cli_and_docs_do_not_expose_sampled_eval_lane():
     assert 'diagnostics-only evaluation workflow' not in lowered
 
 
+def test_docs_limit_rookie_context_to_live_board_support():
+    lowered = ' '.join(_all_doc_text().lower().split())
+
+    assert 'broad historical prospect-feature backfill' in lowered
+    assert 'current and immediately prior draft years' in lowered
+    assert 'cannot publish silently null rookie context' in lowered
+    assert 'draft-time-safe features' not in lowered
+    assert 'historical draft/combine modeling support' not in lowered
+    assert 'historical combine backfill' not in lowered
+
+
 def test_docs_explain_unavailable_validation_metrics():
     combined = _all_doc_text().lower()
     assert 'not estimable' in combined

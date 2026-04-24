@@ -193,7 +193,7 @@ Projection detail stays behind the `Projection breakdown` disclosure. That is wh
 - `Current team`
 - `Team change`
 
-When relevant, the same section also surfaces rookie context such as draft pick, combine signal, and depth-chart rank. Keep that detail in the inspector; the main board should stay lean.
+When relevant, the same section also surfaces current/prior draft-year rookie context such as draft pick, combine signal, and depth-chart rank. Keep that detail in the inspector; the main board should stay lean.
 
 ### Decision Evidence
 

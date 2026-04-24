@@ -198,7 +198,7 @@ The supported draft board has three layers: player projection, board constructio
 
 At a high level:
 
-- the player layer builds season-total posterior projections and uncertainty estimates from historical player performance, availability, and draft-time-safe features
+- the player layer builds season-total posterior projections and uncertainty estimates from historical player performance, availability, and limited live-board context for players with thin NFL history
 - the board layer converts those projections into starter edge, replacement edge, fragility, upside, and market-gap signals
 - the recommendation layer then decides whether to pick now or wait based on roster urgency, next-pick survival, and expected regret
 - the dashboard keeps `Simple VOR proxy` as an explicit baseline comparison beside the contextual board score

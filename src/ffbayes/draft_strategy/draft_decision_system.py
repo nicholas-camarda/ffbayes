@@ -3052,7 +3052,7 @@ def build_dashboard_payload(
         'model_overview': {
             'headline': 'The draft board uses season-total posterior projections plus a starter-first decision policy.',
             'plain_english': [
-                'Each player starts with a season-total posterior built from scoring-rate and availability components, then local context such as team change and rookie inputs updates the draft-facing estimate.',
+                'Each player starts with a season-total posterior built from scoring-rate and availability components, then local context such as team change and current/prior draft-year rookie inputs updates the draft-facing estimate.',
                 'The board value score is a clean posterior-based ranking, and the live recommendation layer separately decides whether to pick now or wait based on starter urgency and survival risk.',
                 'The simple VOR view is still available as a frozen baseline through replacement delta and rank-gap summaries.',
             ],
@@ -5253,7 +5253,7 @@ def export_dashboard_html(
           reasons.push(`projects for about ${formatNumber(row.posterior_rate_mean)} points when active across ${formatNumber(row.posterior_games_mean)} games`);
         }
         if (Number(row.rookie_draft_pick) > 0) {
-          reasons.push(`has rookie context shaped by draft capital and current depth-chart opportunity`);
+          reasons.push(`has current/prior draft-year rookie context shaped by draft capital and current depth-chart opportunity`);
         }
         return `${row.player_name} is recommended because ${reasons.slice(0, 3).join(', ')}.`.replace(' because .', '.');
       }
@@ -5691,7 +5691,7 @@ def export_dashboard_html(
               </div>
               ${(Number(row.rookie_draft_pick) > 0 || Number(row.depth_chart_rank) > 0 || Number(row.rookie_combine_score)) ? `
                 <div class="summary-box">
-                  Rookie/current-role context: draft pick ${row.rookie_draft_pick || 'n/a'}, depth rank ${row.depth_chart_rank || 'n/a'}, combine signal ${formatNumber(row.rookie_combine_score)}.
+                  Current/prior draft-year rookie context: draft pick ${row.rookie_draft_pick || 'n/a'}, depth rank ${row.depth_chart_rank || 'n/a'}, combine signal ${formatNumber(row.rookie_combine_score)}.
                 </div>
               ` : ''}
             </div>

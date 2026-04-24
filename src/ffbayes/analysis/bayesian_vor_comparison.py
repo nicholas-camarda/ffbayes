@@ -10,7 +10,7 @@ historical season data. The research goal is explicit:
 * decision target: which players surface as the strongest draft candidates
 
 The Bayesian model combines player-level partial pooling with a population
-regression trained on lagged, draft-time-safe features assembled from local
+regression trained on lagged player-history features assembled from local
 historical data.
 """
 

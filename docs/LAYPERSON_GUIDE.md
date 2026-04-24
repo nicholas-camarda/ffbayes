@@ -292,7 +292,7 @@ If you want the forecast details, open `Projection breakdown`. That is where the
 Example interpretations:
 
 - a team-changing veteran RB can still have a strong season-total forecast, but the `Team change` flag and the breakdown make it easier to see why uncertainty widened
-- a rookie WR can show a thinner history and more prior-driven uncertainty because draft capital, combine signal, and depth-chart rank are doing more of the work
+- a rookie WR can show a thinner history and more prior-driven uncertainty because current/prior draft-year context and live depth-chart rank are doing more of the work
 
 ### Decision Evidence
 

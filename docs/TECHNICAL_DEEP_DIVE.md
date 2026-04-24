@@ -93,7 +93,7 @@ regression update. In this project, it is not a hand-written opinion and not a
 single projection column. It is a structured estimate built from draft-time-safe
 information such as recent player performance, scoring rate, games played,
 position context, age, team change, role volatility, ADP, market disagreement,
-and rookie context when a player has little or no NFL history.
+and live-board rookie context when a player has little or no NFL history.
 
 The prior answers:
 
@@ -276,7 +276,7 @@ The availability prior mean is built from weighted historical games played, with
 
 Season-total priors are then composed from those two components. The production season-total posterior is not a direct one-stage mean-only regression.
 
-If a player has no usable history, the prior is driven by position context plus explicit rookie inputs such as draft capital, combine-derived signal, and depth-chart context rather than pretending to know a player-specific NFL history.
+If a player has no usable history, the prior is driven by position context plus explicit current/prior draft-year rookie inputs such as draft pick, combine-derived signal, and live depth-chart context rather than pretending to know a player-specific NFL history.
 
 ### What Data Enters The Prior
 
@@ -287,12 +287,21 @@ The prior is not built from one raw projection column. It is built from a draft-
 - games played and games missed
 - age and years in league
 - team-season context and team-change indicators
-- rookie draft-capital, combine, and depth-chart context when available
+- current/prior draft-year rookie draft pick, combine signal, and live depth-chart context when available
 - team-change rate
 - role volatility
 - recent ADP and ADP rank
 - prior VOR-style values and market-proxy values
 - site disagreement and related market instability features
+
+The rookie draft/combine fields are intentionally not a broad historical
+prospect-feature backfill. The installed nflreadpy draft data has usable player
+IDs, but the combine feed does not expose stable IDs in the same way, so the
+project does not train historical rows by fuzzy backfilling combine data across
+old seasons. The supported behavior is narrower: use the current and immediately
+prior draft years to support the live board and no-history player priors, with
+hard coverage checks so the dashboard cannot publish silently null rookie
+context.
 
 The prior is trying to answer three linked questions:
 
@@ -955,7 +964,7 @@ The visible inspector fields are:
 - `Current team`
 - `Team change`
 
-When available, the same section also shows rookie context such as draft pick, combine-derived signal, and depth-chart rank. That inspector section is explanatory. The canonical board ordering still comes from the season-total decision contract.
+When available, the same section also shows current/prior draft-year rookie context such as draft pick, combine-derived signal, and depth-chart rank. That inspector section is explanatory. The canonical board ordering still comes from the season-total decision contract.
 
 ## War-Room Visual Semantics When Present
 

@@ -380,7 +380,7 @@ def _combine_score_from_frame(frame: pd.DataFrame) -> pd.Series:
 
 
 def _load_player_context_snapshot(current_year: int) -> pd.DataFrame:
-    """Load current-team and rookie-prior context from nflverse sources."""
+    """Load live-board team, depth, and current/prior draft-year rookie context."""
     from ffbayes.data_pipeline import nflverse_backend
 
     context_columns = [
@@ -537,7 +537,8 @@ def _load_player_context_snapshot(current_year: int) -> pd.DataFrame:
             context[column] = np.nan if column != 'context_available' else False
     if pd.to_numeric(context['rookie_draft_pick'], errors='coerce').notna().sum() == 0:
         raise ValueError(
-            'Rookie draft-pick context is unavailable from nflreadpy for '
+            'Current/prior draft-year rookie draft-pick context is unavailable '
+            'from nflreadpy for '
             f'{rookie_context_years}; refusing to continue with silently null '
             'rookie_draft_pick values.'
         )
@@ -573,7 +574,7 @@ def _require_rookie_context_coverage(data: pd.DataFrame, stage: str) -> None:
 
 
 def _attach_player_context(data: pd.DataFrame, current_year: int) -> pd.DataFrame:
-    """Attach current-team and rookie/context fields to the unified dataset."""
+    """Attach live-board team, depth, and current/prior draft-year rookie context."""
     if data is None or data.empty:
         return data.copy()
 
