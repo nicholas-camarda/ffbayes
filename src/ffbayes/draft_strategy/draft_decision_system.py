@@ -4181,7 +4181,7 @@ def export_dashboard_html(
             <span class="pill">Live draft mode</span>
             <span class="pill" id="storage-pill">Saved locally</span>
           </div>
-          <p class="subtitle">Operate the draft from this board: update league shape, scoring preset, current pick, queue, taken players, and your roster without leaving the dashboard.</p>
+          <p class="subtitle">Operate the draft from this board: update league shape, scoring preset, queue, taken players, and your roster without leaving the dashboard.</p>
         </div>
         <div class="toolbar-stack">
           <div class="toolbar-row">
