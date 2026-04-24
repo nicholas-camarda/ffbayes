@@ -75,26 +75,14 @@ manual setup field.
 ffbayes pre-draft
 ```
 
-`ffbayes pre-draft` is the main entry point for preparing the board. It runs:
+`ffbayes pre-draft` is the main entry point for preparing the board. It collects
+and validates inputs, builds the player forecast, creates the workbook and
+dashboard, and runs the internal decision-evidence check.
 
-- collect raw season data
-- validate freshness and completeness
-- preprocess the analysis-ready dataset
-- build the VOR snapshot and the canonical player forecast inputs
-- generate the draft board workbook, dashboard payload, and dashboard HTML
-- run the internal draft-decision backtest used by the dashboard evidence surface
-
-The draft-decision backtest is a required dashboard component. Production
-dashboard generation fails closed unless decision evidence is available and fresh.
-
-Freshness policy:
-
-- by default, the workflow fails closed if the latest expected season is missing
-- dashboard generation also fails if the draft-decision evidence is unavailable
-  or degraded
-- `FFBAYES_ALLOW_STALE_SEASON=true` is not a production dashboard path; use it
-  only for non-production investigation where degraded evidence is explicitly
-  acceptable
+Production dashboard generation fails closed when required season inputs or
+decision evidence are missing. Use
+[docs/DASHBOARD_OPERATOR_GUIDE.md](docs/DASHBOARD_OPERATOR_GUIDE.md) for the
+operator sequence and failure checks.
 
 ### 4. Open The Correct Dashboard
 
@@ -112,12 +100,10 @@ Draft-day artifacts:
 - dashboard: `dashboard/index.html`
 - workbook: `seasons/<year>/draft_strategy/draft_board_<year>.xlsx`
 
-During the draft:
-
-- keep the local dashboard open
-- use the workbook as a tabular companion and fallback
-- inspect `Decision evidence` before over-trusting the ranking
-- treat `n/a` or `not estimable` validation entries as slices the board could not judge cleanly, not as measured zero relationships
+During the draft, keep the local dashboard open, use the workbook as the tabular
+backup, and check `Decision evidence` before over-trusting the ranking. Treat
+`n/a` or `not estimable` as "this slice could not be judged cleanly," not as a
+measured zero relationship.
 - inspect `Freshness and provenance` before assuming the board is current
 - if the current dashboard build includes war-room visuals, use them as decision aids, not as a separate model
 - when you click Finalize, keep the downloaded finalized bundle
@@ -166,7 +152,9 @@ and [docs/DATA_LINEAGE_AND_PATHS.md](docs/DATA_LINEAGE_AND_PATHS.md).
 
 The top-level `ffbayes` CLI is the main interface. Module-level scripts still exist, but the unified CLI is the intended operator surface.
 
-The repository uses the hierarchical empirical-Bayes estimator for player forecasts.
+The repository uses a hierarchical empirical-Bayes estimator for player forecasts:
+it starts with a player expectation, updates it with historical evidence, and
+carries uncertainty into the draft board.
 
 ## Output Organization
 
@@ -206,7 +194,7 @@ The supported draft board has three layers: player projection, board constructio
 
 At a high level:
 
-- the player layer builds season-total posterior projections and uncertainty estimates from historical player performance, availability, and limited live-board context for players with thin NFL history
+- the player layer builds updated season-total projections and uncertainty estimates from historical player performance, availability, and limited live-board context for players with thin NFL history
 - the board layer converts those projections into starter edge, replacement edge, fragility, upside, and market-gap signals
 - the recommendation layer then decides whether to pick now or wait based on roster urgency, next-pick survival, and expected regret
 - the dashboard keeps `Simple VOR proxy` as an explicit baseline comparison beside the contextual board score

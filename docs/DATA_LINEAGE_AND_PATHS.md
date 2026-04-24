@@ -1,14 +1,18 @@
 # Data Lineage And Paths
 
-Audience: operators and contributors who need to know where artifacts come from, where they live, and which path is authoritative.
+Audience: operators and contributors who need path authority and artifact
+lineage.
 
-Scope: the supported `pre-draft` workflow, runtime roots, repo-local shortcuts, staged Pages files, and optional public publish targets.
+Scope: runtime roots, repo-local shortcuts, staged Pages files, optional publish
+targets, and retrospective artifacts.
 
-Trust boundary: authoritative runtime artifacts live under the configured runtime root. Repo `dashboard/`, repo `site/`, and cloud mirrors are derived surfaces with different purposes.
+Trust boundary: runtime artifacts are authoritative. Repo `dashboard/`, repo
+`site/`, and cloud mirrors are derived surfaces with different purposes.
 
 ## What This Is
 
-This guide maps the path flow from collected source data to the final board, Pages staging, and retrospective artifacts.
+This guide answers two questions: where did this artifact come from, and which
+copy should be trusted?
 
 ## When To Use It
 
@@ -33,6 +37,16 @@ Primary commands that create or move artifacts:
 - `ffbayes stage-dashboard`
 - `ffbayes draft-retrospective`
 - `ffbayes publish`
+
+Command mutation summary:
+
+| Command | Main mutation | Authority effect |
+| --- | --- | --- |
+| `ffbayes pre-draft` | rebuilds supported runtime artifacts | updates authoritative runtime outputs |
+| `ffbayes pre-draft --stage-pages` | rebuilds runtime artifacts and stages Pages | updates authoritative runtime outputs, then derived publish surface |
+| `ffbayes stage-dashboard` | stages dashboard HTML, payload, and provenance | updates derived publish surface from runtime artifacts |
+| `ffbayes draft-retrospective` | imports finalized draft artifacts | updates authoritative runtime retrospective inputs |
+| `ffbayes publish` | stages Pages and mirrors selected outputs | updates derived publish and cloud mirror surfaces |
 
 ## Interpretation Boundaries
 

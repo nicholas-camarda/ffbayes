@@ -352,6 +352,19 @@ def test_metric_reference_terms_align_with_committed_payload_labels():
         assert label in metric_reference
 
 
+def test_metric_reference_uses_committed_payload_glossary_keys():
+    metric_reference = _read(DOCS_DIR / 'METRIC_REFERENCE.md')
+    payload = _loads_strict_json(
+        (SITE_DIR / 'dashboard_payload.json').read_text(encoding='utf-8')
+    )
+    glossary = payload.get('metric_glossary') or {}
+
+    for key in glossary:
+        assert f'`{key}`' in metric_reference
+
+    assert '`availability_rate`' not in metric_reference
+
+
 def test_docs_pair_paths_and_commands_with_contextual_language():
     operator_guide = _read(DOCS_DIR / 'DASHBOARD_OPERATOR_GUIDE.md')
     path_guide = _read(DOCS_DIR / 'DATA_LINEAGE_AND_PATHS.md')

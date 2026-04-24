@@ -1,14 +1,18 @@
 # Dashboard Operator Guide
 
-Audience: someone running the supported draft-day workflow and using the dashboard as the main local decision surface.
+Audience: the person running the draft-day workflow.
 
-Scope: the current `pre-draft` workflow, the authoritative runtime dashboard, the repo-local shortcut, staged Pages behavior, finalize flow, and the post-draft ingest and retrospective path.
+Scope: how to build, open, trust, stage, finalize, and later evaluate the current
+draft dashboard.
 
-Trust boundary: the authoritative dashboard is the runtime HTML plus runtime payload under the configured runtime root. Repo `dashboard/` and repo `site/` are derived surfaces. Decision evidence is internal holdout evidence, not external proof.
+Trust boundary: the runtime HTML and payload are authoritative. Repo
+`dashboard/` and `site/` are derived copies. Decision evidence is internal
+holdout evidence, not external proof.
 
 ## What This Is
 
-This guide explains how to operate the current dashboard from setup through draft-day use and post-draft follow-up.
+This is the runbook. It tells you which command to run, which dashboard to open,
+what to check before trusting it, and how to capture the final draft.
 
 ## When To Use It
 
@@ -16,7 +20,7 @@ Use this guide when you need to:
 
 - run the supported workflow end to end
 - know which dashboard file to open
-- understand what each dashboard section is for
+- understand the main dashboard sections
 - stage GitHub Pages without confusing it with the local working surface
 - import finalized draft artifacts and run the retrospective later
 
@@ -238,6 +242,24 @@ The first visible evidence surface is intentionally compact:
 Season-level deltas, strategy rows, and disagreement tables live under the nested `Detailed evidence` disclosure.
 
 Sampled-Bayes comparison artifacts are diagnostic history only. The live dashboard uses the empirical-Bayes estimator and does not show sampled comparison rows.
+
+### If Production Evidence Fails Closed
+
+Purpose: diagnose a failed production dashboard build without treating degraded
+evidence as acceptable output.
+
+Check in this order:
+
+1. confirm the latest pre-draft run completed rather than opening an older
+   dashboard shortcut
+2. inspect the decision-backtest artifact for `status`, `winner`, and
+   `season_count`
+3. inspect validation summaries for `n/a` or `not estimable` slices
+4. rerun the supported pre-draft command after fixing the missing or stale input
+   rather than editing the dashboard payload by hand
+
+If the evidence remains unavailable, keep the run out of production review and
+use the artifacts only for investigation.
 
 ### Freshness And Provenance
 

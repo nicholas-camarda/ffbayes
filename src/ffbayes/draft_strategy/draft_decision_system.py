@@ -5111,7 +5111,7 @@ def export_dashboard_html(
             posterior_prob_beats_replacement: 0.10 * componentZ.posterior_prob_beats_replacement[index],
             starter_need: 0.03 * componentZ.starter_need[index],
             fragility_score: -(0.06 * riskMultiplier) * componentZ.fragility_score[index],
-            market_gap: 0.06 * componentZ.market_gap[index],
+            market_gap: 0.05 * componentZ.market_gap[index],
           };
           row.board_value_score = Object.values(row.component_terms).reduce((sum, value) => sum + value, 0);
           row.draft_score = row.board_value_score;

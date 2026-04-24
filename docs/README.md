@@ -1,16 +1,18 @@
 # FFBayes Documentation
 
-This guide suite explains the supported `pre-draft` workflow, the current dashboard trust surfaces, and the difference between authoritative runtime artifacts and derived copies.
+Use this page to choose the right doc. The guides split plain-language use,
+operator workflow, technical math, metric labels, artifact examples, and path
+authority.
 
 ## Quick Route By Audience
 
-- operator guide: [DASHBOARD_OPERATOR_GUIDE.md](DASHBOARD_OPERATOR_GUIDE.md)
-- layperson guide: [LAYPERSON_GUIDE.md](LAYPERSON_GUIDE.md)
-- technical and statistician guide: [TECHNICAL_DEEP_DIVE.md](TECHNICAL_DEEP_DIVE.md)
-- metric reference: [METRIC_REFERENCE.md](METRIC_REFERENCE.md)
-- path and lineage guide: [DATA_LINEAGE_AND_PATHS.md](DATA_LINEAGE_AND_PATHS.md)
-- supported and optional output examples: [OUTPUT_EXAMPLES.md](OUTPUT_EXAMPLES.md)
-- repo-level workflow summary: [../README.md](../README.md)
+- drafting today: [DASHBOARD_OPERATOR_GUIDE.md](DASHBOARD_OPERATOR_GUIDE.md)
+- plain-language explanation: [LAYPERSON_GUIDE.md](LAYPERSON_GUIDE.md)
+- implemented math and statistics: [TECHNICAL_DEEP_DIVE.md](TECHNICAL_DEEP_DIVE.md)
+- dashboard label lookup: [METRIC_REFERENCE.md](METRIC_REFERENCE.md)
+- artifact shapes: [OUTPUT_EXAMPLES.md](OUTPUT_EXAMPLES.md)
+- path authority and lineage: [DATA_LINEAGE_AND_PATHS.md](DATA_LINEAGE_AND_PATHS.md)
+- repo setup and quick workflow: [../README.md](../README.md)
 
 ## Trust Model
 
@@ -20,15 +22,6 @@ This guide suite explains the supported `pre-draft` workflow, the current dashbo
 - repo `site/` is a staged GitHub Pages copy for publishing, not the authoritative local draft surface
 - dashboard evidence is internal holdout evidence, not external validation
 - `n/a` or `not estimable` validation entries mean the slice could not support that estimate cleanly
-
-## Essential Commands
-
-```bash
-ffbayes pre-draft
-ffbayes pre-draft --stage-pages
-ffbayes stage-dashboard --year 2026
-ffbayes draft-retrospective --import-finalized ~/Downloads/ffbayes_finalized_*_2026_* --ingest-only --year 2026
-```
 
 ## Start Here
 
@@ -41,40 +34,25 @@ If you are drafting today:
 If you want a plain-language explanation:
 
 1. Read [LAYPERSON_GUIDE.md](LAYPERSON_GUIDE.md).
-2. Use [OUTPUT_EXAMPLES.md](OUTPUT_EXAMPLES.md) to see the artifact shapes.
+2. Use [METRIC_REFERENCE.md](METRIC_REFERENCE.md) when a dashboard label needs a short definition.
+3. Use [OUTPUT_EXAMPLES.md](OUTPUT_EXAMPLES.md) to see the artifact shapes.
 
 If you want the implemented math:
 
 1. Read [TECHNICAL_DEEP_DIVE.md](TECHNICAL_DEEP_DIVE.md).
 2. Use [DATA_LINEAGE_AND_PATHS.md](DATA_LINEAGE_AND_PATHS.md) to connect code, paths, and emitted artifacts.
 
-## Authority Levels
+## Commands And Paths
 
-### Authoritative Runtime
+This index does not duplicate the workflow commands or artifact authority table.
+Use:
 
-- `seasons/<year>/draft_strategy/dashboard_payload_<year>.json`
-- `seasons/<year>/draft_strategy/draft_board_<year>.html`
-- `seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_<year>.json`
-- `seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_validation_<year_range>.json`
-- `seasons/<year>/diagnostics/validation/player_forecast_validation_summary_<year_range>.json`
-
-### Derived Local Shortcut
-
-- `<runtime-root>/dashboard/index.html`
-- `<runtime-root>/dashboard/dashboard_payload.json`
-- `dashboard/index.html`
-- `dashboard/dashboard_payload.json`
-
-### Staged Pages Copy
-
-- `site/index.html`
-- `site/dashboard_payload.json`
-- `site/publish_provenance.json`
-
-### Optional Publish Targets
-
-- cloud `data/`
-- cloud `Analysis/<date>/`
+- [DASHBOARD_OPERATOR_GUIDE.md](DASHBOARD_OPERATOR_GUIDE.md) for the supported
+  draft-day commands, dashboard opening path, finalize flow, and retrospective
+  import sequence
+- [DATA_LINEAGE_AND_PATHS.md](DATA_LINEAGE_AND_PATHS.md) for authoritative
+  runtime artifacts, derived local shortcuts, staged Pages copies, and optional
+  publish targets
 
 ## Documentation Conventions
 

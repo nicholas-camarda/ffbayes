@@ -1,18 +1,21 @@
 # Output Examples
 
-Audience: operators and readers who want concrete artifact shapes without reading all of the implementation details.
+Audience: readers who need to recognize the output files and understand what the
+examples mean.
 
 Scope: supported `ffbayes pre-draft` outputs first, then clearly labeled optional analyses.
 
-Trust boundary: runtime artifacts are authoritative. Repo `dashboard/` and repo `site/` are derived surfaces. Optional analyses are not default outputs of the supported pre-draft workflow.
+Trust boundary: runtime artifacts are authoritative. Repo `dashboard/` and
+`site/` are derived. Optional analyses are not default `pre-draft` outputs.
 
 ## What This Is
 
-This document shows the shapes of the outputs you should expect from the current workflow.
+This document shows what the current output files look like and how to read the
+important fields.
 
 ## When To Use It
 
-Use this document when you need to answer:
+Use this document to answer:
 
 - what files does `ffbayes pre-draft` actually produce?
 - which files are authoritative versus derived copies?
@@ -34,7 +37,7 @@ Supported default artifacts:
 - `<runtime-root>/dashboard/index.html`
 - `dashboard/index.html`
 
-Additional outputs from explicit commands:
+Outputs from explicit non-default commands:
 
 - `seasons/<year>/montecarlo_results/`
 - `seasons/<year>/model_evaluation/`
@@ -96,7 +99,8 @@ Minimal example:
   "decision_evidence": {
     "status": "available",
     "headline": "Contextual draft score outperforms the simple VOR proxy in backtests.",
-    "winner": "draft_score"
+    "winner": "draft_score",
+    "season_count": 4
   },
   "metric_glossary": {
     "draft_score": {
@@ -113,6 +117,9 @@ What to notice:
 
 - `runtime_controls` tells you which local controls the dashboard expects
 - `analysis_provenance` and `decision_evidence` carry trust messaging
+- `winner` names the internally stronger strategy for the evaluated holdout
+  comparison
+- `season_count` tells you how many seasons supported that internal comparison
 - `metric_glossary` and `model_overview` define canonical names and interpretation language
 - `war_room_visuals` may be present in newer dashboard builds, but should be treated as additive
 - if a validation metric is unavailable, runtime payloads render it as `n/a` or `not estimable` rather than fabricating `0.00`
@@ -175,7 +182,10 @@ What to notice:
 
 - this is evidence for comparative board behavior on holdout seasons
 - it is not a guarantee about your future league
-- the repository uses the empirical-Bayes player forecast
+- read the strategy names as internal policy labels, not as proof that one
+  strategy is universally best
+- if the artifact disagrees with the dashboard evidence surface, treat that as a
+  staging or freshness problem to investigate before draft use
 
 ### Staged GitHub Pages Copy
 
@@ -206,7 +216,12 @@ Minimal provenance example:
 What to notice:
 
 - `site/` is derived and publish-oriented
+- `surface_sync.status` should be `synchronized` when the staged HTML, payload,
+  and provenance agree
 - `publish_provenance.json` records how the staged copy was built
+- if the staged copy disagrees with authoritative runtime artifacts, use the
+  runtime artifacts as source truth and restage rather than editing `site/` by
+  hand
 
 ## Optional Analyses
 
