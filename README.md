@@ -66,7 +66,13 @@ Set default league settings in `config/user_config.json`:
 
 These values seed the generated artifacts. League size, draft position, scoring
 preset, and risk tolerance are editable from the dashboard controls while you
-draft. Current pick advances from the players marked drafted; it is not a
+draft. For the embedded dashboard presets, Standard means `0.0` points per
+reception, Half PPR means `0.5`, and Full PPR means `1.0`. `scoring_type` and
+`ppr_value` seed the dashboard's starting preset only when they resolve exactly
+to one of those three embedded presets; after generation, you can switch among
+them in the dashboard without rerunning the pipeline. Arbitrary custom numeric
+PPR remains a generation-time config setting rather than a dashboard selector
+option. Current pick advances from the players marked drafted; it is not a
 manual setup field.
 
 ### 3. Run The Pre-Draft Pipeline

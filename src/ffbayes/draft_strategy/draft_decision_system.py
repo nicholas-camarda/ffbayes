@@ -64,10 +64,20 @@ class ScoringPreset(TypedDict):
 
 
 SCORING_PRESETS: dict[str, ScoringPreset] = {
-    'standard': {'label': 'Standard', 'scoring_type': 'Standard', 'ppr_value': 0.0},
-    'half_ppr': {'label': 'Half PPR', 'scoring_type': 'Half-PPR', 'ppr_value': 0.5},
-    'ppr': {'label': 'Full PPR', 'scoring_type': 'PPR', 'ppr_value': 1.0},
+    'standard': {
+        'label': 'Standard (0.0 PPR)',
+        'scoring_type': 'Standard',
+        'ppr_value': 0.0,
+    },
+    'half_ppr': {
+        'label': 'Half PPR (0.5)',
+        'scoring_type': 'Half-PPR',
+        'ppr_value': 0.5,
+    },
+    'ppr': {'label': 'Full PPR (1.0)', 'scoring_type': 'PPR', 'ppr_value': 1.0},
 }
+SUPPORTED_DASHBOARD_SCORING_PRESETS = tuple(SCORING_PRESETS.keys())
+DEFAULT_DASHBOARD_SCORING_PRESET = 'half_ppr'
 LATE_SPECIALIST_BUFFER_ROUNDS = 2
 CONSERVATIVE_WAIT_SURVIVAL_THRESHOLD = 0.74
 CONSERVATIVE_WAIT_LINEUP_LOSS_THRESHOLD = 0.28
@@ -403,6 +413,13 @@ def _resolve_scoring_preset_key(settings: LeagueSettings) -> str:
     return 'custom'
 
 
+def _resolve_dashboard_scoring_preset_key(settings: LeagueSettings) -> str:
+    preset_key = _resolve_scoring_preset_key(settings)
+    if preset_key in SUPPORTED_DASHBOARD_SCORING_PRESETS:
+        return preset_key
+    return DEFAULT_DASHBOARD_SCORING_PRESET
+
+
 def _scoring_settings_for_preset(
     settings: LeagueSettings, preset_key: str
 ) -> LeagueSettings | None:
@@ -448,6 +465,164 @@ def _supports_scoring_presets(frame: pd.DataFrame) -> tuple[bool, str]:
         False,
         'Only one scoring projection source is present, so alternate scoring presets would be guesswork.',
     )
+
+
+def _season_history_ppr_bonus_lookup(
+    season_history: pd.DataFrame | None,
+) -> tuple[pd.DataFrame | None, str]:
+    if season_history is None or season_history.empty:
+        return None, 'No season history was available to derive scoring-surface deltas.'
+
+    history = season_history.copy()
+    if 'player_name' not in history.columns:
+        for source in ['Name', 'player']:
+            if source in history.columns:
+                history['player_name'] = history[source]
+                break
+    if 'position' not in history.columns:
+        for source in ['Position', 'pos']:
+            if source in history.columns:
+                history['position'] = history[source]
+                break
+    if 'player_name' not in history.columns or 'position' not in history.columns:
+        return None, 'Season history is missing player_name/position columns.'
+
+    standard = _first_numeric_series(
+        history,
+        ['FantPt', 'fantasy_points', 'actual_points_standard', 'fantasy_points_standard'],
+    )
+    ppr = _first_numeric_series(
+        history, ['FantPtPPR', 'fantasy_points_ppr', 'actual_points_ppr']
+    )
+    if standard is None or ppr is None:
+        return (
+            None,
+            'Season history does not include both standard and PPR fantasy point columns.',
+        )
+
+    history = history.copy()
+    history['player_name'] = history['player_name'].map(_safe_string)
+    history['position'] = history['position'].map(_normalize_position)
+    history['standard_points'] = standard
+    history['ppr_points'] = ppr
+    history['ppr_bonus'] = history['ppr_points'] - history['standard_points']
+    history = history.dropna(
+        subset=['player_name', 'position', 'standard_points', 'ppr_points']
+    ).copy()
+    if history.empty:
+        return None, 'Season history had no usable standard-versus-PPR scoring rows.'
+
+    group_keys = ['player_name', 'position']
+    if 'Season' in history.columns:
+        history['Season'] = pd.to_numeric(history['Season'], errors='coerce')
+        season_rollup = (
+            history.groupby(group_keys + ['Season'], as_index=False)
+            .agg(
+                standard_points=('standard_points', 'sum'),
+                ppr_points=('ppr_points', 'sum'),
+                ppr_bonus=('ppr_bonus', 'sum'),
+            )
+            .sort_values(['player_name', 'position', 'Season'])
+        )
+        player_bonus = (
+            season_rollup.groupby(group_keys, as_index=False)
+            .agg(player_ppr_bonus=('ppr_bonus', 'mean'))
+        )
+        position_bonus = (
+            season_rollup.groupby('position', as_index=False)
+            .agg(position_ppr_bonus=('ppr_bonus', 'mean'))
+        )
+    else:
+        player_bonus = (
+            history.groupby(group_keys, as_index=False)
+            .agg(player_ppr_bonus=('ppr_bonus', 'sum'))
+        )
+        position_bonus = (
+            history.groupby('position', as_index=False)
+            .agg(position_ppr_bonus=('ppr_bonus', 'mean'))
+        )
+
+    lookup = player_bonus.merge(position_bonus, on='position', how='left')
+    return lookup, ''
+
+
+def _augment_scoring_preset_inputs(
+    player_frame: pd.DataFrame,
+    settings: LeagueSettings,
+    season_history: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, str]:
+    normalized = normalize_player_frame(player_frame)
+    supported, reason = _supports_scoring_presets(normalized)
+    if supported:
+        return normalized, ''
+
+    bonus_lookup, bonus_reason = _season_history_ppr_bonus_lookup(season_history)
+    if bonus_lookup is None:
+        return normalized, f'{reason} {bonus_reason}'.strip()
+
+    augmented = normalized.merge(
+        bonus_lookup, on=['player_name', 'position'], how='left'
+    )
+    augmented['ppr_bonus'] = pd.to_numeric(
+        augmented.get('player_ppr_bonus'), errors='coerce'
+    ).combine_first(pd.to_numeric(augmented.get('position_ppr_bonus'), errors='coerce'))
+    base_projection = pd.to_numeric(
+        augmented.get('proj_points_mean', augmented.get('posterior_mean')),
+        errors='coerce',
+    )
+    base_ppr_value = _effective_ppr_value(settings)
+    if base_projection is not None and 'proj_points_standard' not in augmented.columns:
+        augmented['proj_points_standard'] = np.maximum(
+            0.0, base_projection - base_ppr_value * augmented['ppr_bonus'].fillna(0.0)
+        )
+    if 'proj_points_ppr' not in augmented.columns:
+        standard_projection = pd.to_numeric(
+            augmented.get('proj_points_standard'), errors='coerce'
+        ).combine_first(base_projection)
+        augmented['proj_points_ppr'] = np.maximum(
+            0.0, standard_projection + augmented['ppr_bonus'].fillna(0.0)
+        )
+
+    supported, derived_reason = _supports_scoring_presets(augmented)
+    if supported:
+        return augmented, ''
+    return augmented, f'{reason} {derived_reason} {bonus_reason}'.strip()
+
+
+def _require_dashboard_scoring_preset_contract(
+    scoring_presets: dict[str, Any], active_preset: str
+) -> None:
+    expected_keys = list(SUPPORTED_DASHBOARD_SCORING_PRESETS)
+    actual_keys = list(scoring_presets.keys())
+    if actual_keys != expected_keys:
+        raise RuntimeError(
+            'Draft dashboard payload requires scoring_presets in the exact '
+            f'production order {expected_keys}; got {actual_keys}.'
+        )
+    if active_preset not in SUPPORTED_DASHBOARD_SCORING_PRESETS:
+        raise RuntimeError(
+            'Draft dashboard payload requires active_scoring_preset to be one '
+            f'of {expected_keys}; got {active_preset!r}.'
+        )
+    for preset_key in SUPPORTED_DASHBOARD_SCORING_PRESETS:
+        entry = scoring_presets.get(preset_key)
+        if not isinstance(entry, dict):
+            raise RuntimeError(
+                'Draft dashboard payload requires a scoring preset entry for '
+                f'{preset_key!r}.'
+            )
+        if entry.get('available') is not True:
+            raise RuntimeError(
+                'Draft dashboard payload requires all embedded scoring presets '
+                f'to be available; {preset_key!r} was not.'
+            )
+        if not isinstance(entry.get('decision_table'), list) or not entry.get(
+            'decision_table'
+        ):
+            raise RuntimeError(
+                'Draft dashboard payload requires each scoring preset to carry '
+                f'a populated decision_table; {preset_key!r} was empty.'
+            )
 
 
 def _projection_series_for_settings(
@@ -775,43 +950,45 @@ def _require_fresh_decision_evidence(payload: dict[str, Any]) -> None:
 
 
 def _build_scoring_preset_bundle(
-    player_frame: pd.DataFrame, settings: LeagueSettings, context: DraftContext
+    player_frame: pd.DataFrame,
+    settings: LeagueSettings,
+    context: DraftContext,
+    season_history: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
-    normalized = normalize_player_frame(player_frame)
-    supported, reason = _supports_scoring_presets(normalized)
-    active_key = _resolve_scoring_preset_key(settings)
+    normalized, reason = _augment_scoring_preset_inputs(
+        player_frame, settings, season_history=season_history
+    )
+    supported, support_reason = _supports_scoring_presets(normalized)
+    if not supported:
+        raise RuntimeError(
+            'Draft dashboard generation requires enough projection inputs to '
+            'build Standard (0.0 PPR), Half PPR (0.5), and Full PPR (1.0) '
+            f'decision tables. Reason: {(reason or support_reason).strip()}'
+        )
     bundle: dict[str, Any] = {}
-    for preset_key, preset in SCORING_PRESETS.items():
+    for preset_key in SUPPORTED_DASHBOARD_SCORING_PRESETS:
+        preset = SCORING_PRESETS[preset_key]
         preset_settings = _scoring_settings_for_preset(settings, preset_key)
         if preset_settings is None:
-            continue
-        if not supported and preset_key != active_key:
-            bundle[preset_key] = {
-                'key': preset_key,
-                'label': preset['label'],
-                'available': False,
-                'reason_unavailable': reason,
-                'league_settings': preset_settings.to_dict(),
-            }
-            continue
-        preset_table = build_decision_table(player_frame, preset_settings, context)
+            raise RuntimeError(
+                'Draft dashboard generation could not resolve league settings '
+                f'for scoring preset {preset_key!r}.'
+            )
+        preset_table = build_decision_table(normalized, preset_settings, context)
+        if preset_table.empty:
+            raise RuntimeError(
+                'Draft dashboard generation requires a populated decision table '
+                f'for scoring preset {preset_key!r}.'
+            )
         bundle[preset_key] = {
             'key': preset_key,
             'label': preset['label'],
             'available': True,
+            'scoring_type': preset['scoring_type'],
+            'ppr_value': float(preset['ppr_value']),
             'league_settings': preset_settings.to_dict(),
             'decision_table': preset_table.to_dict(orient='records'),
             'supporting_math': _dashboard_supporting_math(preset_table),
-        }
-    if active_key == 'custom':
-        bundle['custom'] = {
-            'key': 'custom',
-            'label': f'Custom ({_effective_ppr_value(settings):.2f} PPR)',
-            'available': True,
-            'league_settings': settings.to_dict(),
-            'decision_table': build_decision_table(
-                player_frame, settings, context
-            ).to_dict(orient='records'),
         }
     return bundle
 
@@ -2932,6 +3109,11 @@ def build_dashboard_payload(
     context = context or DraftContext(
         current_pick_number=league_settings.draft_position
     )
+    scoring_presets = scoring_presets or {}
+    active_scoring_preset = _resolve_dashboard_scoring_preset_key(league_settings)
+    _require_dashboard_scoring_preset_contract(
+        scoring_presets, active_scoring_preset
+    )
     live_state = build_live_recommendation_snapshot(
         decision_table, recommendations, roster_scenarios, league_settings, context
     )
@@ -2978,7 +3160,6 @@ def build_dashboard_payload(
     ].copy()
     recommendation_summary = recommendations.head(12).to_dict(orient='records')
     position_summary = _dashboard_position_summary(decision_table)
-    active_scoring_preset = _resolve_scoring_preset_key(league_settings)
     analysis_provenance = analysis_provenance or {}
     bayesian_vor_summary = _build_bayesian_vor_summary(decision_table, backtest)
     decision_evidence = _build_decision_evidence(
@@ -3011,7 +3192,7 @@ def build_dashboard_payload(
         'league_settings': league_settings.to_dict(),
         'runtime_controls': {
             'risk_tolerance_options': ['low', 'medium', 'high'],
-            'supported_scoring_presets': list(SCORING_PRESETS.keys()),
+            'supported_scoring_presets': list(SUPPORTED_DASHBOARD_SCORING_PRESETS),
             'active_scoring_preset': active_scoring_preset,
         },
         'current_pick_number': context.current_pick_number,
@@ -3032,7 +3213,7 @@ def build_dashboard_payload(
         'recommendation_summary': recommendation_summary,
         'live_state': live_state,
         'decision_table': decision_table.to_dict(orient='records'),
-        'scoring_presets': scoring_presets or {},
+        'scoring_presets': scoring_presets,
         'position_summary': position_summary,
         'tier_cliffs': tier_cliffs.to_dict(orient='records'),
         'roster_scenarios': roster_scenarios.to_dict(orient='records'),
@@ -3446,16 +3627,13 @@ def export_dashboard_html(
     source_freshness = (
         source_freshness if source_freshness is not None else pd.DataFrame()
     )
-    payload = dashboard_payload or build_dashboard_payload(
-        decision_table,
-        recommendations,
-        build_tier_cliffs(decision_table),
-        build_roster_scenarios(decision_table, league_settings),
-        source_freshness,
-        league_settings,
-        backtest=backtest,
-        context=DraftContext(current_pick_number=league_settings.draft_position),
-    )
+    if dashboard_payload is None:
+        raise ValueError(
+            'dashboard_payload is required for production dashboard export so '
+            'the embedded Standard (0.0 PPR), Half PPR (0.5), and Full PPR '
+            '(1.0) preset tables are present.'
+        )
+    payload = dashboard_payload
     payload_json = dumps_strict_json(payload)
     payload_generated_at = payload.get('generated_at')
     resolved_generated_label = generated_label
@@ -4884,7 +5062,7 @@ def export_dashboard_html(
         if (requested && requested.available) {
           return requested;
         }
-        return Object.values(scoringPresets).find((entry) => entry && entry.available) || { decision_table: data.decision_table || [], available: true, key: defaultPreset, label: 'Current preset' };
+        return Object.values(scoringPresets).find((entry) => entry && entry.available) || { decision_table: data.decision_table || [], available: true, key: defaultPreset, label: 'Half PPR (0.5)' };
       }
 
       function activeRows() {
@@ -5281,6 +5459,17 @@ def export_dashboard_html(
 
       function render() {
         const boardState = buildBoardState();
+        window.__ffbayesBoardState = {
+          scoringPreset: state.scoringPreset,
+          selectedPlayer: state.selectedPlayer,
+          rows: (boardState.rows || []).map((row) => ({
+            player_name: row.player_name,
+            position: row.position,
+            proj_points_mean: row.proj_points_mean,
+            draft_score: row.draft_score,
+            status: row.status,
+          })),
+        };
         persistState();
         renderTopbar(boardState);
         renderRecommendations(boardState);
@@ -5591,8 +5780,8 @@ def export_dashboard_html(
         const presetSelect = document.getElementById('scoring-preset');
         const currentPreset = getPresetEntry();
         presetSelect.innerHTML = Object.entries(scoringPresets).map(([key, entry]) => `
-          <option value="${key}" ${key === currentPreset.key ? 'selected' : ''} ${entry.available ? '' : 'disabled'}>
-            ${entry.label}${entry.available ? '' : ' (regen needed)'}
+          <option value="${key}" ${key === currentPreset.key ? 'selected' : ''}>
+            ${entry.label}
           </option>
         `).join('');
         document.getElementById('risk-tolerance').value = state.riskTolerance || 'medium';
@@ -5604,9 +5793,7 @@ def export_dashboard_html(
         document.getElementById('roster-wr').value = state.rosterSpots.WR || 0;
         document.getElementById('roster-te').value = state.rosterSpots.TE || 0;
         document.getElementById('roster-flex').value = state.rosterSpots.FLEX || 0;
-        document.getElementById('preset-notice').textContent = currentPreset.available
-          ? `Using ${currentPreset.label}. This board can recompute live draft context in-browser.`
-          : (currentPreset.reason_unavailable || 'This preset is unavailable for the exported payload.');
+        document.getElementById('preset-notice').textContent = `Starting from ${currentPreset.label}. The config-selected preset seeds this board's default view, and you can switch among Standard (0.0 PPR), Half PPR (0.5), and Full PPR (1.0) here without regeneration.`;
       }
 
       function renderInspector(boardState) {
@@ -6486,7 +6673,26 @@ def build_draft_decision_artifacts(
     tier_cliffs = build_tier_cliffs(decision_table)
     roster_scenarios = build_roster_scenarios(decision_table, settings)
     source_freshness = _compute_freshness(normalize_player_frame(player_frame))
-    scoring_presets = _build_scoring_preset_bundle(player_frame, settings, context)
+    scoring_presets = _build_scoring_preset_bundle(
+        player_frame, settings, context, season_history=season_history
+    )
+    dashboard_preset_key = _resolve_dashboard_scoring_preset_key(settings)
+    dashboard_settings = _scoring_settings_for_preset(settings, dashboard_preset_key)
+    if dashboard_settings is None:
+        raise RuntimeError(
+            'Draft dashboard generation could not resolve the active embedded '
+            f'scoring preset {dashboard_preset_key!r}.'
+        )
+    dashboard_decision_table = build_decision_table(
+        player_frame, dashboard_settings, context
+    )
+    dashboard_recommendations = build_recommendations(
+        dashboard_decision_table, dashboard_settings, context
+    )
+    dashboard_tier_cliffs = build_tier_cliffs(dashboard_decision_table)
+    dashboard_roster_scenarios = build_roster_scenarios(
+        dashboard_decision_table, dashboard_settings
+    )
     analysis_provenance = analysis_provenance or {}
     backtest: dict[str, Any] = {}
     player_forecast_validation: dict[str, Any] = {
@@ -6534,10 +6740,10 @@ def build_draft_decision_artifacts(
             'No season history was available for the draft-decision backtest.',
         )
     dashboard_payload = build_dashboard_payload(
-        decision_table,
-        recommendations,
-        tier_cliffs,
-        roster_scenarios,
+        dashboard_decision_table,
+        dashboard_recommendations,
+        dashboard_tier_cliffs,
+        dashboard_roster_scenarios,
         source_freshness,
         settings,
         backtest=backtest,

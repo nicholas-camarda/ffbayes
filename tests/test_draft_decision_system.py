@@ -10,6 +10,7 @@ import pytest
 from ffbayes.draft_strategy.draft_decision_system import (
     DraftContext,
     LeagueSettings,
+    SCORING_PRESETS,
     _starter_points_from_roster,
     availability_probability,
     build_dashboard_payload,
@@ -61,6 +62,39 @@ def _synthetic_players() -> pd.DataFrame:
             'adp_std': [1.5, 2.2, 2.0, 3.0, 1.8, 2.4, 1.2],
         }
     )
+
+
+def _scoring_preset_payload_bundle(
+    players: pd.DataFrame | None = None,
+    base_settings: LeagueSettings | None = None,
+    context: DraftContext | None = None,
+) -> dict[str, dict[str, object]]:
+    players = players if players is not None else _synthetic_players()
+    base_settings = base_settings or LeagueSettings()
+    context = context or DraftContext(current_pick_number=10)
+    bundle: dict[str, dict[str, object]] = {}
+    for preset_key, preset in SCORING_PRESETS.items():
+        preset_settings = LeagueSettings(
+            league_size=base_settings.league_size,
+            draft_position=base_settings.draft_position,
+            scoring_type=preset['scoring_type'],
+            ppr_value=float(preset['ppr_value']),
+            risk_tolerance=base_settings.risk_tolerance,
+            roster_spots=dict(base_settings.roster_spots),
+            flex_weights=dict(base_settings.flex_weights),
+            bench_slots=base_settings.bench_slots,
+        )
+        table = build_decision_table(players, preset_settings, context)
+        bundle[preset_key] = {
+            'key': preset_key,
+            'label': preset['label'],
+            'available': True,
+            'scoring_type': preset['scoring_type'],
+            'ppr_value': float(preset['ppr_value']),
+            'league_settings': preset_settings.to_dict(),
+            'decision_table': table.to_dict(orient='records'),
+        }
+    return bundle
 
 
 def test_decision_table_builds_expected_columns():
@@ -478,9 +512,21 @@ def test_dashboard_payload_includes_preset_bundle_and_model_notes():
     payload = artifacts.dashboard_payload
 
     assert payload['runtime_controls']['active_scoring_preset'] == 'half_ppr'
+    assert payload['runtime_controls']['supported_scoring_presets'] == [
+        'standard',
+        'half_ppr',
+        'ppr',
+    ]
+    assert list(payload['scoring_presets'].keys()) == ['standard', 'half_ppr', 'ppr']
     assert payload['scoring_presets']['standard']['available'] is True
     assert payload['scoring_presets']['half_ppr']['available'] is True
     assert payload['scoring_presets']['ppr']['available'] is True
+    assert payload['scoring_presets']['standard']['ppr_value'] == 0.0
+    assert payload['scoring_presets']['half_ppr']['ppr_value'] == 0.5
+    assert payload['scoring_presets']['ppr']['ppr_value'] == 1.0
+    assert payload['scoring_presets']['standard']['scoring_type'] == 'Standard'
+    assert payload['scoring_presets']['half_ppr']['scoring_type'] == 'Half-PPR'
+    assert payload['scoring_presets']['ppr']['scoring_type'] == 'PPR'
     assert 'draft_score' in payload['metric_glossary']
     assert 'posterior_rate_mean' in payload['metric_glossary']
     assert 'headline' in payload['model_overview']
@@ -505,6 +551,20 @@ def test_dashboard_payload_includes_preset_bundle_and_model_notes():
         == 'Simple VOR proxy'
     )
     assert payload['war_room_visuals']['positional_cliffs']['default_positions']
+
+    standard_rows = pd.DataFrame(payload['scoring_presets']['standard']['decision_table'])
+    half_rows = pd.DataFrame(payload['scoring_presets']['half_ppr']['decision_table'])
+    ppr_rows = pd.DataFrame(payload['scoring_presets']['ppr']['decision_table'])
+    alpha_standard = standard_rows.loc[
+        standard_rows['player_name'] == 'Alpha RB', 'proj_points_mean'
+    ].iloc[0]
+    alpha_half = half_rows.loc[
+        half_rows['player_name'] == 'Alpha RB', 'proj_points_mean'
+    ].iloc[0]
+    alpha_ppr = ppr_rows.loc[
+        ppr_rows['player_name'] == 'Alpha RB', 'proj_points_mean'
+    ].iloc[0]
+    assert alpha_standard < alpha_half < alpha_ppr
 
 
 def test_dashboard_payload_marks_degraded_decision_evidence_when_provenance_is_degraded():
@@ -599,6 +659,11 @@ def test_dashboard_payload_marks_war_room_visuals_unavailable_when_inputs_missin
         pd.DataFrame(),
         settings,
         context=DraftContext(current_pick_number=10),
+        scoring_presets=_scoring_preset_payload_bundle(
+            _synthetic_players(),
+            settings,
+            DraftContext(current_pick_number=10),
+        ),
     )
 
     assert payload['war_room_visuals']['timing_frontier']['status'] == 'unavailable'
@@ -621,12 +686,71 @@ def test_dashboard_payload_marks_comparative_visual_degraded_without_backtest():
         pd.DataFrame(),
         settings,
         context=context,
+        scoring_presets=_scoring_preset_payload_bundle(
+            _synthetic_players(), settings, context
+        ),
     )
 
     comparative = payload['war_room_visuals']['comparative_explainer']
     assert comparative['status'] == 'degraded'
     assert comparative['available'] is True
     assert comparative['top_disagreements']
+
+
+def test_dashboard_generation_fails_closed_without_alternate_scoring_inputs():
+    players = pd.DataFrame(
+        {
+            'player_name': ['Alpha RB', 'Beta WR'],
+            'position': ['RB', 'WR'],
+            'proj_points_mean': [180.0, 160.0],
+            'adp': [10, 12],
+        }
+    )
+
+    with pytest.raises(RuntimeError, match='requires enough projection inputs'):
+        build_draft_decision_artifacts(
+            players,
+            LeagueSettings(scoring_type='Half-PPR', ppr_value=0.5),
+            DraftContext(current_pick_number=10),
+        )
+
+
+def test_custom_ppr_config_falls_back_to_supported_dashboard_default():
+    players = pd.DataFrame(
+        {
+            'player_name': ['Alpha RB', 'Beta WR'],
+            'position': ['RB', 'WR'],
+            'FantPt': [180.0, 160.0],
+            'FantPtPPR': [220.0, 210.0],
+            'adp': [10, 12],
+        }
+    )
+    settings = LeagueSettings(scoring_type='Custom PPR', ppr_value=0.75)
+    artifacts = build_draft_decision_artifacts(
+        players, settings, DraftContext(current_pick_number=10)
+    )
+
+    assert artifacts.decision_table.loc[
+        artifacts.decision_table['player_name'] == 'Alpha RB', 'proj_points_mean'
+    ].iloc[0] == 210.0
+    assert artifacts.dashboard_payload['runtime_controls']['active_scoring_preset'] == (
+        'half_ppr'
+    )
+    assert artifacts.dashboard_payload['runtime_controls'][
+        'supported_scoring_presets'
+    ] == ['standard', 'half_ppr', 'ppr']
+    assert list(artifacts.dashboard_payload['scoring_presets'].keys()) == [
+        'standard',
+        'half_ppr',
+        'ppr',
+    ]
+    assert 'custom' not in artifacts.dashboard_payload['scoring_presets']
+    assert (
+        pd.DataFrame(artifacts.dashboard_payload['decision_table'])
+        .set_index('player_name')
+        .loc['Alpha RB', 'proj_points_mean']
+        == 200.0
+    )
 
 
 def test_workbook_contains_core_sheets():
@@ -815,6 +939,10 @@ def test_exported_dashboard_html_contains_live_controls_and_full_board_renderer(
         assert 'advance-button' not in html
         assert 'data-status-filter' not in html
         assert 'Marking Taken or Mine advances the draft automatically.' in html
+        assert 'Starting from' in html
+        assert 'Standard (0.0 PPR), Half PPR (0.5), and Full PPR (1.0)' in html
+        assert '(regen needed)' not in html
+        assert 'window.__ffbayesBoardState = {' in html
         assert 'slice(0, 30)' not in html
 
 

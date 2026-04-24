@@ -178,6 +178,11 @@ def _stress_history() -> pd.DataFrame:
     for name, profile in players.items():
         for season, points in profile['weekly_points'].items():
             for week, fant_pt in enumerate(points, start=1):
+                reception_bonus = {
+                    'RB': 2.0,
+                    'WR': 3.0,
+                    'TE': 2.0,
+                }.get(profile['position'], 0.0)
                 rows.append(
                     {
                         'Season': season,
@@ -185,7 +190,7 @@ def _stress_history() -> pd.DataFrame:
                         'Name': name,
                         'Position': profile['position'],
                         'FantPt': float(fant_pt),
-                        'FantPtPPR': float(fant_pt),
+                        'FantPtPPR': float(fant_pt + reception_bonus),
                         'Tm': profile['teams'][season],
                     }
                 )

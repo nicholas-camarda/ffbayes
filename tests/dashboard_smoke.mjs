@@ -63,11 +63,13 @@ async function runSmoke() {
     leagueSize: '#league-size',
     draftPosition: '#draft-position',
     benchSlots: '#bench-slots',
+    scoringPreset: '#scoring-preset',
     riskTolerance: '#risk-tolerance',
     undoButton: '#undo-button',
     redoButton: '#redo-button',
     finalizeButton: '#finalize-button',
     finalizeNote: '#finalize-note',
+    presetNotice: '#preset-notice',
     statusPills: '#status-pills .pill',
     primaryName: '#primary-card .hero-name',
     timingFrontier: '#timing-frontier',
@@ -156,6 +158,32 @@ async function runSmoke() {
     })));
     return Object.fromEntries(entries.map((item) => [item.label.replace(' need', ''), Number(item.value || 0)]));
   };
+  const readRenderedBoardRow = async (playerName) => page.evaluate((targetName) => {
+    const rows = window.__ffbayesBoardState?.rows || [];
+    const row = rows.find((entry) => entry.player_name === targetName);
+    return row || null;
+  }, playerName);
+  const findPresetSensitivePlayer = async () => page.evaluate(() => {
+    const presets = window.FFBAYES_DASHBOARD?.scoring_presets || {};
+    const standardRows = presets.standard?.decision_table || [];
+    const halfRows = new Map((presets.half_ppr?.decision_table || []).map((row) => [row.player_name, row]));
+    const pprRows = new Map((presets.ppr?.decision_table || []).map((row) => [row.player_name, row]));
+    const candidate = standardRows.find((row) => {
+      const half = halfRows.get(row.player_name);
+      const ppr = pprRows.get(row.player_name);
+      if (!half || !ppr) {
+        return false;
+      }
+      return Math.abs(Number(row.proj_points_mean || 0) - Number(half.proj_points_mean || 0)) > 1e-6
+        || Math.abs(Number(half.proj_points_mean || 0) - Number(ppr.proj_points_mean || 0)) > 1e-6;
+    });
+    return candidate ? candidate.player_name : null;
+  });
+  const readPresetProjectionValue = async (presetKey, playerName) => page.evaluate(({ targetPreset, targetName }) => {
+    const rows = window.FFBAYES_DASHBOARD?.scoring_presets?.[targetPreset]?.decision_table || [];
+    const row = rows.find((entry) => entry.player_name === targetName);
+    return row ? Number(row.proj_points_mean || 0) : null;
+  }, { targetPreset: presetKey, targetName: playerName });
 
   const findFirstAvailablePlayerByPosition = async (position) => page.evaluate((targetPosition) => {
     const rows = Array.from(document.querySelectorAll('#board-table tr[data-player-row]'));
@@ -308,6 +336,49 @@ async function runSmoke() {
     if (!configuredPills.includes('Draft slot: 2')) {
       throw new Error(`Expected draft slot pill to update, got ${configuredPills.join(' | ')}`);
     }
+    if (!((await readText(selectors.presetNotice)) || '').includes('Standard (0.0 PPR), Half PPR (0.5), and Full PPR (1.0)')) {
+      throw new Error('Preset notice did not explain the Standard/Half/Full PPR contract');
+    }
+
+    const defaultScoringPreset = await getSelectValue(selectors.scoringPreset);
+    const presetSensitivePlayer = await findPresetSensitivePlayer();
+    if (!presetSensitivePlayer) {
+      throw new Error('Could not find a player whose projection changes across scoring presets');
+    }
+    await setSelect(selectors.scoringPreset, 'standard');
+    const standardProjection = await readPresetProjectionValue('standard', presetSensitivePlayer);
+    const standardRenderedRow = await readRenderedBoardRow(presetSensitivePlayer);
+    if ((await getSelectValue(selectors.scoringPreset)) !== 'standard') {
+      throw new Error('Scoring preset selector did not switch to Standard');
+    }
+    if ((await readStoredState())?.scoringPreset !== 'standard') {
+      throw new Error('Standard scoring preset was not persisted to local state');
+    }
+    if (standardProjection === null || !standardRenderedRow || Math.abs(Number(standardRenderedRow.proj_points_mean || 0) - standardProjection) > 1e-6) {
+      throw new Error(`Board did not update to the Standard projection for ${presetSensitivePlayer}`);
+    }
+    await setSelect(selectors.scoringPreset, 'half_ppr');
+    const halfProjection = await readPresetProjectionValue('half_ppr', presetSensitivePlayer);
+    const halfRenderedRow = await readRenderedBoardRow(presetSensitivePlayer);
+    if ((await getSelectValue(selectors.scoringPreset)) !== 'half_ppr') {
+      throw new Error('Scoring preset selector did not switch to Half PPR');
+    }
+    if (halfProjection === null || !halfRenderedRow || Math.abs(Number(halfRenderedRow.proj_points_mean || 0) - halfProjection) > 1e-6) {
+      throw new Error(`Board did not update to the Half PPR projection for ${presetSensitivePlayer}`);
+    }
+    await setSelect(selectors.scoringPreset, 'ppr');
+    const fullProjection = await readPresetProjectionValue('ppr', presetSensitivePlayer);
+    const fullRenderedRow = await readRenderedBoardRow(presetSensitivePlayer);
+    if ((await getSelectValue(selectors.scoringPreset)) !== 'ppr') {
+      throw new Error('Scoring preset selector did not switch to Full PPR');
+    }
+    if (fullProjection === null || !fullRenderedRow || Math.abs(Number(fullRenderedRow.proj_points_mean || 0) - fullProjection) > 1e-6) {
+      throw new Error(`Board did not update to the Full PPR projection for ${presetSensitivePlayer}`);
+    }
+    if (standardProjection === halfProjection && halfProjection === fullProjection) {
+      throw new Error(`Board did not update across Standard/Half/Full PPR for ${presetSensitivePlayer}`);
+    }
+    await setSelect(selectors.scoringPreset, defaultScoringPreset);
 
     const primaryBeforeTaken = await readText(selectors.primaryName);
     if (!primaryBeforeTaken) {

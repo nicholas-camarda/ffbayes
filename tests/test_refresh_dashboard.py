@@ -30,6 +30,49 @@ def _fresh_decision_evidence():
     }
 
 
+def _scoring_preset_bundle_fixture():
+    def _entry(key: str, label: str, scoring_type: str, ppr_value: float) -> dict:
+        return {
+            'key': key,
+            'label': label,
+            'available': True,
+            'scoring_type': scoring_type,
+            'ppr_value': ppr_value,
+            'league_settings': {
+                'league_size': 10,
+                'draft_position': 10,
+                'scoring_type': scoring_type,
+                'ppr_value': ppr_value,
+                'risk_tolerance': 'medium',
+                'roster_spots': {
+                    'QB': 1,
+                    'RB': 2,
+                    'WR': 2,
+                    'TE': 1,
+                    'FLEX': 1,
+                    'DST': 1,
+                    'K': 1,
+                },
+                'flex_weights': {'RB': 0.45, 'WR': 0.45, 'TE': 0.1},
+                'bench_slots': 6,
+            },
+            'decision_table': [{'player_name': 'Test Player', 'position': 'RB'}],
+            'supporting_math': {
+                'draft_score_mean': 1.0,
+                'draft_score_std': 0.0,
+                'availability_mean': 0.5,
+                'top_draft_score': 1.0,
+                'top_simple_vor_proxy': 1.0,
+            },
+        }
+
+    return {
+        'standard': _entry('standard', 'Standard (0.0 PPR)', 'Standard', 0.0),
+        'half_ppr': _entry('half_ppr', 'Half PPR (0.5)', 'Half-PPR', 0.5),
+        'ppr': _entry('ppr', 'Full PPR (1.0)', 'PPR', 1.0),
+    }
+
+
 def test_refresh_runtime_dashboard_rebuilds_html_and_stages_pages(tmp_path, monkeypatch):
     import ffbayes.refresh_dashboard as refresh_dashboard
     from ffbayes.publish_pages import stage_pages_site as real_stage_pages_site
@@ -175,9 +218,10 @@ def test_refresh_runtime_dashboard_rebuilds_html_and_stages_pages(tmp_path, monk
                 'metric_glossary': {},
                 'runtime_controls': {
                     'risk_tolerance_options': ['low', 'medium', 'high'],
-                    'supported_scoring_presets': ['ppr'],
-                    'active_scoring_preset': 'ppr',
+                    'supported_scoring_presets': ['standard', 'half_ppr', 'ppr'],
+                    'active_scoring_preset': 'half_ppr',
                 },
+                'scoring_presets': _scoring_preset_bundle_fixture(),
             },
             indent=2,
         ),
@@ -307,9 +351,10 @@ def test_check_dashboard_freshness_reports_fresh_and_stale(tmp_path, monkeypatch
                 'metric_glossary': {},
                 'runtime_controls': {
                     'risk_tolerance_options': ['low', 'medium', 'high'],
-                    'supported_scoring_presets': ['ppr'],
-                    'active_scoring_preset': 'ppr',
+                    'supported_scoring_presets': ['standard', 'half_ppr', 'ppr'],
+                    'active_scoring_preset': 'half_ppr',
                 },
+                'scoring_presets': _scoring_preset_bundle_fixture(),
             }
         ),
         encoding='utf-8',
