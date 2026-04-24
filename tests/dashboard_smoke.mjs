@@ -62,7 +62,6 @@ async function runSmoke() {
   const selectors = {
     leagueSize: '#league-size',
     draftPosition: '#draft-position',
-    currentPickNumber: '#current-pick-number',
     benchSlots: '#bench-slots',
     riskTolerance: '#risk-tolerance',
     undoButton: '#undo-button',
@@ -280,8 +279,10 @@ async function runSmoke() {
 
     await setNumber(selectors.leagueSize, 3);
     await setNumber(selectors.draftPosition, 2);
-    await setNumber(selectors.currentPickNumber, 1);
     await setNumber(selectors.benchSlots, 0);
+    if ((await page.locator('#current-pick-number').count()) !== 0) {
+      throw new Error('Current pick should be derived from drafted players, not manually editable');
+    }
     await setSelect(selectors.riskTolerance, 'high');
     await page.evaluate(() => {
       const state = JSON.parse(window.localStorage.getItem('ffbayes-dashboard-state-v2') || 'null');

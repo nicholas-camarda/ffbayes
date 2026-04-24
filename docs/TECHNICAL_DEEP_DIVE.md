@@ -10,7 +10,7 @@ When a rank-based validation slice cannot be estimated because the slice is cons
 
 ## What This Is
 
-This is the single authoritative technical and methods guide for the draft board. It replaces overlapping "deep dive" and "statistician guide" narratives.
+This is the single authoritative technical and methods guide for the draft board.
 
 The key distinction is:
 
@@ -49,6 +49,7 @@ Primary emitted artifacts:
 
 - Do not read the current board as a pure Monte Carlo ranking. The supported board is driven by posterior player projections plus a decision policy.
 - Do not read the current board as a pure VOR ranking. `Simple VOR proxy` is a baseline comparator, not the full contextual score.
+- Do not read sampled-Bayes diagnostic artifacts as an active production workflow. The supported board uses the hierarchical empirical-Bayes estimator.
 - Do not treat internal holdout backtests as external validity.
 - Do not conflate floor and ceiling with frequentist confidence intervals unless the range is explicitly defined that way.
 

@@ -4306,10 +4306,6 @@ def export_dashboard_html(
               <input id="draft-position" type="number" min="1" max="20" />
             </div>
             <div class="field">
-              <label for="current-pick-number">Current pick</label>
-              <input id="current-pick-number" type="number" min="1" />
-            </div>
-            <div class="field">
               <label for="bench-slots">Bench slots</label>
               <input id="bench-slots" type="number" min="0" max="12" />
             </div>
@@ -4795,6 +4791,18 @@ def export_dashboard_html(
         }
       }
 
+      function derivedCurrentPickNumber(targetState = state) {
+        const drafted = new Set([
+          ...safeLowerArray(targetState.takenPlayers || []),
+          ...safeLowerArray(targetState.yourPlayers || []),
+        ].filter(Boolean));
+        return drafted.size + 1;
+      }
+
+      function syncCurrentPickNumber() {
+        state.currentPickNumber = derivedCurrentPickNumber(state);
+      }
+
       function pushHistory() {
         pushSnapshot(state.history, captureDraftSnapshot());
         state.redoHistory = [];
@@ -5004,6 +5012,7 @@ def export_dashboard_html(
       }
 
       function buildBoardState() {
+        syncCurrentPickNumber();
         const rows = activeRows().filter((row) => {
           const name = (row.player_name || '').toString().trim();
           return name && name.toUpperCase() !== 'UNKNOWN' && FANTASY_DRAFT_POSITIONS.includes(row.position);
@@ -5589,7 +5598,6 @@ def export_dashboard_html(
         document.getElementById('risk-tolerance').value = state.riskTolerance || 'medium';
         document.getElementById('league-size').value = state.leagueSize;
         document.getElementById('draft-position').value = state.draftPosition;
-        document.getElementById('current-pick-number').value = state.currentPickNumber;
         document.getElementById('bench-slots').value = state.benchSlots;
         document.getElementById('roster-qb').value = state.rosterSpots.QB || 0;
         document.getElementById('roster-rb').value = state.rosterSpots.RB || 0;
@@ -6339,7 +6347,6 @@ def export_dashboard_html(
           ['risk-tolerance', (value) => { state.riskTolerance = value; }],
           ['league-size', (value) => { state.leagueSize = Math.max(2, Number(value || 10)); state.draftPosition = Math.min(state.draftPosition, state.leagueSize); }],
           ['draft-position', (value) => { state.draftPosition = Math.max(1, Number(value || 1)); }],
-          ['current-pick-number', (value) => { state.currentPickNumber = Math.max(1, Number(value || 1)); }],
           ['bench-slots', (value) => { state.benchSlots = Math.max(0, Number(value || 0)); }],
           ['roster-qb', (value) => { state.rosterSpots.QB = Math.max(0, Number(value || 0)); }],
           ['roster-rb', (value) => { state.rosterSpots.RB = Math.max(0, Number(value || 0)); }],
@@ -6394,7 +6401,6 @@ def export_dashboard_html(
         const boardState = buildBoardState();
         const targetRow = boardState.rows.find((row) => safeLower(row.player_name) === normalized) || null;
         pushHistory();
-        let shouldAdvancePick = false;
         if (action === 'queue') {
           state.queuePlayers = state.queuePlayers.some((item) => safeLower(item) === normalized)
             ? state.queuePlayers.filter((item) => safeLower(item) !== normalized)
@@ -6408,7 +6414,6 @@ def export_dashboard_html(
             state.yourPlayers = state.yourPlayers.filter((item) => safeLower(item) !== normalized);
           } else {
             state.queuePlayers = state.queuePlayers.filter((item) => safeLower(item) !== normalized);
-            shouldAdvancePick = true;
           }
         } else if (action === 'mine') {
           const alreadyMine = state.yourPlayers.some((item) => safeLower(item) === normalized);
@@ -6425,15 +6430,11 @@ def export_dashboard_html(
             if (targetRow) {
               state.pickLog = [...state.pickLog, buildPickReceipt(targetRow, boardState)];
             }
-            shouldAdvancePick = true;
           }
         }
         state.pickLog = (state.pickLog || []).filter((entry) =>
           state.yourPlayers.some((item) => safeLower(item) === safeLower(entry.player_name))
         );
-        if (shouldAdvancePick) {
-          state.currentPickNumber = Math.max(1, Number(state.currentPickNumber || 1) + 1);
-        }
         render();
       }
 

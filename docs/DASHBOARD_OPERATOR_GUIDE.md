@@ -238,7 +238,7 @@ The first visible evidence surface is intentionally compact:
 
 Season-level deltas, strategy rows, and disagreement tables live under the nested `Detailed evidence` disclosure.
 
-Sampled-versus-empirical comparison remains a diagnostics-only workflow unless a formal promotion decision changes the production estimator. Do not expect sampled comparison rows in the live dashboard while empirical Bayes remains production.
+Sampled-Bayes comparison artifacts are diagnostic history only. The live dashboard uses the empirical-Bayes estimator and does not show sampled comparison rows.
 
 ### Freshness And Provenance
 
