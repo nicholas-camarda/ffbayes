@@ -42,9 +42,9 @@ pip install -e .
 
 All supported Python commands should run inside the `ffbayes` conda environment.
 
-### 2. Configure Your League
+### 2. Set The Starting League Defaults
 
-Edit `config/user_config.json`:
+Set default league settings in `config/user_config.json`:
 
 ```json
 {
@@ -58,8 +58,8 @@ Edit `config/user_config.json`:
 }
 ```
 
-These values seed the generated artifacts. In the dashboard, adjust league size,
-draft position, scoring preset, and risk tolerance from the controls while you
+These values seed the generated artifacts. League size, draft position, scoring
+preset, and risk tolerance are editable from the dashboard controls while you
 draft. Current pick advances from the players marked drafted; it is not a
 manual setup field.
 
