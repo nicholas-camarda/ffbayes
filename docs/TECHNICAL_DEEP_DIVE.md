@@ -424,7 +424,7 @@ g^{(m)} \sim \mathcal{N}(\mu_{\text{games}},\sigma^2_{\text{games}})
 $$
 
 $$
-y^{(m)} = \max(r^{(m)},0)\cdot \operatorname{clip}(g^{(m)},0,G_{\text{season}})
+y^{(m)} = \max(r^{(m)},0)\cdot \min\{\max(g^{(m)},0),G_{\text{season}}\}
 $$
 
 with `512` draws per player. The exported summaries are:

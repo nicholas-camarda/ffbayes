@@ -253,6 +253,8 @@ def test_technical_math_avoids_implementation_names_inside_tex_text_macros():
     for pattern in fragile_patterns:
         assert not re.search(pattern, technical), pattern
 
+    assert r'\operatorname' not in technical
+
 
 def test_docs_path_contract_and_authority_language_remain_explicit():
     combined = _all_doc_text()
