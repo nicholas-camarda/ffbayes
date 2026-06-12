@@ -1,29 +1,92 @@
 # Dashboard Frontend Architecture
 
-## Clean-start confirmation
-- Working tree verified clean before branching.
-- Branch: `refactor/ffbayes-dashboard-frontend`
-- Baseline: `master` @ `89c61a3e7bb992508ddfb6a5aacd91a168a2741d`
+Audience: contributors changing dashboard UI, payload contract, or renderer wiring.
 
-## Current-state audit
+Scope: how the React frontend, Python payload pipeline, and HTML artifact paths
+fit together after cutover.
 
-The interactive draft dashboard is produced entirely inside `src/ffbayes/draft_strategy/draft_decision_system.py` (7,103 lines). Payload construction, HTML rendering, workbook export, and shortcut staging all live in this single module.
+Trust boundary: Python builds and validates the payload; the browser only
+renders. Runtime `seasons/<year>/draft_strategy/` artifacts are authoritative.
 
-**Payload generation.** `build_dashboard_payload()` (`draft_decision_system.py:3094–3250`) assembles a JSON-serializable `dict[str, Any]` from decision tables, recommendations, tier cliffs, roster scenarios, scoring presets, war-room visuals, and supporting metadata. The return type is untyped beyond `dict[str, Any]`; there is no schema version field today.
+## What This Is
 
-**Artifact write path.** `save_draft_decision_artifacts()` (`draft_decision_system.py:6876–7103`) writes the full artifact bundle: Excel workbook via `export_workbook()`, payload JSON at lines 6945–6947, and HTML via `export_dashboard_html()` at lines 6949–6957. After writing, `_stage_runtime_dashboard_shortcuts()` (`draft_decision_system.py:6780–6873`) copies `index.html` and `dashboard_payload.json` into convenience shortcuts under `<runtime_root>/dashboard/` and `<repo>/dashboard/` using `shutil.copy2`.
+Technical architecture for the draft war room dashboard: payload contract,
+frontend build toolchain, default renderer, and legacy rollback surface.
 
-**HTML renderer.** `export_dashboard_html()` (`draft_decision_system.py:3613–6657`) embeds a ~3,000-line raw Python string (`html = r"""` at line 3650 through closing `"""` at line 6651). Client-side logic is vanilla JavaScript inside a `<script>` block from lines 4568–6647 (~2,080 lines). The payload is injected at build time by replacing the `__PAYLOAD_JSON__` placeholder (line 4569); `__GENERATED_LABEL__` is substituted at lines 6652–6654.
+## When To Use It
 
-**Payload injection for publish.** `src/ffbayes/publish_pages.py` re-injects payload into staged HTML using string markers: `PAYLOAD_ASSIGNMENT_PREFIX = 'window.FFBAYES_DASHBOARD = '` and `PAYLOAD_ASSIGNMENT_SUFFIX = ';\n\n    (() => {'` (lines 22–23). `_inject_dashboard_payload_into_html()` (lines 94–103) finds these markers and splices in fresh JSON during `stage_pages_site()` (lines 107–222).
+Use this guide when:
 
-**Artifact authority model.** Canonical season artifacts resolve under `seasons/<year>/draft_strategy/` via `get_draft_strategy_dir()` → `get_pre_draft_artifacts_dir()` → `get_run_root()` (`path_constants.py:100–115`, `118–127`, `164–168`). Payload and HTML paths are `get_dashboard_payload_path()` and `get_dashboard_html_path()` (`path_constants.py:187–202`), yielding `dashboard_payload_<year>.json` and `draft_board_<year>.html`. Derived shortcuts land at `<runtime>/dashboard/` and `<repo>/dashboard/` (`draft_decision_system.py:6785–6791`, `6825–6861`). Published output is staged to `<repo>/site/` via `get_pages_site_dir()` (`path_constants.py:408–412`).
+- changing `dashboard_frontend/` or the committed HTML template
+- wiring new payload sections into the UI
+- debugging renderer selection or Pages payload injection
+- planning removal of the legacy Python HTML renderer
 
-**Refresh and validation.** `src/ffbayes/refresh_dashboard.py` loads an existing payload and re-renders HTML. Required-key validation is hand-rolled: `REQUIRED_PAYLOAD_KEYS` and `_validate_dashboard_payload()` (lines 33–91) check four top-level keys plus nested `decision_evidence` freshness rules. `load_dashboard_payload()` (lines 94–107) reads JSON and calls the validator. No JSON Schema or generated types exist today.
+## What To Inspect
 
-**CLI wiring.** Five workflows remain entry-point driven via `src/ffbayes/cli.py`. Pages staging hooks through `run_pipeline_split.py:379–387` (`--stage-pages` → `stage_dashboard()`), and `src/ffbayes/stage_dashboard.py` wraps `refresh_runtime_dashboard(..., stage_pages=True)`.
+- `dashboard_frontend/` — React source and Vitest tests
+- `src/ffbayes/dashboard/` — contract, `frontend_renderer`, `legacy_renderer`
+- `src/ffbayes/dashboard/assets/dashboard_template.html` — committed build artifact
+- `src/ffbayes/draft_strategy/draft_decision_system.py` — payload builder and legacy HTML (rollback only)
 
-**Tests today.** Python coverage includes string/content asserts in `tests/test_draft_decision_system.py` (payload shape, scoring presets, war-room visuals), `tests/test_refresh_dashboard.py` (rebuild + staging), `tests/test_publish_pages.py` (injection markers), `tests/test_run_pipeline_split.py`, and `tests/test_documentation_contracts.py`. End-to-end browser coverage is `tests/dashboard_smoke.mjs` (686-line Playwright suite) invoked from `tests/test_dashboard_smoke.py`; there are no isolated frontend unit or component tests.
+## Interpretation Boundaries
+
+- This doc describes implementation layout, not draft-day operator steps (see
+  `DASHBOARD_OPERATOR_GUIDE.md`).
+- Legacy `export_dashboard_html()` remains for rollback; it is not the default path.
+
+## Commands And Paths
+
+- Rebuild template: `cd dashboard_frontend && npm ci && npm run build:template`
+- Default HTML generation: `ffbayes stage-dashboard --year <year>` (no env var)
+- Rollback: `FFBAYES_DASHBOARD_RENDERER=legacy ffbayes stage-dashboard --year <year>`
+
+## Status
+
+Cutover complete: **default renderer is `frontend`**. Roll back with
+`FFBAYES_DASHBOARD_RENDERER=legacy`. Operator checklist:
+`docs/DASHBOARD_FRONTEND_CUTOVER.md`.
+
+## Layout (post-cutover)
+
+**Payload (Python, source of truth).** `build_dashboard_payload()` in
+`draft_decision_system.py` assembles the authoritative JSON. Payloads are
+validated fail-closed via `ffbayes.dashboard.payload_contract` (JSON Schema at
+`src/ffbayes/dashboard/schemas/dashboard_payload.schema.json`, version field
+`dashboard_schema_version: 1`). Legacy payloads without a version field still
+validate against the pre-existing required-key contract.
+
+**HTML (default: React + Vite template).** `dashboard_frontend/` builds to a
+single self-contained file committed at
+`src/ffbayes/dashboard/assets/dashboard_template.html`. At artifact-write time,
+`ffbayes.dashboard.frontend_renderer.render_dashboard_html()` injects the
+payload into `<script type="application/json" id="ffbayes-dashboard-payload">`
+(replacing the `__PAYLOAD_JSON__` placeholder). Node is required only when
+frontend source changes, not during normal pipeline runs.
+
+**HTML (rollback: legacy Python renderer).** `export_dashboard_html()` remains
+in `draft_decision_system.py` (~3,000-line inline HTML/JS string). Import
+surface for rollback paths: `ffbayes.dashboard.legacy_renderer`. Scheduled for
+removal after one stable draft day on the React dashboard.
+
+**Artifact write path.** `save_draft_decision_artifacts()` writes workbook,
+payload JSON, and HTML (frontend by default). `_stage_runtime_dashboard_shortcuts()`
+copies `index.html` and `dashboard_payload.json` into `<runtime>/dashboard/` and
+`repo/dashboard/`.
+
+**Pages staging.** `publish_pages.py` re-injects payload during
+`stage_pages_site()`: prefers the frontend JSON script tag; falls back to legacy
+`window.FFBAYES_DASHBOARD = …` markers for older HTML.
+
+**Refresh.** `refresh_dashboard.py` reloads a payload, validates it, and
+re-renders HTML through the active renderer.
+
+**CLI.** Unchanged entry points: `ffbayes pre-draft`, `ffbayes draft-strategy`,
+`ffbayes stage-dashboard`, `ffbayes refresh-dashboard`, `ffbayes draft-retrospective`.
+
+**Tests.** Python: contract, renderer switch, refresh, publish, pipeline.
+Frontend: Vitest in `dashboard_frontend/`. E2E parity:
+`tests/dashboard_smoke.mjs` (Playwright) against frontend-rendered `site/`.
 
 ## Maintainability problems
 1. Monolithic module: payload logic, HTML, CSS, and JS in one 7k-line file.
@@ -61,12 +124,12 @@ exact runtime model the repo already has.
   reviewed via source + deterministic rebuild.
 - Python `ffbayes.dashboard.frontend_renderer` injects payload into the template using
   the same `__PAYLOAD_JSON__` placeholder mechanism as the legacy renderer.
-- Renderer selection: `FFBAYES_DASHBOARD_RENDERER=legacy|frontend`, default `legacy`.
-  Selecting `frontend` without a built template fails with an actionable message.
+- Renderer selection: `FFBAYES_DASHBOARD_RENDERER=legacy|frontend`, default `frontend`.
+  Missing template fails with an actionable message; set `legacy` to roll back.
 
 ## Migration plan
 Slices A–D as in `docs/superpowers/plans/2026-06-12-dashboard-frontend-refactor.md`.
-Default-flip to `frontend` is a follow-up PR after a draft-day dry run.
+Default renderer is `frontend` as of cutover (see `docs/DASHBOARD_FRONTEND_CUTOVER.md`).
 
 ## Testing plan
 - Python: `tests/test_dashboard_payload_schema.py` (contract), existing suites extended
@@ -78,11 +141,11 @@ Default-flip to `frontend` is a follow-up PR after a draft-day dry run.
 
 ## Compatibility plan
 - All five CLI workflows unchanged: `ffbayes pre-draft`, `ffbayes pre-draft --stage-pages`, `ffbayes draft-strategy`, `ffbayes stage-dashboard --year <year>`, `ffbayes draft-retrospective`. `dashboard/index.html` shortcuts unchanged.
-- `site/` staging unchanged; `publish_pages.py` injection gains a second suffix marker
-  (`; /*FFBAYES_PAYLOAD_END*/`) tried before the legacy suffix.
+- `site/` staging unchanged; `publish_pages.py` injects into the frontend JSON
+  script tag first, then legacy `window.FFBAYES_DASHBOARD` markers if needed.
 - Legacy payloads load without `dashboard_schema_version`.
 
 ## Rollback / fallback plan
-- `FFBAYES_DASHBOARD_RENDERER` unset/`legacy` → byte-identical legacy behavior.
+- `FFBAYES_DASHBOARD_RENDERER=legacy` → legacy Python renderer (rollback path).
 - Legacy renderer code untouched; deleting it is only allowed after the default flip
   has survived a real draft.

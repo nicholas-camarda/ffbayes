@@ -1,4 +1,9 @@
-"""Render the dashboard HTML from the prebuilt frontend template."""
+"""Default dashboard HTML renderer (React + Vite single-file template).
+
+Pipeline commands call :func:`render_dashboard_html` when
+:func:`active_renderer` returns ``frontend`` (the default). Roll back with
+``FFBAYES_DASHBOARD_RENDERER=legacy``; see ``docs/DASHBOARD_FRONTEND_CUTOVER.md``.
+"""
 
 from __future__ import annotations
 
@@ -29,8 +34,8 @@ def dumps_html_safe_json(payload: dict[str, Any]) -> str:
 
 
 def active_renderer() -> str:
-    """Return the configured dashboard renderer (default: legacy)."""
-    value = os.environ.get(RENDERER_ENV_VAR, RENDERER_LEGACY).strip().lower()
+    """Return the configured dashboard renderer (default: frontend)."""
+    value = os.environ.get(RENDERER_ENV_VAR, RENDERER_FRONTEND).strip().lower()
     if value not in _VALID_RENDERERS:
         raise ValueError(
             f'{RENDERER_ENV_VAR} must be one of {_VALID_RENDERERS}, got {value!r}.'
@@ -47,7 +52,7 @@ def load_dashboard_template() -> str:
         raise FileNotFoundError(
             'Frontend dashboard template is missing from the ffbayes package. '
             'Build it with `cd dashboard_frontend && npm ci && npm run build:template`, '
-            f'or unset {RENDERER_ENV_VAR} to use the legacy renderer.'
+            f'or set {RENDERER_ENV_VAR}={RENDERER_LEGACY!r} to use the legacy renderer.'
         )
     return template.read_text(encoding='utf-8')
 

@@ -61,7 +61,7 @@ export function AppShell(props: { payload: DashboardPayload; store: DraftStore }
           <TimingFrontier payload={payload} store={store} />
         </div>
 
-        <div className="column">
+        <div className="column column-board">
           <PositionalCliffs payload={payload} store={store} />
           <PlayerBoard payload={payload} store={store} />
           <RecommendationFallbacks payload={payload} store={store} />

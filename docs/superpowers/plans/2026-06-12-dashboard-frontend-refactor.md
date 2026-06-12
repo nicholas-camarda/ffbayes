@@ -14,6 +14,25 @@
 
 ---
 
+## Status: **COMPLETE** (2026-06-12)
+
+All 23 tasks implemented. Default renderer is `frontend`. Smoke suite and full
+pytest pass against the React dashboard.
+
+**Current docs (prefer these over this plan):**
+
+- `docs/DASHBOARD_FRONTEND_ARCHITECTURE.md` — layout and module map
+- `docs/DASHBOARD_FRONTEND_CUTOVER.md` — operator checklist and rollback
+
+**Remaining follow-ups (separate PRs):** delete `export_dashboard_html()` after
+one stable draft day; CI template-drift check; migrate `draft_retrospective.py`
+inline HTML to the same frontend pattern.
+
+> Historical implementation plan. Line numbers and defaults below reflect the
+> pre-cutover audit unless noted otherwise.
+
+---
+
 ## Repo facts the executor must know (from the audit)
 
 - All Python/pytest/ruff commands run inside the `ffbayes` conda env: `conda run -n ffbayes <cmd>`.
@@ -43,7 +62,7 @@ This plan is one branch but four reviewable slices. Open PRs (or at least group 
 3. **Slice C (Tasks 13–19):** behavior parity port in the frontend.
 4. **Slice D (Tasks 20–23):** renderer switch integration, regression tests, parity validation, final report.
 
-Flipping the default renderer from `legacy` to `frontend` is **explicitly out of scope** — recommend it as a follow-up PR after a real draft-day dry run.
+Default renderer flip to `frontend` was completed as part of cutover (see `docs/DASHBOARD_FRONTEND_CUTOVER.md`).
 
 ## Hard constraints (do not violate)
 

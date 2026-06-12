@@ -3620,6 +3620,11 @@ def _build_charts(
     return [fig1, fig2, fig3]
 
 
+# Legacy dashboard HTML renderer (rollback only). Default writes use
+# ffbayes.dashboard.frontend_renderer. Re-exported from legacy_renderer.py.
+# Removal planned after one stable draft day — see DASHBOARD_FRONTEND_CUTOVER.md.
+
+
 def export_dashboard_html(
     decision_table: pd.DataFrame,
     recommendations: pd.DataFrame,
@@ -3630,7 +3635,11 @@ def export_dashboard_html(
     dashboard_payload: dict[str, Any] | None = None,
     generated_label: str | None = None,
 ) -> Path:
-    """Write a local interactive HTML dashboard."""
+    """Write the rollback-only legacy interactive HTML dashboard.
+
+    Default artifact generation uses :mod:`ffbayes.dashboard.frontend_renderer`.
+    Set ``FFBAYES_DASHBOARD_RENDERER=legacy`` only when rolling back.
+    """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     backtest = backtest or {}

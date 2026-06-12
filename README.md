@@ -154,7 +154,11 @@ Use these commands by intent:
 
 Internal developer dashboard refresh helpers and publish-surface checks are
 covered in [docs/DASHBOARD_OPERATOR_GUIDE.md](docs/DASHBOARD_OPERATOR_GUIDE.md)
-and [docs/DATA_LINEAGE_AND_PATHS.md](docs/DATA_LINEAGE_AND_PATHS.md).
+and [docs/DATA_LINEAGE_AND_PATHS.md](docs/DATA_LINEAGE_AND_PATHS.md). The
+dashboard UI is a React+Vite frontend built into a single HTML template (default
+renderer); architecture and rollback are documented in
+[docs/DASHBOARD_FRONTEND_ARCHITECTURE.md](docs/DASHBOARD_FRONTEND_ARCHITECTURE.md)
+and [docs/DASHBOARD_FRONTEND_CUTOVER.md](docs/DASHBOARD_FRONTEND_CUTOVER.md).
 
 The top-level `ffbayes` CLI is the main interface. Module-level scripts still exist, but the unified CLI is the intended operator surface.
 

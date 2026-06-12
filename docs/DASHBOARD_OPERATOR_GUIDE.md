@@ -107,20 +107,31 @@ ffbayes refresh-dashboard --year 2026
 
 ### Dashboard Renderer Selection
 
-Purpose: choose which HTML renderer produces dashboard artifacts. The default is unchanged legacy behavior.
+Purpose: choose which HTML renderer produces dashboard artifacts. **Default: `frontend`** (React+Vite template committed in the Python package).
 
-Environment variable: `FFBAYES_DASHBOARD_RENDERER=legacy|frontend` (default `legacy` when unset).
+Environment variable: `FFBAYES_DASHBOARD_RENDERER=legacy|frontend` (default `frontend` when unset).
 
-- `legacy` — existing Python-rendered dashboard (default operator path)
-- `frontend` — React+Vite single-file template committed in the Python package
+- `frontend` — current default; single-file React dashboard (passes the Playwright smoke suite)
+- `legacy` — fallback Python-rendered dashboard if you need to roll back
 
-Regenerate with the new frontend renderer:
+Normal operator commands use the frontend renderer automatically:
 
 ```bash
-FFBAYES_DASHBOARD_RENDERER=frontend ffbayes stage-dashboard --year 2026
+ffbayes stage-dashboard --year 2026
 ```
 
-Selecting `frontend` without a built template fails with an actionable error. Node is only required when frontend source changes, not during normal pipeline runs.
+Rollback to legacy for one run:
+
+```bash
+FFBAYES_DASHBOARD_RENDERER=legacy ffbayes stage-dashboard --year 2026
+```
+
+If the packaged template is missing, the command fails with instructions to run `npm run build:template` or set `FFBAYES_DASHBOARD_RENDERER=legacy`. Node is only required when frontend source changes, not during normal pipeline runs.
+
+See [DASHBOARD_FRONTEND_CUTOVER.md](DASHBOARD_FRONTEND_CUTOVER.md) for the cutover
+checklist and [DASHBOARD_FRONTEND_ARCHITECTURE.md](DASHBOARD_FRONTEND_ARCHITECTURE.md)
+for the module layout. Legacy rollback imports live in
+`ffbayes.dashboard.legacy_renderer`.
 
 ### Frontend Template Build
 

@@ -34,6 +34,18 @@ def _loads_strict_json(text: str) -> dict:
 
 
 def _extract_embedded_payload(html_text: str) -> dict:
+    json_script_marker = 'id="ffbayes-dashboard-payload"'
+    tag_start = html_text.find(f'<script type="application/json" {json_script_marker}')
+    if tag_start != -1:
+        content_start = html_text.find('>', tag_start)
+        if content_start == -1:
+            raise AssertionError('Dashboard HTML JSON script tag is malformed')
+        content_start += 1
+        content_end = html_text.find('</script>', content_start)
+        if content_end == -1:
+            raise AssertionError('Dashboard HTML JSON script tag is unclosed')
+        return _loads_strict_json(html_text[content_start:content_end])
+
     start = html_text.find(PAYLOAD_ASSIGNMENT_PREFIX)
     if start == -1:
         raise AssertionError('Dashboard HTML is missing the inline payload assignment')
@@ -375,8 +387,9 @@ def test_player_forecast_stress_fixture_exercises_forecast_and_dashboard(tmp_pat
         'player_forecast_validation_summary_'
     )
     assert saved['validation_summary_path'].exists()
-    assert 'Decision evidence' in saved['html_path'].read_text(encoding='utf-8')
-    assert 'Forecast validation' in saved['html_path'].read_text(encoding='utf-8')
+    html = saved['html_path'].read_text(encoding='utf-8')
+    assert 'FFBayes Draft War Room' in html
+    assert 'id="ffbayes-dashboard-payload"' in html
     _loads_strict_json(saved['payload_path'].read_text(encoding='utf-8'))
     _loads_strict_json(
         saved['player_forecast_validation_path'].read_text(encoding='utf-8')

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Stage the live draft dashboard for GitHub Pages."""
+"""Stage the live draft dashboard for GitHub Pages.
+
+When re-injecting payload into staged HTML, prefers the frontend JSON script
+tag (``id="ffbayes-dashboard-payload"``) and falls back to legacy
+``window.FFBAYES_DASHBOARD`` assignment markers for older HTML.
+"""
 
 from __future__ import annotations
 
@@ -93,7 +98,28 @@ def _build_publish_provenance(
     }
 
 
+def _inject_json_script_payload(html_text: str, payload: dict[str, Any]) -> str | None:
+    """Inject payload into the frontend JSON script tag when present."""
+    marker = 'id="ffbayes-dashboard-payload"'
+    tag_start = html_text.find(f'<script type="application/json" {marker}')
+    if tag_start == -1:
+        return None
+    content_start = html_text.find('>', tag_start)
+    if content_start == -1:
+        return None
+    content_start += 1
+    content_end = html_text.find('</script>', content_start)
+    if content_end == -1:
+        return None
+    payload_json = dumps_html_safe_json(payload)
+    return html_text[:content_start] + payload_json + html_text[content_end:]
+
+
 def _inject_dashboard_payload_into_html(html_text: str, payload: dict[str, Any]) -> str:
+    json_script_html = _inject_json_script_payload(html_text, payload)
+    if json_script_html is not None:
+        return json_script_html
+
     start = html_text.find(PAYLOAD_ASSIGNMENT_PREFIX)
     if start == -1:
         return html_text

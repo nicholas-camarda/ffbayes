@@ -8,7 +8,7 @@ const dist = resolve(here, '../dist/index.html');
 const target = resolve(here, '../../src/ffbayes/dashboard/assets/dashboard_template.html');
 
 const html = readFileSync(dist, 'utf-8');
-for (const marker of ['window.FFBAYES_DASHBOARD = __PAYLOAD_JSON__', '/*FFBAYES_PAYLOAD_END*/']) {
+for (const marker of ['id="ffbayes-dashboard-payload"', '__PAYLOAD_JSON__']) {
   if (!html.includes(marker)) {
     console.error(`Built template is missing required marker: ${marker}`);
     process.exit(1);

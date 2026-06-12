@@ -66,6 +66,8 @@ Command mutation summary:
 | runtime dashboard shortcut | `<runtime-root>/dashboard/index.html` | local shortcut beside runtime artifacts | derived local shortcut |
 | repo dashboard shortcut | `dashboard/index.html` | easy local opening path | derived local shortcut |
 | staged Pages copy | `site/index.html` | repo-tracked publishing surface | derived publish surface |
+| dashboard frontend source | `dashboard_frontend/` | React UI source; builds packaged template | repo source (not a runtime artifact) |
+| packaged dashboard template | `src/ffbayes/dashboard/assets/dashboard_template.html` | single-file HTML committed for pipeline runtime | repo source (built artifact) |
 | cloud mirror | `data/` under cloud root | mirrored selected runtime artifacts | derived mirror |
 | cloud snapshot | `Analysis/<date>/` under cloud root | dated publish snapshot | derived mirror |
 
@@ -194,13 +196,13 @@ Use overrides only when you intentionally want a non-default layout:
 - `FFBAYES_RUNTIME_ROOT`
 - `FFBAYES_PROJECT_ROOT`
 - `FFBAYES_CLOUD_ROOT`
-- `FFBAYES_DASHBOARD_RENDERER` — `legacy|frontend` (default `legacy`)
+- `FFBAYES_DASHBOARD_RENDERER` — `legacy|frontend` (default `frontend`)
 
 These should be set before running the CLI so collection, preprocessing, dashboard staging, and retrospective import all agree on the same path base.
 
 ### Dashboard Frontend Template
 
-The optional React+Vite frontend builds to a single self-contained HTML template committed at:
+The React+Vite frontend (`dashboard_frontend/`) builds to a single self-contained HTML template committed at:
 
 ```text
 src/ffbayes/dashboard/assets/dashboard_template.html
@@ -212,7 +214,7 @@ Rebuild after frontend source changes:
 cd dashboard_frontend && npm ci && npm run build:template
 ```
 
-With `FFBAYES_DASHBOARD_RENDERER=frontend`, `ffbayes draft-strategy`, `ffbayes stage-dashboard`, and `ffbayes refresh-dashboard` inject the authoritative payload into this template instead of the legacy Python renderer. Node is not required at pipeline runtime; only when rebuilding the template from `dashboard_frontend/`.
+By default (`FFBAYES_DASHBOARD_RENDERER=frontend` or unset), `ffbayes draft-strategy`, `ffbayes stage-dashboard`, and `ffbayes refresh-dashboard` inject the authoritative payload into this template. Set `FFBAYES_DASHBOARD_RENDERER=legacy` to use the Python-rendered fallback. Node is not required at pipeline runtime; only when rebuilding the template from `dashboard_frontend/`.
 
 ## Minimal Provenance Example
 

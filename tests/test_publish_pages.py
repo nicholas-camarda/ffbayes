@@ -176,6 +176,22 @@ def test_stage_pages_site_normalizes_local_paths_from_public_payload(tmp_path):
     assert '<runtime-root>/inputs/processed/unified_dataset/unified_dataset.csv' in payload_text
 
 
+def test_inject_dashboard_payload_into_html_uses_json_script_for_frontend_template():
+    from ffbayes.publish_pages import _inject_dashboard_payload_into_html
+
+    html = (
+        '<script type="application/json" id="ffbayes-dashboard-payload">'
+        '{"old": 1}</script>'
+    )
+    payload = {'new': 2, 'player_name': 'Test Player'}
+
+    result = _inject_dashboard_payload_into_html(html, payload)
+
+    assert '{"old": 1}' not in result
+    assert '"new": 2' in result
+    assert 'id="ffbayes-dashboard-payload"' in result
+
+
 def test_inject_dashboard_payload_into_html_uses_v2_marker_for_frontend_template():
     from ffbayes.publish_pages import _inject_dashboard_payload_into_html
 

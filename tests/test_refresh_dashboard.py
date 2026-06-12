@@ -107,12 +107,24 @@ def test_refresh_runtime_dashboard_uses_frontend_renderer_when_configured(
         )
 
     html_text = html_path.read_text(encoding='utf-8')
-    assert '/*FFBAYES_PAYLOAD_END*/' in html_text
+    assert 'id="ffbayes-dashboard-payload"' in html_text
     assert payload['decision_table'][0]['player_name'] in html_text
 
     html_path.unlink()
     with mock.patch.dict(os.environ, {}, clear=False):
         os.environ.pop('FFBAYES_DASHBOARD_RENDERER', None)
+        refresh_dashboard.refresh_runtime_dashboard(
+            year=2026,
+            payload_path=payload_path,
+            output_html=html_path,
+            stage_pages=False,
+        )
+
+    default_html = html_path.read_text(encoding='utf-8')
+    assert 'id="ffbayes-dashboard-payload"' in default_html
+
+    html_path.unlink()
+    with mock.patch.dict(os.environ, {'FFBAYES_DASHBOARD_RENDERER': 'legacy'}):
         refresh_dashboard.refresh_runtime_dashboard(
             year=2026,
             payload_path=payload_path,
@@ -172,11 +184,8 @@ def test_refresh_runtime_dashboard_rebuilds_html_and_stages_pages(tmp_path, monk
 
     html_text = html_path.read_text(encoding='utf-8')
     assert 'FFBayes Draft War Room' in html_text
-    assert 'Decision evidence' in html_text
-    assert 'Freshness and provenance' in html_text
-    assert 'Projection breakdown' in html_text
-    assert 'Season total mean' in html_text
-    assert 'Detailed evidence' in html_text
+    assert 'id="ffbayes-dashboard-payload"' in html_text
+    assert _load_minimal_payload()['decision_table'][0]['player_name'] in html_text
     assert result['html_path'] == html_path
     assert result['source_payload_path'] == payload_path
     assert freshness['status'] == 'fresh'

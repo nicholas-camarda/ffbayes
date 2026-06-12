@@ -877,7 +877,8 @@ def test_dashboard_artifacts_do_not_surface_unpromoted_sampled_comparison(tmp_pa
 
     assert 'sampled_bayes' not in json.dumps(payload).lower()
     assert 'hierarchical_sampled_bayes' not in json.dumps(payload).lower()
-    assert "return Number.isFinite(num) ? num.toFixed(digits) : 'n/a';" in html
+    assert 'id="ffbayes-dashboard-payload"' in html
+    assert 'FFBayes Draft War Room' in html
 
 
 def test_canonical_runtime_save_prunes_shortcut_surfaces(monkeypatch, tmp_path):

@@ -21,9 +21,13 @@ class TestFrontendRenderer(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
 
-    def test_default_renderer_is_legacy(self):
+    def test_default_renderer_is_frontend(self):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop(RENDERER_ENV_VAR, None)
+            self.assertEqual(active_renderer(), 'frontend')
+
+    def test_legacy_renderer_when_configured(self):
+        with mock.patch.dict(os.environ, {RENDERER_ENV_VAR: 'legacy'}):
             self.assertEqual(active_renderer(), 'legacy')
 
     def test_invalid_renderer_value_raises(self):
@@ -41,8 +45,7 @@ class TestFrontendRenderer(unittest.TestCase):
         render_dashboard_html(payload, out, generated_label='2026-06-12 10:00')
         html = out.read_text(encoding='utf-8')
         self.assertNotIn('__PAYLOAD_JSON__', html)
-        self.assertIn('window.FFBAYES_DASHBOARD = {', html)
-        self.assertIn('/*FFBAYES_PAYLOAD_END*/', html)
+        self.assertIn('id="ffbayes-dashboard-payload"', html)
         self.assertIn(payload['generated_at'], html)
 
     def test_render_escapes_script_breaking_strings(self):
