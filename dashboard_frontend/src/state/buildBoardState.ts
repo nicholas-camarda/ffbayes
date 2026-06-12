@@ -297,6 +297,22 @@ function isInspectableStatus(status: string | undefined): boolean {
   return status === 'available' || status === 'queued';
 }
 
+export function filterBoardRows(
+  rows: DecisionRow[],
+  search: string,
+): DecisionRow[] {
+  const query = safeLower(search);
+  return rows.filter((row) => {
+    if (query) {
+      const haystack = [row.player_name, row.position, row.team].map(safeLower).join(' ');
+      if (!haystack.includes(query)) {
+        return false;
+      }
+    }
+    return true;
+  });
+}
+
 export function buildBoardState(payload: DashboardPayload, state: DraftState): BoardState {
   const draftState = {
     ...state,

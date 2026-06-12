@@ -2,6 +2,8 @@ import type { DashboardPayload } from '../payload/load';
 import type { DraftStore } from '../state/draftState';
 import { useDraftStore } from '../state/useDraftStore';
 import { PickStatus } from './PickStatus';
+import { PlayerBoard } from './PlayerBoard';
+import { PlayerInspector } from './PlayerInspector';
 import {
   RecommendationFallbacks,
   RecommendationPrimary,
@@ -75,13 +77,7 @@ export function AppShell(props: { payload: DashboardPayload; store: DraftStore }
             <h2>Positional Cliffs</h2>
             <p className="subtle">Positional cliffs coming soon.</p>
           </section>
-          <section className="panel strong placeholder-panel">
-            <h2>Full Player Board</h2>
-            <p className="subtle">Player board coming soon.</p>
-            <table id="board-table">
-              <tbody />
-            </table>
-          </section>
+          <PlayerBoard payload={payload} store={store} />
           <RecommendationFallbacks payload={payload} store={store} />
           <RecommendationWait payload={payload} store={store} />
         </div>
@@ -94,10 +90,7 @@ export function AppShell(props: { payload: DashboardPayload; store: DraftStore }
             <div className="roster-chip-row" id="my-roster" />
             <div className="metric-grid" id="roster-need-grid" />
           </section>
-          <section className="panel strong placeholder-panel" id="player-inspector">
-            <h2>Selected Player</h2>
-            <p className="subtle">Player inspector coming soon.</p>
-          </section>
+          <PlayerInspector payload={payload} store={store} />
           <section className="panel placeholder-panel">
             <h2>Decision evidence</h2>
             <p className="subtle">Evidence panels coming soon.</p>

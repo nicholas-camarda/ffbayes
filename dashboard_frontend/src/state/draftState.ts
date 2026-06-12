@@ -80,6 +80,8 @@ export interface DraftStore {
   markTaken(playerName: string): void;
   markMine(playerName: string): void;
   toggleQueue(playerName: string): void;
+  selectPlayer(playerName: string): void;
+  setSearch(value: string): void;
   setScoringPreset(value: string): void;
   setRiskTolerance(value: string): void;
   setLeagueSize(value: number): void;
@@ -272,6 +274,16 @@ export function createDraftStore(options: CreateDraftStoreOptions = {}): DraftSt
     toggleQueue(playerName: string): void {
       pushHistory();
       applyQueue(playerName);
+      commit();
+    },
+
+    selectPlayer(playerName: string): void {
+      state.selectedPlayer = playerName;
+      commit();
+    },
+
+    setSearch(value: string): void {
+      state.search = value;
       commit();
     },
 
