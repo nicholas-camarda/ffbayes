@@ -400,6 +400,17 @@ def test_check_dashboard_freshness_reports_stale_repo_shortcut_payload(tmp_path,
     assert result['stale_paths'] == [str(repo_payload)]
 
 
+def test_load_dashboard_payload_rejects_unsupported_schema_version(tmp_path):
+    import ffbayes.refresh_dashboard as refresh_dashboard
+
+    payload = _load_minimal_payload()
+    payload['dashboard_schema_version'] = 999
+    payload_path = tmp_path / 'dashboard_payload_2026.json'
+    payload_path.write_text(json.dumps(payload), encoding='utf-8')
+    with pytest.raises(ValueError):
+        refresh_dashboard.load_dashboard_payload(payload_path)
+
+
 def test_refresh_dashboard_rejects_degraded_decision_evidence(tmp_path, monkeypatch):
     import ffbayes.refresh_dashboard as refresh_dashboard
 

@@ -24,18 +24,17 @@ from ffbayes.publish_pages import (
     _inject_dashboard_payload_into_html,
     stage_pages_site,
 )
+from ffbayes.dashboard.payload_contract import (
+    LEGACY_REQUIRED_PAYLOAD_KEYS,
+    validate_dashboard_payload,
+)
 from ffbayes.utils.json_serialization import dumps_strict_json, to_strict_jsonable
 from ffbayes.utils.path_constants import (
     get_dashboard_html_path,
     get_dashboard_payload_path,
 )
 
-REQUIRED_PAYLOAD_KEYS = (
-    'generated_at',
-    'league_settings',
-    'decision_table',
-    'decision_evidence',
-)
+REQUIRED_PAYLOAD_KEYS = LEGACY_REQUIRED_PAYLOAD_KEYS
 
 
 def _validate_required_decision_evidence(
@@ -69,24 +68,7 @@ def _validate_required_decision_evidence(
 def _validate_dashboard_payload(
     payload: dict[str, Any], payload_path: Path
 ) -> dict[str, Any]:
-    missing = [
-        key
-        for key in REQUIRED_PAYLOAD_KEYS
-        if key not in payload or payload.get(key) is None
-    ]
-    if missing:
-        raise ValueError(
-            f'Dashboard payload at {payload_path} is missing required keys: '
-            f'{", ".join(missing)}'
-        )
-    if not isinstance(payload.get('decision_table'), list):
-        raise ValueError(
-            f'Dashboard payload at {payload_path} has a non-list `decision_table`.'
-        )
-    if not isinstance(payload.get('league_settings'), dict):
-        raise ValueError(
-            f'Dashboard payload at {payload_path} has an invalid `league_settings` object.'
-        )
+    validate_dashboard_payload(payload, source=str(payload_path))
     _validate_required_decision_evidence(payload, payload_path)
     return payload
 
