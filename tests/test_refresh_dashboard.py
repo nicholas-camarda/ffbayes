@@ -1,6 +1,15 @@
 import json
+from pathlib import Path
 
 import pytest
+
+FIXTURES_DIR = Path(__file__).parent / 'fixtures'
+
+
+def _load_minimal_payload() -> dict:
+    return json.loads(
+        (FIXTURES_DIR / 'dashboard_payload_minimal.json').read_text(encoding='utf-8')
+    )
 
 
 def _fresh_decision_evidence():
@@ -102,129 +111,7 @@ def test_refresh_runtime_dashboard_rebuilds_html_and_stages_pages(tmp_path, monk
     )
     payload_path.parent.mkdir(parents=True, exist_ok=True)
     payload_path.write_text(
-        json.dumps(
-            {
-                'generated_at': '2026-04-07T14:50:00',
-                'league_settings': {
-                    'league_size': 10,
-                    'draft_position': 10,
-                    'scoring_type': 'PPR',
-                    'ppr_value': 0.5,
-                    'risk_tolerance': 'medium',
-                    'roster_spots': {
-                        'QB': 1,
-                        'RB': 2,
-                        'WR': 2,
-                        'TE': 1,
-                        'FLEX': 1,
-                        'DST': 1,
-                        'K': 1,
-                    },
-                    'flex_weights': {'RB': 0.45, 'WR': 0.45, 'TE': 0.1},
-                    'bench_slots': 6,
-                },
-                'decision_table': [
-                    {
-                        'player_name': 'Test Player',
-                        'position': 'RB',
-                        'draft_rank': 1,
-                        'simple_vor_rank': 1,
-                        'draft_score': 1.23,
-                        'simple_vor_proxy': 12.0,
-                        'availability_to_next_pick': 0.5,
-                        'expected_regret': 0.1,
-                        'upside_score': 0.7,
-                        'fragility_score': 0.2,
-                        'status': 'available',
-                    }
-                ],
-                'recommendation_summary': [{'player_name': 'Test Player'}],
-                'source_freshness': [
-                    {
-                        'source_name': 'players',
-                        'status': 'fresh',
-                        'override_used': False,
-                        'latest_expected_year': 2026,
-                        'latest_found_year': 2026,
-                    }
-                ],
-                'analysis_provenance': {
-                    'overall_freshness': {
-                        'status': 'fresh',
-                        'override_used': False,
-                        'warnings': [],
-                    }
-                },
-                'decision_evidence': {
-                    'available': True,
-                    'status': 'available',
-                    'headline': 'Decision evidence is available for this board.',
-                    'freshness': {'status': 'fresh', 'override_used': False},
-                    'strategy_summary': [
-                        {
-                            'strategy': 'draft_score',
-                            'mean_lineup_points': 100.0,
-                            'season_count': 1,
-                        }
-                    ],
-                    'season_rows': [
-                        {
-                            'holdout_year': 2025,
-                            'draft_score_lineup_points': 100.0,
-                            'historical_vor_proxy_lineup_points': 90.0,
-                            'delta_lineup_points': 10.0,
-                        }
-                    ],
-                    'top_disagreements': [],
-                },
-                'war_room_visuals': {
-                    'schema_version': 'war_room_visuals_v1',
-                    'contextual': {'key': 'contextual_score', 'label': 'Board value score'},
-                    'baseline': {'key': 'baseline_score', 'label': 'Simple VOR proxy'},
-                    'timing_frontier': {
-                        'available': True,
-                        'status': 'available',
-                        'question': 'Can I safely wait on this value, or do I need to pick now?',
-                        'reason': '',
-                        'candidates': [
-                            {
-                                'player_name': 'Test Player',
-                                'position': 'RB',
-                                'lane': 'pick_now',
-                                'timing_survival': 0.5,
-                                'wait_regret': 0.1,
-                            }
-                        ],
-                    },
-                    'positional_cliffs': {
-                        'available': True,
-                        'status': 'available',
-                        'question': 'Which positions are about to fall off if I wait?',
-                        'reason': '',
-                        'default_positions': ['RB'],
-                        'positions': [],
-                    },
-                    'comparative_explainer': {
-                        'available': True,
-                        'status': 'available',
-                        'question': 'Why does the contextual board differ from the baseline value view?',
-                        'reason': '',
-                        'contextual_label': 'Board value score',
-                        'baseline_label': 'Simple VOR proxy',
-                        'top_disagreements': [],
-                    },
-                },
-                'model_overview': {'headline': 'Model overview'},
-                'metric_glossary': {},
-                'runtime_controls': {
-                    'risk_tolerance_options': ['low', 'medium', 'high'],
-                    'supported_scoring_presets': ['standard', 'half_ppr', 'ppr'],
-                    'active_scoring_preset': 'half_ppr',
-                },
-                'scoring_presets': _scoring_preset_bundle_fixture(),
-            },
-            indent=2,
-        ),
+        json.dumps(_load_minimal_payload(), indent=2),
         encoding='utf-8',
     )
 
