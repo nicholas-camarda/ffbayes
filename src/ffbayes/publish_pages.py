@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ffbayes.dashboard.frontend_renderer import dumps_html_safe_json
 from ffbayes.utils.json_serialization import dumps_strict_json, to_strict_jsonable
 from ffbayes.utils.path_constants import (
     get_cloud_root,
@@ -21,6 +22,7 @@ from ffbayes.utils.path_constants import (
 
 PAYLOAD_ASSIGNMENT_PREFIX = 'window.FFBAYES_DASHBOARD = '
 PAYLOAD_ASSIGNMENT_SUFFIX = ';\n\n    (() => {'
+PAYLOAD_ASSIGNMENT_SUFFIX_V2 = '; /*FFBAYES_PAYLOAD_END*/'
 
 
 def _normalized_json_text(payload: dict[str, Any]) -> str:
@@ -95,13 +97,19 @@ def _inject_dashboard_payload_into_html(html_text: str, payload: dict[str, Any])
     start = html_text.find(PAYLOAD_ASSIGNMENT_PREFIX)
     if start == -1:
         return html_text
-    end = html_text.find(PAYLOAD_ASSIGNMENT_SUFFIX, start)
-    if end == -1:
-        return html_text
-    payload_json = dumps_strict_json(payload)
-    return (
-        html_text[:start] + PAYLOAD_ASSIGNMENT_PREFIX + payload_json + html_text[end:]
+    end = html_text.find(PAYLOAD_ASSIGNMENT_SUFFIX_V2, start)
+    use_v2 = end != -1
+    if not use_v2:
+        end = html_text.find(PAYLOAD_ASSIGNMENT_SUFFIX, start)
+        if end == -1:
+            return html_text
+    payload_json = (
+        dumps_html_safe_json(payload) if use_v2 else dumps_strict_json(payload)
     )
+    suffix = (
+        PAYLOAD_ASSIGNMENT_SUFFIX_V2 if use_v2 else PAYLOAD_ASSIGNMENT_SUFFIX
+    )
+    return html_text[:start] + PAYLOAD_ASSIGNMENT_PREFIX + payload_json + suffix + html_text[end + len(suffix) :]
 
 
 def stage_pages_site(

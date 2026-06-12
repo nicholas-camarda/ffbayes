@@ -1,5 +1,7 @@
 import json
+import os
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -80,6 +82,46 @@ def _scoring_preset_bundle_fixture():
         'half_ppr': _entry('half_ppr', 'Half PPR (0.5)', 'Half-PPR', 0.5),
         'ppr': _entry('ppr', 'Full PPR (1.0)', 'PPR', 1.0),
     }
+
+
+def test_refresh_runtime_dashboard_uses_frontend_renderer_when_configured(
+    tmp_path, monkeypatch
+):
+    import ffbayes.refresh_dashboard as refresh_dashboard
+
+    runtime_root = tmp_path / 'runtime'
+    runtime_root.mkdir()
+    monkeypatch.setenv('FFBAYES_RUNTIME_ROOT', str(runtime_root))
+
+    payload_path = runtime_root / 'dashboard_payload_2026.json'
+    payload = _load_minimal_payload()
+    payload_path.write_text(json.dumps(payload, indent=2), encoding='utf-8')
+    html_path = runtime_root / 'draft_board_2026.html'
+
+    with mock.patch.dict(os.environ, {'FFBAYES_DASHBOARD_RENDERER': 'frontend'}):
+        refresh_dashboard.refresh_runtime_dashboard(
+            year=2026,
+            payload_path=payload_path,
+            output_html=html_path,
+            stage_pages=False,
+        )
+
+    html_text = html_path.read_text(encoding='utf-8')
+    assert '/*FFBAYES_PAYLOAD_END*/' in html_text
+    assert payload['decision_table'][0]['player_name'] in html_text
+
+    html_path.unlink()
+    with mock.patch.dict(os.environ, {}, clear=False):
+        os.environ.pop('FFBAYES_DASHBOARD_RENDERER', None)
+        refresh_dashboard.refresh_runtime_dashboard(
+            year=2026,
+            payload_path=payload_path,
+            output_html=html_path,
+            stage_pages=False,
+        )
+
+    legacy_html = html_path.read_text(encoding='utf-8')
+    assert '(() => {' in legacy_html
 
 
 def test_refresh_runtime_dashboard_rebuilds_html_and_stages_pages(tmp_path, monkeypatch):

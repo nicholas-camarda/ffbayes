@@ -40,6 +40,11 @@ from ffbayes.analysis.bayesian_player_model import (
 from ffbayes.analysis.bayesian_vor_comparison import (
     build_player_forecast_validation_summary,
 )
+from ffbayes.dashboard.frontend_renderer import (
+    RENDERER_FRONTEND,
+    active_renderer,
+    render_dashboard_html,
+)
 from ffbayes.dashboard.payload_contract import (
     DASHBOARD_SCHEMA_VERSION,
     validate_dashboard_payload,
@@ -6954,15 +6959,22 @@ def save_draft_decision_artifacts(
         dumps_strict_json(artifacts.dashboard_payload, indent=2), encoding='utf-8'
     )
     canonical_payload = json.loads(payload_path.read_text(encoding='utf-8'))
-    export_dashboard_html(
-        artifacts.decision_table,
-        artifacts.recommendations,
-        html_path,
-        artifacts.league_settings,
-        backtest=artifacts.backtest,
-        source_freshness=artifacts.source_freshness,
-        dashboard_payload=canonical_payload,
-    )
+    if active_renderer() == RENDERER_FRONTEND:
+        render_dashboard_html(
+            canonical_payload,
+            html_path,
+            generated_label=datetime.now().strftime('%Y-%m-%d %H:%M'),
+        )
+    else:
+        export_dashboard_html(
+            artifacts.decision_table,
+            artifacts.recommendations,
+            html_path,
+            artifacts.league_settings,
+            backtest=artifacts.backtest,
+            source_freshness=artifacts.source_freshness,
+            dashboard_payload=canonical_payload,
+        )
     if artifacts.backtest:
         backtest_path.write_text(
             dumps_strict_json(artifacts.backtest, indent=2), encoding='utf-8'
