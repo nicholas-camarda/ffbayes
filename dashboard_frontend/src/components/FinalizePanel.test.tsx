@@ -12,7 +12,7 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-it('does not render finalize controls when publish_provenance exists', () => {
+it('renders finalize controls for staged payloads opened as local files', () => {
   const stagedPayload = {
     ...basePayload,
     publish_provenance: {
@@ -28,11 +28,16 @@ it('does not render finalize controls when publish_provenance exists', () => {
     },
   } as unknown as DashboardPayload;
   const store = createStoreFromPayload(stagedPayload);
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    value: { protocol: 'file:' },
+  });
 
   render(<FinalizePanel payload={stagedPayload} store={store} />);
 
-  expect(document.getElementById('finalize-button')).not.toBeInTheDocument();
-  expect(document.getElementById('finalize-note')).not.toBeInTheDocument();
+  expect(document.getElementById('finalize-button')).toBeInTheDocument();
+  expect(document.getElementById('finalize-note')).toBeInTheDocument();
+  expect(document.getElementById('finalize-button')).not.toHaveAttribute('hidden');
 });
 
 it('renders finalize controls for local payloads without publish_provenance', () => {

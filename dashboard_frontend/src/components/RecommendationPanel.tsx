@@ -19,7 +19,10 @@ type LiveStateSection = GatedSection & {
 function recommendationsSection(payload: DashboardPayload): GatedSection | undefined {
   const live = payload.live_state as LiveStateSection | undefined;
   if (live) {
-    return live;
+    if (live.available === false) {
+      return live;
+    }
+    return { available: true, status: 'available' };
   }
   if ((payload.decision_table?.length ?? 0) > 0) {
     return { available: true, status: 'available' };

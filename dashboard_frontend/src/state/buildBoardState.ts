@@ -1,5 +1,5 @@
 import type { DashboardPayload } from '../payload/load';
-import { nextPickNumber, safeLower, type DraftState } from './draftState';
+import { nextPickNumber, safeLower, type DraftState, type PickLogEntry } from './draftState';
 
 const POSITION_KEYS = ['QB', 'RB', 'WR', 'TE', 'FLEX', 'DST', 'K'] as const;
 const FANTASY_DRAFT_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'DST', 'K'] as const;
@@ -86,7 +86,7 @@ export function buildPlayerSummary(row: DecisionRow | null | undefined): string 
   );
 }
 
-function derivedCurrentPickNumber(state: DraftState): number {
+export function derivedCurrentPickNumber(state: DraftState): number {
   const drafted = new Set(
     [...state.takenPlayers, ...state.yourPlayers].map(safeLower).filter(Boolean),
   );
@@ -677,5 +677,46 @@ export function buildBoardState(payload: DashboardPayload, state: DraftState): B
     fallbacks,
     canWait,
     selectedRow,
+  };
+}
+
+export function buildPickReceipt(
+  row: DecisionRow,
+  boardState: BoardState,
+  state: DraftState,
+): PickLogEntry {
+  const topRecommendation = boardState.pickNow[0] || null;
+  const topWaitCandidate = boardState.canWait[0] || null;
+  return {
+    pick_number: state.currentPickNumber,
+    player_name: row.player_name,
+    position: row.position,
+    team: String(row.team || ''),
+    adp: Number(row.adp || 0),
+    market_rank: Number(row.market_rank || 0),
+    draft_score: Number(row.draft_score || 0),
+    simple_vor_proxy: Number(row.simple_vor_proxy || 0),
+    fragility_score: Number(row.fragility_score || 0),
+    upside_score: Number(row.upside_score || 0),
+    top_recommendation: topRecommendation ? topRecommendation.player_name : '',
+    recommended_draft_score: topRecommendation ? Number(topRecommendation.draft_score || 0) : null,
+    top_wait_candidate: topWaitCandidate
+      ? {
+          player_name: topWaitCandidate.player_name,
+          position: topWaitCandidate.position,
+          wait_utility: Number(topWaitCandidate.wait_utility || 0),
+          availability_to_next_pick: Number(topWaitCandidate.availability_to_next_pick || 0),
+          expected_regret: Number(topWaitCandidate.expected_regret || 0),
+          draft_score: Number(topWaitCandidate.draft_score || 0),
+        }
+      : null,
+    followed_model: Boolean(
+      topRecommendation
+      && safeLower(topRecommendation.player_name) === safeLower(row.player_name),
+    ),
+    decision_label:
+      topRecommendation && safeLower(topRecommendation.player_name) === safeLower(row.player_name)
+        ? 'Followed model'
+        : 'Pivoted',
   };
 }

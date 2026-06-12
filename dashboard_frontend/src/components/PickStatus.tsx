@@ -1,12 +1,12 @@
 import type { DashboardPayload } from '../payload/load';
-import { nextPickNumber } from '../state/draftState';
+import { derivedCurrentPickNumber, nextPickNumber } from '../state/draftState';
 import type { DraftStore } from '../state/draftState';
 import { useDraftStore } from '../state/useDraftStore';
 
 export function PickStatus(props: { payload: DashboardPayload; store: DraftStore }) {
   const { payload, store } = props;
   const state = useDraftStore(store);
-  const currentPick = state.currentPickNumber;
+  const currentPick = derivedCurrentPickNumber(state);
   const nextPick =
     payload.next_pick_number
     ?? nextPickNumber(currentPick, state.draftPosition, state.leagueSize);

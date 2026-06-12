@@ -11,11 +11,6 @@ import type { DraftStore } from '../state/draftState';
 
 export function FinalizePanel(props: { payload: DashboardPayload; store: DraftStore }) {
   const { payload, store } = props;
-
-  if (payload.publish_provenance) {
-    return null;
-  }
-
   const showFinalize = isLocalFinalizeSupported();
 
   const handleFinalize = () => {

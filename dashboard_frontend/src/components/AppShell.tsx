@@ -14,6 +14,7 @@ import { FreshnessPanel } from './FreshnessPanel';
 import { ProvenanceBanner } from './ProvenanceBanner';
 import { SettingsPanel } from './SettingsPanel';
 import { FinalizePanel } from './FinalizePanel';
+import { QueueRosterPanel } from './QueueRosterPanel';
 import { PositionalCliffs } from './warroom/PositionalCliffs';
 import { TimingFrontier } from './warroom/TimingFrontier';
 
@@ -69,12 +70,7 @@ export function AppShell(props: { payload: DashboardPayload; store: DraftStore }
 
         <div className="column">
           <SettingsPanel payload={payload} store={store} />
-          <section className="panel placeholder-panel">
-            <h2>Queue &amp; Roster</h2>
-            <p className="subtle">Queue and roster coming soon.</p>
-            <div className="roster-chip-row" id="my-roster" />
-            <div className="metric-grid" id="roster-need-grid" />
-          </section>
+          <QueueRosterPanel payload={payload} store={store} />
           <PlayerInspector payload={payload} store={store} />
           <EvidencePanel payload={payload} />
           <FreshnessPanel payload={payload} />

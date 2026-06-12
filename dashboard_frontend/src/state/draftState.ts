@@ -1,3 +1,9 @@
+import {
+  buildBoardState,
+  buildPickReceipt,
+  type DecisionRow,
+} from './buildBoardState';
+
 export const STORAGE_KEY = 'ffbayes-dashboard-state-v2';
 
 const DEFAULT_ROSTER_SPOTS: Record<string, number> = {
@@ -74,6 +80,7 @@ export interface CreateDraftStoreOptions {
   queuePlayers?: string[];
   selectedPlayer?: string;
   storage?: Storage;
+  payload?: import('../payload/load').DashboardPayload;
 }
 
 export interface DraftStore {
@@ -200,9 +207,23 @@ function restoreDraftSnapshot(state: DraftState, snapshot: DraftSnapshot | undef
 
 export function createDraftStore(options: CreateDraftStoreOptions = {}): DraftStore {
   const storage = options.storage ?? window.localStorage;
+  const payload = options.payload;
   const defaultState = buildDefaultState(options);
   const state = loadState(defaultState, storage);
   const listeners = new Set<() => void>();
+
+  function syncCurrentPickNumber(): void {
+    state.currentPickNumber = syncDerivedCurrentPickNumber(state);
+  }
+
+  function syncDerivedCurrentPickNumber(targetState: DraftState = state): number {
+    const drafted = new Set(
+      [...targetState.takenPlayers, ...targetState.yourPlayers].map(safeLower).filter(Boolean),
+    );
+    return drafted.size + 1;
+  }
+
+  syncCurrentPickNumber();
 
   function notify(): void {
     for (const listener of listeners) {
@@ -215,6 +236,7 @@ export function createDraftStore(options: CreateDraftStoreOptions = {}): DraftSt
   }
 
   function commit(): void {
+    syncCurrentPickNumber();
     persistState();
     notify();
   }
@@ -267,8 +289,20 @@ export function createDraftStore(options: CreateDraftStoreOptions = {}): DraftSt
     },
 
     markMine(playerName: string): void {
+      const normalized = safeLower(playerName);
+      let targetRow: DecisionRow | null = null;
+      let boardStateBefore = null as ReturnType<typeof buildBoardState> | null;
+      if (payload) {
+        boardStateBefore = buildBoardState(payload, state);
+        targetRow =
+          boardStateBefore.rows.find((row) => safeLower(row.player_name) === normalized) || null;
+      }
+      const alreadyMine = state.yourPlayers.some((item) => safeLower(item) === normalized);
       pushHistory();
       applyMine(playerName);
+      if (!alreadyMine && targetRow && boardStateBefore) {
+        state.pickLog = [...state.pickLog, buildPickReceipt(targetRow, boardStateBefore, state)];
+      }
       commit();
     },
 
@@ -350,4 +384,11 @@ export function createDraftStore(options: CreateDraftStoreOptions = {}): DraftSt
       };
     },
   };
+}
+
+export function derivedCurrentPickNumber(state: DraftState): number {
+  const drafted = new Set(
+    [...state.takenPlayers, ...state.yourPlayers].map(safeLower).filter(Boolean),
+  );
+  return drafted.size + 1;
 }

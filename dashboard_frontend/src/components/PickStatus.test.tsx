@@ -11,10 +11,10 @@ const payload = {
   next_pick_number: 11,
 };
 
-it('shows current and next pick numbers from the fixture', () => {
+it('shows derived current pick and next pick numbers from draft state', () => {
   const store = createStoreFromPayload(payload);
   render(<PickStatus payload={payload} store={store} />);
 
-  expect(screen.getByText('Current pick: 10')).toBeInTheDocument();
+  expect(screen.getByText('Current pick: 1')).toBeInTheDocument();
   expect(screen.getByText('Next pick: 11')).toBeInTheDocument();
 });

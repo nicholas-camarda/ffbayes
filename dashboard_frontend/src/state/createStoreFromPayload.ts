@@ -24,5 +24,5 @@ export function createStoreFromPayload(payload: DashboardPayload) {
     selectedPlayer: payload.selected_player ?? '',
   };
 
-  return createDraftStore(options);
+  return createDraftStore({ ...options, payload });
 }

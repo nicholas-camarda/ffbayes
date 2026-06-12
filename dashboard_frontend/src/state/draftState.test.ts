@@ -58,7 +58,7 @@ describe('draft store', () => {
     expect(store.getState().takenPlayers).toEqual(['Player A', 'Player B']);
     expect(store.getState().yourPlayers).toEqual(['My Pick']);
     expect(store.getState().queuePlayers).toEqual(['Queued Player']);
-    expect(store.getState().currentPickNumber).toBe(12);
+    expect(store.getState().currentPickNumber).toBe(4);
     expect(store.getState().search).toBe('rb');
     expect(store.getState().showAllCliffs).toBe(true);
   });
