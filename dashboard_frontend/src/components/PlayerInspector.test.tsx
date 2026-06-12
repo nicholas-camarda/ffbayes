@@ -79,6 +79,5 @@ it('updates the inspector when a board row is clicked', async () => {
   await user.click(row);
 
   const inspector = document.getElementById('player-inspector');
-  expect(inspector?.textContent).toContain('Beta Receiver');
-  expect(inspector?.textContent).not.toContain('Alpha Runner');
+  expect(inspector?.querySelector('.hero-name')?.textContent).toBe('Beta Receiver');
 });

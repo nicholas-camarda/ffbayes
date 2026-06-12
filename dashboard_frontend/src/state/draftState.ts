@@ -81,6 +81,7 @@ export interface DraftStore {
   markMine(playerName: string): void;
   toggleQueue(playerName: string): void;
   selectPlayer(playerName: string): void;
+  toggleShowAllCliffs(): void;
   setSearch(value: string): void;
   setScoringPreset(value: string): void;
   setRiskTolerance(value: string): void;
@@ -279,6 +280,11 @@ export function createDraftStore(options: CreateDraftStoreOptions = {}): DraftSt
 
     selectPlayer(playerName: string): void {
       state.selectedPlayer = playerName;
+      commit();
+    },
+
+    toggleShowAllCliffs(): void {
+      state.showAllCliffs = !state.showAllCliffs;
       commit();
     },
 

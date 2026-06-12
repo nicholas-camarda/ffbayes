@@ -13,6 +13,8 @@ import { EvidencePanel } from './EvidencePanel';
 import { FreshnessPanel } from './FreshnessPanel';
 import { ProvenanceBanner } from './ProvenanceBanner';
 import { SettingsPanel } from './SettingsPanel';
+import { PositionalCliffs } from './warroom/PositionalCliffs';
+import { TimingFrontier } from './warroom/TimingFrontier';
 
 function isLocalFinalizeSupported(): boolean {
   if (typeof window === 'undefined') {
@@ -69,17 +71,11 @@ export function AppShell(props: { payload: DashboardPayload; store: DraftStore }
       <section className="layout">
         <div className="column">
           <RecommendationPrimary payload={payload} store={store} />
-          <section className="panel placeholder-panel" id="timing-frontier">
-            <h2>Wait vs Pick Frontier</h2>
-            <p className="subtle">Timing frontier coming soon.</p>
-          </section>
+          <TimingFrontier payload={payload} store={store} />
         </div>
 
         <div className="column">
-          <section className="panel strong placeholder-panel" id="positional-cliffs">
-            <h2>Positional Cliffs</h2>
-            <p className="subtle">Positional cliffs coming soon.</p>
-          </section>
+          <PositionalCliffs payload={payload} store={store} />
           <PlayerBoard payload={payload} store={store} />
           <RecommendationFallbacks payload={payload} store={store} />
           <RecommendationWait payload={payload} store={store} />

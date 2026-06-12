@@ -7,6 +7,7 @@ import {
 } from '../state/buildBoardState';
 import type { DraftStore } from '../state/draftState';
 import { useBoardState } from '../state/useBoardState';
+import { ComparativeExplainer } from './warroom/ComparativeExplainer';
 
 const COMPONENT_LABELS: Record<string, string> = {
   starter_delta: 'Starter edge',
@@ -115,6 +116,7 @@ export function PlayerInspector(props: { payload: DashboardPayload; store: Draft
               <ContributionBars row={row} />
             </div>
           </details>
+          <ComparativeExplainer payload={payload} store={store} />
           <details>
             <summary>Projection breakdown</summary>
             <div className="details-body">
