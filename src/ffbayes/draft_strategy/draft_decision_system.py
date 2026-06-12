@@ -43,6 +43,7 @@ from ffbayes.analysis.bayesian_vor_comparison import (
 from ffbayes.dashboard.frontend_renderer import (
     RENDERER_FRONTEND,
     active_renderer,
+    dumps_html_safe_json,
     render_dashboard_html,
 )
 from ffbayes.dashboard.payload_contract import (
@@ -3653,7 +3654,7 @@ def export_dashboard_html(
             '(1.0) preset tables are present.'
         )
     payload = dashboard_payload
-    payload_json = dumps_strict_json(payload)
+    payload_json = dumps_html_safe_json(payload)
     payload_generated_at = payload.get('generated_at')
     resolved_generated_label = generated_label
     if resolved_generated_label is None:

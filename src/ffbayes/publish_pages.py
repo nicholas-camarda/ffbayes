@@ -129,9 +129,7 @@ def _inject_dashboard_payload_into_html(html_text: str, payload: dict[str, Any])
         end = html_text.find(PAYLOAD_ASSIGNMENT_SUFFIX, start)
         if end == -1:
             return html_text
-    payload_json = (
-        dumps_html_safe_json(payload) if use_v2 else dumps_strict_json(payload)
-    )
+    payload_json = dumps_html_safe_json(payload)
     suffix = (
         PAYLOAD_ASSIGNMENT_SUFFIX_V2 if use_v2 else PAYLOAD_ASSIGNMENT_SUFFIX
     )

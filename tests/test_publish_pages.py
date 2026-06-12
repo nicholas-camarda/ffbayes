@@ -192,6 +192,24 @@ def test_inject_dashboard_payload_into_html_uses_json_script_for_frontend_templa
     assert 'id="ffbayes-dashboard-payload"' in result
 
 
+def test_inject_dashboard_payload_into_html_escapes_script_breaking_strings_for_legacy_marker():
+    from ffbayes.publish_pages import _inject_dashboard_payload_into_html
+
+    html = (
+        '<script>window.FFBAYES_DASHBOARD = {"old": 1};\n\n    (() => {'
+        '})();</script>'
+    )
+    payload = {
+        'player_name': 'Bad </script><script>alert(1)',
+        'generated_at': '2026-04-04T18:35:49',
+    }
+
+    result = _inject_dashboard_payload_into_html(html, payload)
+
+    assert '</script><script>alert(1)' not in result
+    assert '<\\/script>' in result
+
+
 def test_inject_dashboard_payload_into_html_uses_v2_marker_for_frontend_template():
     from ffbayes.publish_pages import _inject_dashboard_payload_into_html
 

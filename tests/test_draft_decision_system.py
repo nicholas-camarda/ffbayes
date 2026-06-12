@@ -936,6 +936,39 @@ def test_canonical_runtime_save_prunes_shortcut_surfaces(monkeypatch, tmp_path):
     assert repo_payload == canonical_payload
 
 
+def test_export_dashboard_html_escapes_script_breaking_payload_strings():
+    settings = LeagueSettings()
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
+    payload = dict(artifacts.dashboard_payload)
+    payload['decision_table'] = [
+        {
+            **dict(payload['decision_table'][0]),
+            'player_name': 'Bad </script><script>alert(1)',
+        },
+        *payload['decision_table'][1:],
+    ]
+
+    with TemporaryDirectory() as tmpdir:
+        output_path = Path(tmpdir) / 'draft_board.html'
+        from ffbayes.draft_strategy.draft_decision_system import export_dashboard_html
+
+        export_dashboard_html(
+            artifacts.decision_table,
+            artifacts.recommendations,
+            output_path,
+            settings,
+            backtest=artifacts.backtest,
+            source_freshness=artifacts.source_freshness,
+            dashboard_payload=payload,
+        )
+
+        html = output_path.read_text(encoding='utf-8')
+        assert '</script><script>alert(1)' not in html
+        assert '<\\/script>' in html
+
+
 def test_exported_dashboard_html_contains_live_controls_and_full_board_renderer():
     settings = LeagueSettings()
     artifacts = build_draft_decision_artifacts(
