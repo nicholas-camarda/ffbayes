@@ -12,6 +12,10 @@ from typing import Any
 
 import pandas as pd
 
+from ffbayes.dashboard.payload_contract import (
+    LEGACY_REQUIRED_PAYLOAD_KEYS,
+    validate_dashboard_payload,
+)
 from ffbayes.draft_strategy.draft_decision_system import (
     LeagueSettings,
     _stage_runtime_dashboard_shortcuts,
@@ -23,10 +27,6 @@ from ffbayes.publish_pages import (
     _build_publish_provenance,
     _inject_dashboard_payload_into_html,
     stage_pages_site,
-)
-from ffbayes.dashboard.payload_contract import (
-    LEGACY_REQUIRED_PAYLOAD_KEYS,
-    validate_dashboard_payload,
 )
 from ffbayes.utils.json_serialization import dumps_strict_json, to_strict_jsonable
 from ffbayes.utils.path_constants import (
