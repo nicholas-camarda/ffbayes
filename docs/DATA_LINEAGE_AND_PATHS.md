@@ -194,8 +194,25 @@ Use overrides only when you intentionally want a non-default layout:
 - `FFBAYES_RUNTIME_ROOT`
 - `FFBAYES_PROJECT_ROOT`
 - `FFBAYES_CLOUD_ROOT`
+- `FFBAYES_DASHBOARD_RENDERER` — `legacy|frontend` (default `legacy`)
 
 These should be set before running the CLI so collection, preprocessing, dashboard staging, and retrospective import all agree on the same path base.
+
+### Dashboard Frontend Template
+
+The optional React+Vite frontend builds to a single self-contained HTML template committed at:
+
+```text
+src/ffbayes/dashboard/assets/dashboard_template.html
+```
+
+Rebuild after frontend source changes:
+
+```bash
+cd dashboard_frontend && npm ci && npm run build:template
+```
+
+With `FFBAYES_DASHBOARD_RENDERER=frontend`, `ffbayes draft-strategy`, `ffbayes stage-dashboard`, and `ffbayes refresh-dashboard` inject the authoritative payload into this template instead of the legacy Python renderer. Node is not required at pipeline runtime; only when rebuilding the template from `dashboard_frontend/`.
 
 ## Minimal Provenance Example
 

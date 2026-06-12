@@ -105,6 +105,33 @@ Purpose: rebuild HTML from an authoritative payload without rerunning the broade
 ffbayes refresh-dashboard --year 2026
 ```
 
+### Dashboard Renderer Selection
+
+Purpose: choose which HTML renderer produces dashboard artifacts. The default is unchanged legacy behavior.
+
+Environment variable: `FFBAYES_DASHBOARD_RENDERER=legacy|frontend` (default `legacy` when unset).
+
+- `legacy` — existing Python-rendered dashboard (default operator path)
+- `frontend` — React+Vite single-file template committed in the Python package
+
+Regenerate with the new frontend renderer:
+
+```bash
+FFBAYES_DASHBOARD_RENDERER=frontend ffbayes stage-dashboard --year 2026
+```
+
+Selecting `frontend` without a built template fails with an actionable error. Node is only required when frontend source changes, not during normal pipeline runs.
+
+### Frontend Template Build
+
+Purpose: rebuild the committed dashboard template after changing `dashboard_frontend/` source.
+
+```bash
+cd dashboard_frontend && npm ci && npm run build:template
+```
+
+This writes `src/ffbayes/dashboard/assets/dashboard_template.html`. Commit the template when frontend source changes; pipeline runtime never invokes Node.
+
 ### Derived-Surface Drift Check
 
 Purpose: verify whether a target HTML file still matches regeneration from its authoritative payload.
