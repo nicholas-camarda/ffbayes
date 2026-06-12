@@ -9,6 +9,9 @@ import {
   RecommendationPrimary,
   RecommendationWait,
 } from './RecommendationPanel';
+import { EvidencePanel } from './EvidencePanel';
+import { FreshnessPanel } from './FreshnessPanel';
+import { ProvenanceBanner } from './ProvenanceBanner';
 import { SettingsPanel } from './SettingsPanel';
 
 function isLocalFinalizeSupported(): boolean {
@@ -91,16 +94,9 @@ export function AppShell(props: { payload: DashboardPayload; store: DraftStore }
             <div className="metric-grid" id="roster-need-grid" />
           </section>
           <PlayerInspector payload={payload} store={store} />
-          <section className="panel placeholder-panel">
-            <h2>Decision evidence</h2>
-            <p className="subtle">Evidence panels coming soon.</p>
-          </section>
-          {payload.publish_provenance ? (
-            <section className="panel placeholder-panel" id="provenance-panel">
-              <h2>Publish provenance</h2>
-              <p className="subtle">Provenance banner coming soon.</p>
-            </section>
-          ) : null}
+          <EvidencePanel payload={payload} />
+          <FreshnessPanel payload={payload} />
+          {payload.publish_provenance ? <ProvenanceBanner payload={payload} /> : null}
         </div>
       </section>
     </div>
