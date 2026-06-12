@@ -1,0 +1,44 @@
+{
+  "name": "dashboard_frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "test": "vitest run",
+    "typecheck": "tsc -b --noEmit",
+    "generate:types": "json2ts -i ../src/ffbayes/dashboard/schemas/dashboard_payload.schema.json -o src/payload/types.generated.ts --bannerComment '/* AUTO-GENERATED from dashboard_payload.schema.json — run npm run generate:types */'",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "build:template": "npm run build && node scripts/build_template.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^24.12.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "jsdom": "^29.1.1",
+    "json-schema-to-typescript": "^15.0.4",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.59.2",
+    "vite": "^8.0.12",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^4.1.8"
+  }
+}

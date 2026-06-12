@@ -577,10 +577,8 @@ def test_preprocess_to_canonical_dashboard_fixture_path(tmp_path, monkeypatch):
     assert saved['html_path'] == path_constants.get_dashboard_html_path(2026)
     html = saved['html_path'].read_text(encoding='utf-8')
     payload = json.loads(saved['payload_path'].read_text(encoding='utf-8'))
-    assert 'Decision evidence' in html
-    assert 'Projection breakdown' in html
-    assert 'Season total mean' in html
-    assert 'Detailed evidence' in html
+    assert 'FFBayes Draft War Room' in html
+    assert 'id="ffbayes-dashboard-payload"' in html
     assert payload['decision_evidence']['status'] in {
         'available',
         'degraded',

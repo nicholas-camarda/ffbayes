@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Stage the live draft dashboard for GitHub Pages."""
+"""Stage the live draft dashboard for GitHub Pages.
+
+When re-injecting payload into staged HTML, prefers the frontend JSON script
+tag (``id="ffbayes-dashboard-payload"``) and falls back to legacy
+``window.FFBAYES_DASHBOARD`` assignment markers for older HTML.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ffbayes.dashboard.frontend_renderer import dumps_html_safe_json
 from ffbayes.utils.json_serialization import dumps_strict_json, to_strict_jsonable
 from ffbayes.utils.path_constants import (
     get_cloud_root,
@@ -21,6 +27,7 @@ from ffbayes.utils.path_constants import (
 
 PAYLOAD_ASSIGNMENT_PREFIX = 'window.FFBAYES_DASHBOARD = '
 PAYLOAD_ASSIGNMENT_SUFFIX = ';\n\n    (() => {'
+PAYLOAD_ASSIGNMENT_SUFFIX_V2 = '; /*FFBAYES_PAYLOAD_END*/'
 
 
 def _normalized_json_text(payload: dict[str, Any]) -> str:
@@ -91,17 +98,44 @@ def _build_publish_provenance(
     }
 
 
+def _inject_json_script_payload(html_text: str, payload: dict[str, Any]) -> str | None:
+    """Inject payload into the frontend JSON script tag when present."""
+    marker = 'id="ffbayes-dashboard-payload"'
+    tag_start = html_text.find(f'<script type="application/json" {marker}')
+    if tag_start == -1:
+        return None
+    content_start = html_text.find('>', tag_start)
+    if content_start == -1:
+        return None
+    content_start += 1
+    content_end = html_text.find('</script>', content_start)
+    if content_end == -1:
+        return None
+    payload_json = dumps_html_safe_json(payload)
+    return html_text[:content_start] + payload_json + html_text[content_end:]
+
+
 def _inject_dashboard_payload_into_html(html_text: str, payload: dict[str, Any]) -> str:
+    json_script_html = _inject_json_script_payload(html_text, payload)
+    if json_script_html is not None:
+        return json_script_html
+
     start = html_text.find(PAYLOAD_ASSIGNMENT_PREFIX)
     if start == -1:
         return html_text
-    end = html_text.find(PAYLOAD_ASSIGNMENT_SUFFIX, start)
-    if end == -1:
-        return html_text
-    payload_json = dumps_strict_json(payload)
-    return (
-        html_text[:start] + PAYLOAD_ASSIGNMENT_PREFIX + payload_json + html_text[end:]
+    end = html_text.find(PAYLOAD_ASSIGNMENT_SUFFIX_V2, start)
+    use_v2 = end != -1
+    if not use_v2:
+        end = html_text.find(PAYLOAD_ASSIGNMENT_SUFFIX, start)
+        if end == -1:
+            return html_text
+    payload_json = (
+        dumps_html_safe_json(payload) if use_v2 else dumps_strict_json(payload)
     )
+    suffix = (
+        PAYLOAD_ASSIGNMENT_SUFFIX_V2 if use_v2 else PAYLOAD_ASSIGNMENT_SUFFIX
+    )
+    return html_text[:start] + PAYLOAD_ASSIGNMENT_PREFIX + payload_json + suffix + html_text[end + len(suffix) :]
 
 
 def stage_pages_site(

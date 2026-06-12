@@ -143,18 +143,29 @@ That command auto-discovers imported finalized JSON and writes retrospective JSO
 
 ## Command Guide
 
-Use these commands by intent:
+There is one primary workflow command and a few narrower follow-ups:
 
-- `ffbayes pre-draft`: full pre-draft workflow
-- `ffbayes pre-draft --stage-pages`: full pre-draft workflow plus GitHub Pages staging
-- `ffbayes draft-strategy`: regenerate the board and dashboard from current processed inputs and league settings
-- `ffbayes stage-dashboard --year <year>`: refresh and stage the dashboard when only dashboard/template changes need iteration
-- `ffbayes draft-retrospective`: import finalized draft bundles and later evaluate them against realized outcomes
-- `ffbayes collect`, `ffbayes validate`, `ffbayes preprocess`: lower-level debugging or recovery steps
+| Intent | Command |
+| --- | --- |
+| Full rebuild (data → board → dashboard) | `ffbayes pre-draft` |
+| Full rebuild + update GitHub Pages `site/` | `ffbayes pre-draft --stage-pages` |
+| Board + dashboard only (skip data collection) | `ffbayes draft-strategy` |
+| Dashboard HTML + `site/` only | `ffbayes stage-dashboard --year <year>` |
+| Stage dashboard + mirror artifacts to cloud | `ffbayes publish --year <year>` |
+| Post-draft evaluation | `ffbayes draft-retrospective` |
+
+`ffbayes pipeline` and `ffbayes split` are aliases for `ffbayes pre-draft`.
+
+Lower-level recovery steps: `ffbayes collect`, `ffbayes validate`, `ffbayes preprocess`.
+Developer-only dashboard check: `ffbayes refresh-dashboard --check --json`.
 
 Internal developer dashboard refresh helpers and publish-surface checks are
 covered in [docs/DASHBOARD_OPERATOR_GUIDE.md](docs/DASHBOARD_OPERATOR_GUIDE.md)
-and [docs/DATA_LINEAGE_AND_PATHS.md](docs/DATA_LINEAGE_AND_PATHS.md).
+and [docs/DATA_LINEAGE_AND_PATHS.md](docs/DATA_LINEAGE_AND_PATHS.md). The
+dashboard UI is a React+Vite frontend built into a single HTML template (default
+renderer); architecture and rollback are documented in
+[docs/DASHBOARD_FRONTEND_ARCHITECTURE.md](docs/DASHBOARD_FRONTEND_ARCHITECTURE.md)
+and [docs/DASHBOARD_FRONTEND_CUTOVER.md](docs/DASHBOARD_FRONTEND_CUTOVER.md).
 
 The top-level `ffbayes` CLI is the main interface. Module-level scripts still exist, but the unified CLI is the intended operator surface.
 

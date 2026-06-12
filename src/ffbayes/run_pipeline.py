@@ -394,7 +394,7 @@ def main():
     parser.add_argument(
         '--team-file', type=str, help='Path to TSV team file for Monte Carlo validation'
     )
-    known_args, _ = parser.parse_known_args()
+    known_args, remaining_args = parser.parse_known_args()
 
     # Initialize logging to file named with phase and timestamp
     try:
@@ -421,79 +421,17 @@ def main():
         log_write('🔄 Pipeline cannot continue without proper directory structure')
         return 1
 
-    # Check if enhanced orchestrator is available
-    if EnhancedPipelineOrchestrator is not None and known_args.phase == 'full':
-        log_write('🚀 Using Enhanced Pipeline Orchestrator')
+    if known_args.phase != 'full':
         log_write(
-            '📊 Features: Dependency management, sequential execution with internal multiprocessing, error recovery'
+            f'❌ Unsupported pipeline phase: {known_args.phase}. '
+            'Only --phase full is implemented for ffbayes-pipeline.'
         )
-        log_write('')
+        return 2
 
-        try:
-            # Use enhanced orchestrator with integrated logging
-            orchestrator = EnhancedPipelineOrchestrator(main_log_file=LOG_FILE_HANDLE)
+    from ffbayes.run_pipeline_split import run_pre_draft
 
-            # Execute pipeline with enhanced features
-            success = orchestrator.execute_pipeline()
-
-            # Get comprehensive summary
-            summary = orchestrator.get_execution_summary()
-
-            # Display enhanced summary
-            log_write('\n' + '=' * 80)
-            log_write('ENHANCED PIPELINE ORCHESTRATION - EXECUTION SUMMARY')
-            log_write('=' * 80)
-
-            log_write(f'Pipeline Status: {"✅ SUCCESS" if success else "❌ FAILED"}')
-            log_write(f'Total Steps: {summary["pipeline_info"]["total_steps"]}')
-            log_write(
-                f'Completed Steps: {summary["performance_metrics"]["completed_steps"]}'
-            )
-            log_write(f'Failed Steps: {summary["performance_metrics"]["failed_steps"]}')
-            log_write(
-                f'Total Execution Time: {summary["pipeline_info"]["total_time"]:.1f}s'
-            )
-            log_write(
-                f'Parallel Efficiency: {summary["performance_metrics"]["parallel_efficiency"]:.2f}'
-            )
-
-            if summary['error_recovery_state']['total_retries'] > 0:
-                log_write(
-                    f'Total Retries: {summary["error_recovery_state"]["total_retries"]}'
-                )
-
-            log_write('\nStep Results:')
-            for result in summary['step_results']:
-                status_icon = '✅' if result['success'] else '❌'
-                log_write(
-                    f'  {status_icon} {result["step_name"]}: {result["execution_time"]:.1f}s'
-                )
-                if result['retry_attempts'] > 0:
-                    log_write(f'    Retries: {result["retry_attempts"]}')
-                if result['error_message']:
-                    log_write(f'    Error: {result["error_message"]}')
-
-            log_write('=' * 80)
-
-            return 0 if success else 1
-
-        except Exception as e:
-            log_write(f'❌ CRITICAL ERROR: Enhanced orchestrator failed: {e}')
-            log_write(
-                '🚨 Production pipeline requires enhanced orchestrator to work properly.'
-            )
-            log_write('❌ No fallbacks allowed - fix the orchestrator issue and retry.')
-            raise RuntimeError(
-                f'Enhanced orchestrator failed: {e}. '
-                'Production pipeline requires proper orchestration. '
-                'No fallbacks allowed.'
-            )
-
-    log_write(
-        f'❌ Unsupported pipeline phase: {known_args.phase}. '
-        'Only --phase full is implemented for ffbayes-pipeline.'
-    )
-    return 2
+    log_write('🚀 Running the supported pre-draft pipeline')
+    return run_pre_draft(remaining_args)
 
 
 if __name__ == '__main__':

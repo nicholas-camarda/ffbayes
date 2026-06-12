@@ -42,9 +42,11 @@ Command mutation summary:
 
 | Command | Main mutation | Authority effect |
 | --- | --- | --- |
-| `ffbayes pre-draft` | rebuilds supported runtime artifacts | updates authoritative runtime outputs |
+| `ffbayes pre-draft` (`pipeline`, `split`) | rebuilds supported runtime artifacts | updates authoritative runtime outputs |
 | `ffbayes pre-draft --stage-pages` | rebuilds runtime artifacts and stages Pages | updates authoritative runtime outputs, then derived publish surface |
-| `ffbayes stage-dashboard` | stages dashboard HTML, payload, and provenance | updates derived publish surface from runtime artifacts |
+| `ffbayes draft-strategy` | regenerates board + dashboard from processed inputs | updates authoritative runtime outputs |
+| `ffbayes stage-dashboard` | refreshes dashboard HTML from payload and stages Pages | updates derived publish surface from runtime artifacts |
+| `ffbayes publish` | stages dashboard and mirrors selected artifacts to cloud | derived publish surface + cloud mirror |
 | `ffbayes draft-retrospective` | imports finalized draft artifacts | updates authoritative runtime retrospective inputs |
 | `ffbayes publish` | stages Pages and mirrors selected outputs | updates derived publish and cloud mirror surfaces |
 
@@ -66,6 +68,8 @@ Command mutation summary:
 | runtime dashboard shortcut | `<runtime-root>/dashboard/index.html` | local shortcut beside runtime artifacts | derived local shortcut |
 | repo dashboard shortcut | `dashboard/index.html` | easy local opening path | derived local shortcut |
 | staged Pages copy | `site/index.html` | repo-tracked publishing surface | derived publish surface |
+| dashboard frontend source | `dashboard_frontend/` | React UI source; builds packaged template | repo source (not a runtime artifact) |
+| packaged dashboard template | `src/ffbayes/dashboard/assets/dashboard_template.html` | single-file HTML committed for pipeline runtime | repo source (built artifact) |
 | cloud mirror | `data/` under cloud root | mirrored selected runtime artifacts | derived mirror |
 | cloud snapshot | `Analysis/<date>/` under cloud root | dated publish snapshot | derived mirror |
 
@@ -194,8 +198,25 @@ Use overrides only when you intentionally want a non-default layout:
 - `FFBAYES_RUNTIME_ROOT`
 - `FFBAYES_PROJECT_ROOT`
 - `FFBAYES_CLOUD_ROOT`
+- `FFBAYES_DASHBOARD_RENDERER` — `legacy|frontend` (default `frontend`)
 
 These should be set before running the CLI so collection, preprocessing, dashboard staging, and retrospective import all agree on the same path base.
+
+### Dashboard Frontend Template
+
+The React+Vite frontend (`dashboard_frontend/`) builds to a single self-contained HTML template committed at:
+
+```text
+src/ffbayes/dashboard/assets/dashboard_template.html
+```
+
+Rebuild after frontend source changes:
+
+```bash
+cd dashboard_frontend && npm ci && npm run build:template
+```
+
+By default (`FFBAYES_DASHBOARD_RENDERER=frontend` or unset), `ffbayes draft-strategy`, `ffbayes stage-dashboard`, and `ffbayes refresh-dashboard` inject the authoritative payload into this template. Set `FFBAYES_DASHBOARD_RENDERER=legacy` to use the Python-rendered fallback. Node is not required at pipeline runtime; only when rebuilding the template from `dashboard_frontend/`.
 
 ## Minimal Provenance Example
 

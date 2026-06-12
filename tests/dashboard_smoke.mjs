@@ -164,7 +164,22 @@ async function runSmoke() {
     return row || null;
   }, playerName);
   const findPresetSensitivePlayer = async () => page.evaluate(() => {
-    const presets = window.FFBAYES_DASHBOARD?.scoring_presets || {};
+    const readDashboardPayload = () => {
+      if (window.FFBAYES_DASHBOARD && typeof window.FFBAYES_DASHBOARD === 'object') {
+        return window.FFBAYES_DASHBOARD;
+      }
+      const element = document.getElementById('ffbayes-dashboard-payload');
+      const raw = element?.textContent?.trim();
+      if (!raw) {
+        return null;
+      }
+      try {
+        return JSON.parse(raw);
+      } catch (_) {
+        return null;
+      }
+    };
+    const presets = readDashboardPayload()?.scoring_presets || {};
     const standardRows = presets.standard?.decision_table || [];
     const halfRows = new Map((presets.half_ppr?.decision_table || []).map((row) => [row.player_name, row]));
     const pprRows = new Map((presets.ppr?.decision_table || []).map((row) => [row.player_name, row]));
@@ -180,7 +195,22 @@ async function runSmoke() {
     return candidate ? candidate.player_name : null;
   });
   const readPresetProjectionValue = async (presetKey, playerName) => page.evaluate(({ targetPreset, targetName }) => {
-    const rows = window.FFBAYES_DASHBOARD?.scoring_presets?.[targetPreset]?.decision_table || [];
+    const readDashboardPayload = () => {
+      if (window.FFBAYES_DASHBOARD && typeof window.FFBAYES_DASHBOARD === 'object') {
+        return window.FFBAYES_DASHBOARD;
+      }
+      const element = document.getElementById('ffbayes-dashboard-payload');
+      const raw = element?.textContent?.trim();
+      if (!raw) {
+        return null;
+      }
+      try {
+        return JSON.parse(raw);
+      } catch (_) {
+        return null;
+      }
+    };
+    const rows = readDashboardPayload()?.scoring_presets?.[targetPreset]?.decision_table || [];
     const row = rows.find((entry) => entry.player_name === targetName);
     return row ? Number(row.proj_points_mean || 0) : null;
   }, { targetPreset: presetKey, targetName: playerName });

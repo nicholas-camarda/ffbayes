@@ -11,11 +11,12 @@ import ffbayes.run_pipeline_split as run_pipeline_split
 def _load_step_map(config_name: str) -> dict[str, dict]:
     config_path = Path(__file__).resolve().parents[1] / 'config' / config_name
     config = json.loads(config_path.read_text(encoding='utf-8'))
-    return {step['name']: step for step in config['steps']}
+    steps = config.get('steps') or config['pipeline_steps']
+    return {step['name']: step for step in steps}
 
 
 def test_pipeline_configs_fail_closed_by_default():
-    pre_steps = _load_step_map('pipeline_pre_draft.json')
+    pre_steps = _load_step_map('pipeline_config.json')
 
     assert (
         pre_steps['data_collection']['env']['FFBAYES_PROCESS_DATASET_PROGRESS']
@@ -29,6 +30,7 @@ def test_pipeline_configs_fail_closed_by_default():
 
     config_root = Path(__file__).resolve().parents[1] / 'config'
     assert not (config_root / 'pipeline_post_draft.json').exists()
+    assert not (config_root / 'pipeline_pre_draft.json').exists()
 
 
 def test_split_runner_forwards_step_env_and_args(monkeypatch):
@@ -118,10 +120,7 @@ def test_pre_draft_stage_pages_runs_after_success(monkeypatch):
         ['ffbayes.run_pipeline_split', '--year', '2026', '--stage-pages'],
     )
 
-    with pytest.raises(SystemExit) as exc:
-        run_pipeline_split.main()
-
-    assert exc.value.code == 0
+    assert run_pipeline_split.run_pre_draft(['--year', '2026', '--stage-pages']) == 0
     assert captured == {
         'year': 2026,
         'pipeline_ran': True,

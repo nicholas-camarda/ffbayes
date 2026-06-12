@@ -65,6 +65,19 @@ Primary surfaces:
 
 ## Commands And Paths
 
+### CLI At A Glance
+
+| Tier | When to use it | Command |
+| --- | --- | --- |
+| 1 — full | New data, new season, or full trust refresh | `ffbayes pre-draft` |
+| 1 — full + Pages | Same as tier 1 and update `site/` | `ffbayes pre-draft --stage-pages` |
+| 2 — board | Processed inputs already exist; change league settings or rerun models | `ffbayes draft-strategy` |
+| 3 — dashboard | Payload is current; template/UI iteration or restage Pages only | `ffbayes stage-dashboard --year <year>` |
+| 4 — publish | Stage dashboard and mirror selected runtime artifacts to cloud | `ffbayes publish --year <year>` |
+
+`ffbayes pipeline` and `ffbayes split` are aliases for tier 1 (`pre-draft`).
+`ffbayes refresh-dashboard` is a developer drift-check helper, not the normal operator path.
+
 ### Full Supported Refresh
 
 Purpose: rebuild the supported pre-draft stack from source data through dashboard artifacts.
@@ -104,6 +117,44 @@ Purpose: rebuild HTML from an authoritative payload without rerunning the broade
 ```bash
 ffbayes refresh-dashboard --year 2026
 ```
+
+### Dashboard Renderer Selection
+
+Purpose: choose which HTML renderer produces dashboard artifacts. **Default: `frontend`** (React+Vite template committed in the Python package).
+
+Environment variable: `FFBAYES_DASHBOARD_RENDERER=legacy|frontend` (default `frontend` when unset).
+
+- `frontend` — current default; single-file React dashboard (passes the Playwright smoke suite)
+- `legacy` — fallback Python-rendered dashboard if you need to roll back
+
+Normal operator commands use the frontend renderer automatically:
+
+```bash
+ffbayes stage-dashboard --year 2026
+```
+
+Rollback to legacy for one run:
+
+```bash
+FFBAYES_DASHBOARD_RENDERER=legacy ffbayes stage-dashboard --year 2026
+```
+
+If the packaged template is missing, the command fails with instructions to run `npm run build:template` or set `FFBAYES_DASHBOARD_RENDERER=legacy`. Node is only required when frontend source changes, not during normal pipeline runs.
+
+See [DASHBOARD_FRONTEND_CUTOVER.md](DASHBOARD_FRONTEND_CUTOVER.md) for the cutover
+checklist and [DASHBOARD_FRONTEND_ARCHITECTURE.md](DASHBOARD_FRONTEND_ARCHITECTURE.md)
+for the module layout. Legacy rollback imports live in
+`ffbayes.dashboard.legacy_renderer`.
+
+### Frontend Template Build
+
+Purpose: rebuild the committed dashboard template after changing `dashboard_frontend/` source.
+
+```bash
+cd dashboard_frontend && npm ci && npm run build:template
+```
+
+This writes `src/ffbayes/dashboard/assets/dashboard_template.html`. Commit the template when frontend source changes; pipeline runtime never invokes Node.
 
 ### Derived-Surface Drift Check
 

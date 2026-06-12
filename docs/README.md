@@ -12,6 +12,8 @@ authority.
 - dashboard label lookup: [METRIC_REFERENCE.md](METRIC_REFERENCE.md)
 - artifact shapes: [OUTPUT_EXAMPLES.md](OUTPUT_EXAMPLES.md)
 - path authority and lineage: [DATA_LINEAGE_AND_PATHS.md](DATA_LINEAGE_AND_PATHS.md)
+- dashboard frontend architecture: [DASHBOARD_FRONTEND_ARCHITECTURE.md](DASHBOARD_FRONTEND_ARCHITECTURE.md)
+- dashboard cutover and rollback: [DASHBOARD_FRONTEND_CUTOVER.md](DASHBOARD_FRONTEND_CUTOVER.md)
 - repo setup and quick workflow: [../README.md](../README.md)
 
 ## Trust Model

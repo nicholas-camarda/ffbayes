@@ -40,7 +40,16 @@ from ffbayes.analysis.bayesian_player_model import (
 from ffbayes.analysis.bayesian_vor_comparison import (
     build_player_forecast_validation_summary,
 )
-from ffbayes.utils.json_serialization import dumps_strict_json
+from ffbayes.dashboard.frontend_renderer import (
+    RENDERER_FRONTEND,
+    active_renderer,
+    render_dashboard_html,
+)
+from ffbayes.dashboard.payload_contract import (
+    DASHBOARD_SCHEMA_VERSION,
+    validate_dashboard_payload,
+)
+from ffbayes.utils.json_serialization import dumps_strict_json, to_strict_jsonable
 
 POSITION_ORDER = ['QB', 'RB', 'WR', 'TE', 'DST', 'K']
 FANTASY_DRAFT_POSITIONS = tuple(POSITION_ORDER)
@@ -3188,6 +3197,7 @@ def build_dashboard_payload(
         'next_pick_number'
     ]
     return {
+        'dashboard_schema_version': DASHBOARD_SCHEMA_VERSION,
         'generated_at': datetime.now().isoformat(timespec='seconds'),
         'league_settings': league_settings.to_dict(),
         'runtime_controls': {
@@ -3610,6 +3620,11 @@ def _build_charts(
     return [fig1, fig2, fig3]
 
 
+# Legacy dashboard HTML renderer (rollback only). Default writes use
+# ffbayes.dashboard.frontend_renderer. Re-exported from legacy_renderer.py.
+# Removal planned after one stable draft day — see DASHBOARD_FRONTEND_CUTOVER.md.
+
+
 def export_dashboard_html(
     decision_table: pd.DataFrame,
     recommendations: pd.DataFrame,
@@ -3620,7 +3635,11 @@ def export_dashboard_html(
     dashboard_payload: dict[str, Any] | None = None,
     generated_label: str | None = None,
 ) -> Path:
-    """Write a local interactive HTML dashboard."""
+    """Write the rollback-only legacy interactive HTML dashboard.
+
+    Default artifact generation uses :mod:`ffbayes.dashboard.frontend_renderer`.
+    Set ``FFBAYES_DASHBOARD_RENDERER=legacy`` only when rolling back.
+    """
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     backtest = backtest or {}
@@ -6942,19 +6961,29 @@ def save_draft_decision_artifacts(
         backtest=artifacts.backtest,
         dashboard_payload=artifacts.dashboard_payload,
     )
+    validate_dashboard_payload(
+        to_strict_jsonable(artifacts.dashboard_payload), source=str(payload_path)
+    )
     payload_path.write_text(
         dumps_strict_json(artifacts.dashboard_payload, indent=2), encoding='utf-8'
     )
     canonical_payload = json.loads(payload_path.read_text(encoding='utf-8'))
-    export_dashboard_html(
-        artifacts.decision_table,
-        artifacts.recommendations,
-        html_path,
-        artifacts.league_settings,
-        backtest=artifacts.backtest,
-        source_freshness=artifacts.source_freshness,
-        dashboard_payload=canonical_payload,
-    )
+    if active_renderer() == RENDERER_FRONTEND:
+        render_dashboard_html(
+            canonical_payload,
+            html_path,
+            generated_label=datetime.now().strftime('%Y-%m-%d %H:%M'),
+        )
+    else:
+        export_dashboard_html(
+            artifacts.decision_table,
+            artifacts.recommendations,
+            html_path,
+            artifacts.league_settings,
+            backtest=artifacts.backtest,
+            source_freshness=artifacts.source_freshness,
+            dashboard_payload=canonical_payload,
+        )
     if artifacts.backtest:
         backtest_path.write_text(
             dumps_strict_json(artifacts.backtest, indent=2), encoding='utf-8'

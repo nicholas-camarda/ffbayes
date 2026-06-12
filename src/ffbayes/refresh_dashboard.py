@@ -12,10 +12,19 @@ from typing import Any
 
 import pandas as pd
 
+from ffbayes.dashboard.frontend_renderer import (
+    RENDERER_FRONTEND,
+    active_renderer,
+    render_dashboard_html,
+)
+from ffbayes.dashboard.payload_contract import (
+    LEGACY_REQUIRED_PAYLOAD_KEYS,
+    validate_dashboard_payload,
+)
+from ffbayes.dashboard.legacy_renderer import export_dashboard_html
 from ffbayes.draft_strategy.draft_decision_system import (
     LeagueSettings,
     _stage_runtime_dashboard_shortcuts,
-    export_dashboard_html,
 )
 from ffbayes.publish_pages import (
     PAYLOAD_ASSIGNMENT_PREFIX,
@@ -30,12 +39,7 @@ from ffbayes.utils.path_constants import (
     get_dashboard_payload_path,
 )
 
-REQUIRED_PAYLOAD_KEYS = (
-    'generated_at',
-    'league_settings',
-    'decision_table',
-    'decision_evidence',
-)
+REQUIRED_PAYLOAD_KEYS = LEGACY_REQUIRED_PAYLOAD_KEYS
 
 
 def _validate_required_decision_evidence(
@@ -69,24 +73,7 @@ def _validate_required_decision_evidence(
 def _validate_dashboard_payload(
     payload: dict[str, Any], payload_path: Path
 ) -> dict[str, Any]:
-    missing = [
-        key
-        for key in REQUIRED_PAYLOAD_KEYS
-        if key not in payload or payload.get(key) is None
-    ]
-    if missing:
-        raise ValueError(
-            f'Dashboard payload at {payload_path} is missing required keys: '
-            f'{", ".join(missing)}'
-        )
-    if not isinstance(payload.get('decision_table'), list):
-        raise ValueError(
-            f'Dashboard payload at {payload_path} has a non-list `decision_table`.'
-        )
-    if not isinstance(payload.get('league_settings'), dict):
-        raise ValueError(
-            f'Dashboard payload at {payload_path} has an invalid `league_settings` object.'
-        )
+    validate_dashboard_payload(payload, source=str(payload_path))
     _validate_required_decision_evidence(payload, payload_path)
     return payload
 
@@ -189,24 +176,37 @@ def _paired_payload_path(
     return output_html.with_name('dashboard_payload.json')
 
 
-def _render_dashboard_html_text(
-    payload: dict[str, Any], output_html: Path, year: int
-) -> str:
+def _write_dashboard_html(
+    payload: dict[str, Any], output_html: Path
+) -> None:
+    if active_renderer() == RENDERER_FRONTEND:
+        render_dashboard_html(
+            payload,
+            output_html,
+            generated_label=_generated_label_from_payload(payload),
+        )
+        return
     league_settings = LeagueSettings.from_mapping(
         {'league_settings': payload.get('league_settings', {})}
     )
+    export_dashboard_html(
+        pd.DataFrame(payload.get('decision_table', [])),
+        pd.DataFrame(payload.get('recommendation_summary', [])),
+        output_html,
+        league_settings,
+        backtest=payload.get('backtest', {}),
+        source_freshness=pd.DataFrame(payload.get('source_freshness', [])),
+        dashboard_payload=payload,
+        generated_label=_generated_label_from_payload(payload),
+    )
+
+
+def _render_dashboard_html_text(
+    payload: dict[str, Any], output_html: Path, year: int
+) -> str:
     with tempfile.TemporaryDirectory(prefix='ffbayes-refresh-dashboard-') as tmpdir:
         temp_path = Path(tmpdir) / output_html.name
-        export_dashboard_html(
-            pd.DataFrame(payload.get('decision_table', [])),
-            pd.DataFrame(payload.get('recommendation_summary', [])),
-            temp_path,
-            league_settings,
-            backtest=payload.get('backtest', {}),
-            source_freshness=pd.DataFrame(payload.get('source_freshness', [])),
-            dashboard_payload=payload,
-            generated_label=_generated_label_from_payload(payload),
-        )
+        _write_dashboard_html(payload, temp_path)
         return temp_path.read_text(encoding='utf-8')
 
 
@@ -332,25 +332,13 @@ def refresh_runtime_dashboard(
         else get_dashboard_payload_path(resolved_year)
     )
     payload = load_dashboard_payload(resolved_payload)
-    league_settings = LeagueSettings.from_mapping(
-        {'league_settings': payload.get('league_settings', {})}
-    )
     resolved_output_html = (
         Path(output_html)
         if output_html is not None
         else get_dashboard_html_path(resolved_year)
     )
 
-    export_dashboard_html(
-        pd.DataFrame(payload.get('decision_table', [])),
-        pd.DataFrame(payload.get('recommendation_summary', [])),
-        resolved_output_html,
-        league_settings,
-        backtest=payload.get('backtest', {}),
-        source_freshness=pd.DataFrame(payload.get('source_freshness', [])),
-        dashboard_payload=payload,
-        generated_label=_generated_label_from_payload(payload),
-    )
+    _write_dashboard_html(payload, resolved_output_html)
 
     result: dict[str, Any] = {
         'status': 'refreshed',
