@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ffbayes/dashboard_payload.schema.json",
+  "title": "ffbayes dashboard payload",
+  "type": "object",
+  "required": [
+    "dashboard_schema_version",
+    "generated_at",
+    "league_settings",
+    "decision_table",
+    "recommendation_summary",
+    "decision_evidence"
+  ],
+  "properties": {
+    "dashboard_schema_version": { "const": 1 },
+    "generated_at": { "type": "string", "minLength": 1 },
+    "league_settings": {
+      "type": "object",
+      "required": ["league_size", "draft_position", "scoring_type", "roster_spots"],
+      "properties": {
+        "league_size": { "type": "integer", "minimum": 2 },
+        "draft_position": { "type": "integer", "minimum": 1 },
+        "scoring_type": { "type": "string" },
+        "roster_spots": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "decision_table": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["player_name", "position"],
+        "properties": {
+          "player_name": { "type": "string", "minLength": 1 },
+          "position": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "recommendation_summary": { "type": "array" },
+    "decision_evidence": {
+      "type": "object",
+      "required": ["available", "status"],
+      "properties": {
+        "available": { "type": "boolean" },
+        "status": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "runtime_controls": { "type": "object" },
+    "current_pick_number": { "type": "integer" },
+    "next_pick_number": { "type": "integer" },
+    "current_draft_context_defaults": { "type": "object" },
+    "selected_player": { "type": ["string", "null"] },
+    "recommendation_inputs": { "type": "array" },
+    "live_state": { "type": "object" },
+    "scoring_presets": { "type": "object" },
+    "position_summary": { "type": ["array", "object"] },
+    "tier_cliffs": { "type": "array" },
+    "roster_scenarios": { "type": "array" },
+    "source_freshness": { "type": "array" },
+    "analysis_provenance": { "type": "object" },
+    "player_forecast_validation": { "type": "object" },
+    "war_room_visuals": { "type": "object" },
+    "backtest": { "type": "object" },
+    "supporting_math": { "type": "object" },
+    "metric_glossary": { "type": "object" },
+    "model_overview": { "type": "object" },
+    "bayesian_vor_summary": { "type": ["object", "null"] },
+    "publish_provenance": { "type": "object" }
+  },
+  "additionalProperties": true
+}

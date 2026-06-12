@@ -104,6 +104,9 @@ ignore_errors = true
 [tool.setuptools]
 package-dir = { "" = "src" }
 
+[tool.setuptools.package-data]
+ffbayes = ["dashboard/schemas/*.json", "dashboard/assets/*.html"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["ffbayes*"]
