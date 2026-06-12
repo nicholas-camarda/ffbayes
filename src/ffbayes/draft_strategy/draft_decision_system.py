@@ -40,7 +40,11 @@ from ffbayes.analysis.bayesian_player_model import (
 from ffbayes.analysis.bayesian_vor_comparison import (
     build_player_forecast_validation_summary,
 )
-from ffbayes.utils.json_serialization import dumps_strict_json
+from ffbayes.dashboard.payload_contract import (
+    DASHBOARD_SCHEMA_VERSION,
+    validate_dashboard_payload,
+)
+from ffbayes.utils.json_serialization import dumps_strict_json, to_strict_jsonable
 
 POSITION_ORDER = ['QB', 'RB', 'WR', 'TE', 'DST', 'K']
 FANTASY_DRAFT_POSITIONS = tuple(POSITION_ORDER)
@@ -3188,6 +3192,7 @@ def build_dashboard_payload(
         'next_pick_number'
     ]
     return {
+        'dashboard_schema_version': DASHBOARD_SCHEMA_VERSION,
         'generated_at': datetime.now().isoformat(timespec='seconds'),
         'league_settings': league_settings.to_dict(),
         'runtime_controls': {
@@ -6941,6 +6946,9 @@ def save_draft_decision_artifacts(
         artifacts.league_settings,
         backtest=artifacts.backtest,
         dashboard_payload=artifacts.dashboard_payload,
+    )
+    validate_dashboard_payload(
+        to_strict_jsonable(artifacts.dashboard_payload), source=str(payload_path)
     )
     payload_path.write_text(
         dumps_strict_json(artifacts.dashboard_payload, indent=2), encoding='utf-8'

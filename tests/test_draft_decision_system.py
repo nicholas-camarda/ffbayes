@@ -7,6 +7,10 @@ from tempfile import TemporaryDirectory
 import pandas as pd
 import pytest
 
+from ffbayes.dashboard.payload_contract import (
+    DASHBOARD_SCHEMA_VERSION,
+    DashboardPayloadError,
+)
 from ffbayes.draft_strategy.draft_decision_system import (
     DraftContext,
     LeagueSettings,
@@ -643,6 +647,28 @@ def test_dashboard_payload_marks_degraded_decision_evidence_when_provenance_is_d
             season_history=season_history,
             analysis_provenance=provenance,
             require_fresh_decision_evidence=True,
+        )
+
+
+def test_build_dashboard_payload_stamps_schema_version():
+    settings = LeagueSettings()
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
+    assert artifacts.dashboard_payload['dashboard_schema_version'] == (
+        DASHBOARD_SCHEMA_VERSION
+    )
+
+
+def test_save_artifacts_rejects_invalid_payload(tmp_path):
+    settings = LeagueSettings()
+    artifacts = build_draft_decision_artifacts(
+        _synthetic_players(), settings, DraftContext(current_pick_number=10)
+    )
+    artifacts.dashboard_payload.pop('decision_table')
+    with pytest.raises(DashboardPayloadError):
+        save_draft_decision_artifacts(
+            artifacts, tmp_path / 'artifacts', year=2026
         )
 
 
