@@ -13,20 +13,13 @@ import { EvidencePanel } from './EvidencePanel';
 import { FreshnessPanel } from './FreshnessPanel';
 import { ProvenanceBanner } from './ProvenanceBanner';
 import { SettingsPanel } from './SettingsPanel';
+import { FinalizePanel } from './FinalizePanel';
 import { PositionalCliffs } from './warroom/PositionalCliffs';
 import { TimingFrontier } from './warroom/TimingFrontier';
-
-function isLocalFinalizeSupported(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  return window.location.protocol === 'file:';
-}
 
 export function AppShell(props: { payload: DashboardPayload; store: DraftStore }) {
   const { payload, store } = props;
   const state = useDraftStore(store);
-  const showFinalize = isLocalFinalizeSupported();
 
   return (
     <div className="shell">
@@ -53,15 +46,8 @@ export function AppShell(props: { payload: DashboardPayload; store: DraftStore }
               <button type="button" id="redo-button" disabled={!state.redoHistory.length} onClick={() => store.redo()}>
                 Redo
               </button>
-              <button type="button" id="finalize-button" hidden={!showFinalize}>
-                Finalize Draft
-              </button>
             </div>
-            <div className="tiny toolbar-note" id="finalize-note">
-              {showFinalize
-                ? 'Finalize downloads a locked HTML snapshot, JSON export, and post-draft summary from this local dashboard.'
-                : 'Finalize downloads are only supported from the local generated dashboard opened as a file.'}
-            </div>
+            <FinalizePanel payload={payload} store={store} />
           </div>
         </div>
         <PickStatus payload={payload} store={store} />
