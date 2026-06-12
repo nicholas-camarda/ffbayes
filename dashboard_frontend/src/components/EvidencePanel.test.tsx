@@ -16,6 +16,10 @@ it('renders strategy summary and season rows from the fixture', () => {
   expect(panel?.textContent).toContain('2025');
   expect(panel?.textContent).toContain('10.00');
   expect(panel?.querySelectorAll('td').length).toBeGreaterThanOrEqual(4);
+  expect(panel?.querySelector('.panel-table-wrap')).toBeTruthy();
+  expect(panel?.querySelector('.board-table-wrap')).toBeNull();
+  expect(panel?.textContent).toContain('Strategy comparison');
+  expect(panel?.textContent).toContain('Season holdouts');
 });
 
 it('shows a SectionGate notice when decision evidence is unavailable', () => {

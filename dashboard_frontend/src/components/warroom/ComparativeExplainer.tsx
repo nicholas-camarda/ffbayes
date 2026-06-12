@@ -54,8 +54,8 @@ export function ComparativeExplainer(props: { payload: DashboardPayload; store: 
                   <span className="value">{formatNumber(comparative.row.baseline_score)}</span>
                 </div>
               </div>
-              <div className="board-table-wrap" style={{ maxHeight: '220px' }}>
-                <table>
+              <div className="panel-table-wrap">
+                <table className="panel-table">
                   <thead>
                     <tr>
                       <th>Player</th>

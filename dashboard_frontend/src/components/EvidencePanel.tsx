@@ -49,63 +49,83 @@ export function EvidencePanel(props: { payload: DashboardPayload }) {
         <div className="summary-box">
           {evidence.headline || 'Decision evidence is available for this board.'}
         </div>
-        <div className="board-table-wrap" style={{ maxHeight: '220px' }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Strategy</th>
-                <th>Mean lineup points</th>
-                <th>Seasons</th>
-              </tr>
-            </thead>
-            <tbody>
-              {strategyRows.length ? (
-                strategyRows.map((row) => (
-                  <tr key={row.strategy}>
-                    <td>{row.strategy}</td>
-                    <td>{formatNumber(row.mean_lineup_points)}</td>
-                    <td>{row.season_count ?? 'n/a'}</td>
+        <div className="evidence-tables">
+          <div className="panel-table-block">
+            <h3 className="panel-table-title">Strategy comparison</h3>
+            <div className="panel-table-wrap">
+              <table className="panel-table panel-table-strategy">
+                <thead>
+                  <tr>
+                    <th>Strategy</th>
+                    <th className="num">Mean lineup pts</th>
+                    <th className="num">Seasons</th>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={3} className="empty">
-                    No strategy rows available.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="board-table-wrap" style={{ maxHeight: '220px' }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Year</th>
-                <th>Board value score</th>
-                <th>Simple VOR proxy</th>
-                <th>Delta</th>
-              </tr>
-            </thead>
-            <tbody>
-              {seasonRows.length ? (
-                seasonRows.map((row) => (
-                  <tr key={row.holdout_year}>
-                    <td>{row.holdout_year}</td>
-                    <td>{formatNumber(row.draft_score_lineup_points)}</td>
-                    <td>{formatNumber(row.historical_vor_proxy_lineup_points)}</td>
-                    <td>{formatNumber(row.delta_lineup_points)}</td>
+                </thead>
+                <tbody>
+                  {strategyRows.length ? (
+                    strategyRows.map((row) => (
+                      <tr key={row.strategy}>
+                        <td data-label="Strategy">{row.strategy}</td>
+                        <td className="num" data-label="Mean lineup pts">
+                          {formatNumber(row.mean_lineup_points)}
+                        </td>
+                        <td className="num" data-label="Seasons">
+                          {row.season_count ?? 'n/a'}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={3} className="empty">
+                        No strategy rows available.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="panel-table-block">
+            <h3 className="panel-table-title">Season holdouts</h3>
+            <div className="panel-table-wrap">
+              <table className="panel-table panel-table-seasons">
+                <thead>
+                  <tr>
+                    <th className="num">Year</th>
+                    <th className="num">Board value</th>
+                    <th className="num">VOR proxy</th>
+                    <th className="num">Delta</th>
                   </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={4} className="empty">
-                    No season-level rows available.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                </thead>
+                <tbody>
+                  {seasonRows.length ? (
+                    seasonRows.map((row) => (
+                      <tr key={row.holdout_year}>
+                        <td className="num" data-label="Year">
+                          {row.holdout_year}
+                        </td>
+                        <td className="num" data-label="Board value">
+                          {formatNumber(row.draft_score_lineup_points)}
+                        </td>
+                        <td className="num" data-label="VOR proxy">
+                          {formatNumber(row.historical_vor_proxy_lineup_points)}
+                        </td>
+                        <td className="num" data-label="Delta">
+                          {formatNumber(row.delta_lineup_points)}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="empty">
+                        No season-level rows available.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
         {limitations.length ? (
           <div className="notice">{limitations.join(' ')}</div>

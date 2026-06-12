@@ -37,8 +37,8 @@ export function FreshnessPanel(props: { payload: DashboardPayload }) {
         </div>
       </div>
       <FreshnessNotice freshness={analysisFreshness} />
-      <div className="board-table-wrap" style={{ maxHeight: '220px' }}>
-        <table>
+      <div className="panel-table-wrap">
+        <table className="panel-table">
           <thead>
             <tr>
               <th>Source</th>
