@@ -2,6 +2,11 @@ import type { DashboardPayload } from '../payload/load';
 import type { DraftStore } from '../state/draftState';
 import { useDraftStore } from '../state/useDraftStore';
 import { PickStatus } from './PickStatus';
+import {
+  RecommendationFallbacks,
+  RecommendationPrimary,
+  RecommendationWait,
+} from './RecommendationPanel';
 import { SettingsPanel } from './SettingsPanel';
 
 function isLocalFinalizeSupported(): boolean {
@@ -58,10 +63,7 @@ export function AppShell(props: { payload: DashboardPayload; store: DraftStore }
 
       <section className="layout">
         <div className="column">
-          <section className="panel strong placeholder-panel" id="primary-card">
-            <h2>Pick Now</h2>
-            <p className="subtle">Recommendations panel coming soon.</p>
-          </section>
+          <RecommendationPrimary payload={payload} store={store} />
           <section className="panel placeholder-panel" id="timing-frontier">
             <h2>Wait vs Pick Frontier</h2>
             <p className="subtle">Timing frontier coming soon.</p>
@@ -80,6 +82,8 @@ export function AppShell(props: { payload: DashboardPayload; store: DraftStore }
               <tbody />
             </table>
           </section>
+          <RecommendationFallbacks payload={payload} store={store} />
+          <RecommendationWait payload={payload} store={store} />
         </div>
 
         <div className="column">
