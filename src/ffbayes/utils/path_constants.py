@@ -353,7 +353,7 @@ def get_pipeline_config_file() -> Path:
 
 def get_pre_draft_config_file() -> Path:
     """Get pre-draft pipeline configuration file path."""
-    return CONFIG_DIR / 'pipeline_pre_draft.json'
+    return get_pipeline_config_file()
 
 
 # File patterns

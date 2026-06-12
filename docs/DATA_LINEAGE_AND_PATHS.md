@@ -42,9 +42,11 @@ Command mutation summary:
 
 | Command | Main mutation | Authority effect |
 | --- | --- | --- |
-| `ffbayes pre-draft` | rebuilds supported runtime artifacts | updates authoritative runtime outputs |
+| `ffbayes pre-draft` (`pipeline`, `split`) | rebuilds supported runtime artifacts | updates authoritative runtime outputs |
 | `ffbayes pre-draft --stage-pages` | rebuilds runtime artifacts and stages Pages | updates authoritative runtime outputs, then derived publish surface |
-| `ffbayes stage-dashboard` | stages dashboard HTML, payload, and provenance | updates derived publish surface from runtime artifacts |
+| `ffbayes draft-strategy` | regenerates board + dashboard from processed inputs | updates authoritative runtime outputs |
+| `ffbayes stage-dashboard` | refreshes dashboard HTML from payload and stages Pages | updates derived publish surface from runtime artifacts |
+| `ffbayes publish` | stages dashboard and mirrors selected artifacts to cloud | derived publish surface + cloud mirror |
 | `ffbayes draft-retrospective` | imports finalized draft artifacts | updates authoritative runtime retrospective inputs |
 | `ffbayes publish` | stages Pages and mirrors selected outputs | updates derived publish and cloud mirror surfaces |
 

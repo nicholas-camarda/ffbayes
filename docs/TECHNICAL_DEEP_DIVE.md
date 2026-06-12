@@ -44,7 +44,7 @@ Implementation sources:
 - `src/ffbayes/draft_strategy/draft_decision_system.py`
 - `src/ffbayes/draft_strategy/draft_decision_strategy.py`
 - `src/ffbayes/analysis/draft_retrospective.py`
-- `config/pipeline_pre_draft.json`
+- `config/pipeline_config.json`
 
 Emitted artifacts:
 
@@ -110,7 +110,7 @@ target player a draft-time starting distribution.
 
 ## Implemented Workflow
 
-The supported `pre-draft` runner in `config/pipeline_pre_draft.json` performs:
+The supported `pre-draft` runner in `config/pipeline_config.json` performs:
 
 1. data collection
 2. data validation

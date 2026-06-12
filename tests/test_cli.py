@@ -29,6 +29,31 @@ def test_collect_command_forwards_extra_arguments(monkeypatch):
     ]
 
 
+def test_pipeline_command_forwards_same_as_pre_draft(monkeypatch):
+    captured = {}
+
+    def fake_import(module_name):
+        captured['module_name'] = module_name
+
+        def fake_main():
+            captured['argv'] = sys.argv[:]
+            return 0
+
+        return SimpleNamespace(main=fake_main)
+
+    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
+
+    exit_code = cli.main(['pipeline', '--year', '2025'])
+
+    assert exit_code == 0
+    assert captured['module_name'] == 'ffbayes.run_pipeline_split'
+    assert captured['argv'] == [
+        'ffbayes.run_pipeline_split',
+        '--year',
+        '2025',
+    ]
+
+
 def test_split_command_forwards_without_phase_argument(monkeypatch):
     captured = {}
 

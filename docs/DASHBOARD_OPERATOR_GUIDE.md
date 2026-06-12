@@ -65,6 +65,19 @@ Primary surfaces:
 
 ## Commands And Paths
 
+### CLI At A Glance
+
+| Tier | When to use it | Command |
+| --- | --- | --- |
+| 1 — full | New data, new season, or full trust refresh | `ffbayes pre-draft` |
+| 1 — full + Pages | Same as tier 1 and update `site/` | `ffbayes pre-draft --stage-pages` |
+| 2 — board | Processed inputs already exist; change league settings or rerun models | `ffbayes draft-strategy` |
+| 3 — dashboard | Payload is current; template/UI iteration or restage Pages only | `ffbayes stage-dashboard --year <year>` |
+| 4 — publish | Stage dashboard and mirror selected runtime artifacts to cloud | `ffbayes publish --year <year>` |
+
+`ffbayes pipeline` and `ffbayes split` are aliases for tier 1 (`pre-draft`).
+`ffbayes refresh-dashboard` is a developer drift-check helper, not the normal operator path.
+
 ### Full Supported Refresh
 
 Purpose: rebuild the supported pre-draft stack from source data through dashboard artifacts.

@@ -9,6 +9,9 @@
       "name": "data_collection",
       "script": "ffbayes.data_pipeline.collect_data",
       "description": "Collect NFL fantasy football data",
+      "env": {
+        "FFBAYES_PROCESS_DATASET_PROGRESS": "summary"
+      },
       "timeout": 300,
       "retry_count": 3,
       "dependencies": [],

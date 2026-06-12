@@ -27,20 +27,10 @@ class CommandSpec:
 
 COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec(
-        name='pipeline',
-        module='ffbayes.run_pipeline',
-        help_text='Run the full end-to-end pipeline.',
-    ),
-    CommandSpec(
-        name='split',
-        module='ffbayes.run_pipeline_split',
-        help_text='Run the pre-draft split pipeline.',
-    ),
-    CommandSpec(
         name='pre-draft',
         module='ffbayes.run_pipeline_split',
-        help_text='Run only the pre-draft pipeline.',
-        aliases=('pre_draft',),
+        help_text='Full workflow: collect data → build board → write dashboard.',
+        aliases=('pre_draft', 'pipeline', 'split'),
     ),
     CommandSpec(
         name='collect',
@@ -65,7 +55,7 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec(
         name='draft-strategy',
         module='ffbayes.draft_strategy.draft_decision_strategy',
-        help_text='Generate the live draft command center and workbook.',
+        help_text='Regenerate board + dashboard only (skip data collection).',
     ),
     CommandSpec(
         name='draft-backtest',
@@ -85,18 +75,18 @@ COMMANDS: tuple[CommandSpec, ...] = (
     CommandSpec(
         name='publish',
         module='ffbayes.publish_artifacts',
-        help_text='Stage GitHub Pages and mirror selected runtime artifacts into cloud storage.',
+        help_text='Stage GitHub Pages and mirror selected runtime artifacts to cloud.',
     ),
     CommandSpec(
         name='stage-dashboard',
         module='ffbayes.stage_dashboard',
-        help_text='Refresh dashboard HTML and stage GitHub Pages in one step.',
+        help_text='Refresh dashboard HTML from payload and stage GitHub Pages.',
         aliases=('stage_dashboard',),
     ),
     CommandSpec(
         name='refresh-dashboard',
         module='ffbayes.refresh_dashboard',
-        help_text='Regenerate dashboard HTML from the current runtime payload.',
+        help_text='Developer helper: rebuild dashboard HTML from payload only.',
     ),
 )
 
@@ -122,16 +112,19 @@ def build_parser() -> argparse.ArgumentParser:
         description='Unified command-line entry point for the FFBayes project.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
+            'Workflow tiers:\n'
+            '  ffbayes pre-draft                 full rebuild (data → board → dashboard)\n'
+            '  ffbayes pre-draft --stage-pages   full rebuild + update site/ for GitHub Pages\n'
+            '  ffbayes draft-strategy            board + dashboard only\n'
+            '  ffbayes stage-dashboard --year Y  dashboard HTML + site/ only\n'
+            '  ffbayes publish --year Y          stage-dashboard + cloud mirror\n\n'
+            'Aliases: pipeline and split are the same as pre-draft.\n\n'
             'Examples:\n'
             '  ffbayes pre-draft\n'
-            '  ffbayes pre-draft --stage-pages\n'
-            '  ffbayes draft-strategy --draft-position 10\n'
-            '  ffbayes stage-dashboard --year 2025\n'
-            '  ffbayes draft-retrospective --import-finalized ~/Downloads/ffbayes_finalized_*_2026_*\n'
-            '  ffbayes draft-retrospective --year 2026\n'
-            '  ffbayes publish --year 2025\n\n'
-            'Any extra arguments after the command are forwarded to the existing '
-            'module-level CLI.'
+            '  ffbayes draft-strategy --draft-position 3 --league-size 12\n'
+            '  ffbayes stage-dashboard --year 2026\n'
+            '  ffbayes draft-retrospective --year 2026\n\n'
+            'Extra arguments after the command are forwarded to the underlying module.'
         ),
     )
     parser.add_argument('--version', action='version', version=f'ffbayes {_version()}')
@@ -184,7 +177,7 @@ def dispatch(command: str, argv: Sequence[str]) -> int:
     canonical_name = _ALIAS_TO_NAME.get(command, command)
     spec = _COMMAND_BY_NAME.get(canonical_name)
     if spec is None:
-        print(f"Unknown command: {command}", file=sys.stderr)
+        print(f'Unknown command: {command}', file=sys.stderr)
         return 2
 
     return _run_module(spec.module, [*spec.argv_prefix, *argv])

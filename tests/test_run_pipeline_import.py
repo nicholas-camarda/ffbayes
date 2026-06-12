@@ -27,3 +27,29 @@ def test_run_pipeline_rejects_unimplemented_phase(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, 'argv', ['ffbayes-pipeline', '--phase', 'draft'])
 
     assert module.main() == 2
+
+
+def test_run_pipeline_full_phase_delegates_to_pre_draft(monkeypatch, tmp_path):
+    module = importlib.import_module('ffbayes.run_pipeline')
+    captured: dict[str, object] = {}
+
+    def fake_run_pre_draft(argv):
+        captured['argv'] = list(argv)
+        return 0
+
+    monkeypatch.setattr(module, 'ensure_conda_environment', lambda: None)
+    monkeypatch.setattr(module, 'create_required_directories', lambda: None)
+    monkeypatch.setattr(module, 'cleanup_empty_directories', lambda: None)
+    monkeypatch.setenv('FFBAYES_RUNTIME_ROOT', str(tmp_path / 'runtime'))
+    monkeypatch.setenv('FFBAYES_PROJECT_ROOT', str(tmp_path / 'project'))
+    monkeypatch.setattr(
+        'ffbayes.run_pipeline_split.run_pre_draft', fake_run_pre_draft
+    )
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['ffbayes-pipeline', '--phase', 'full', '--year', '2026', '--stage-pages'],
+    )
+
+    assert module.main() == 0
+    assert captured['argv'] == ['--year', '2026', '--stage-pages']

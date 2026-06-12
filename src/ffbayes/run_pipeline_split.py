@@ -66,7 +66,15 @@ class SplitPipelineRunner:
             raise FileNotFoundError(f'Pipeline config not found: {self.config_file}')
 
         with open(self.config_file, 'r') as f:
-            return json.load(f)
+            raw = json.load(f)
+
+        steps = raw.get('steps') or raw.get('pipeline_steps')
+        if not steps:
+            raise ValueError(
+                f'Pipeline config must define "steps" or "pipeline_steps": '
+                f'{self.config_file}'
+            )
+        return {**raw, 'steps': steps}
 
     def create_directory_if_needed(self, dir_path: str, description: str = ''):
         """Create directory only when needed, with tracking."""
@@ -352,8 +360,8 @@ class SplitPipelineRunner:
         self._log(f'      📁 Strategy copied to: {dest_dir}')
 
 
-def main():
-    """Main function to run split pipeline."""
+def run_pre_draft(argv: list[str] | None = None) -> int:
+    """Run the supported pre-draft pipeline and optionally stage GitHub Pages."""
     import argparse
 
     parser = argparse.ArgumentParser(
@@ -370,7 +378,7 @@ def main():
         action='store_true',
         help='After a successful pre-draft run, stage the public GitHub Pages copy.',
     )
-    args, _ = parser.parse_known_args()
+    args, _ = parser.parse_known_args(argv)
 
     try:
         runner = SplitPipelineRunner(year=args.year)
@@ -387,15 +395,20 @@ def main():
                     print(f'   staged payload: {staged.get("staged_payload_path")}')
                 except Exception as e:
                     print(f'\n💥 GitHub Pages staging failed: {e}')
-                    sys.exit(1)
-            sys.exit(0)
-        else:
-            print('\n💥 Pipeline completed with errors!')
-            sys.exit(1)
+                    return 1
+            return 0
+
+        print('\n💥 Pipeline completed with errors!')
+        return 1
 
     except Exception as e:
         print(f'💥 Pipeline runner failed: {e}')
-        sys.exit(1)
+        return 1
+
+
+def main() -> None:
+    """CLI entry point for the pre-draft pipeline."""
+    raise SystemExit(run_pre_draft())
 
 
 if __name__ == '__main__':
