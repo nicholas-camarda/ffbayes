@@ -1,0 +1,158 @@
+:root {
+  color-scheme: light dark;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #f4f6f8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.shell {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.topbar {
+  margin-bottom: 16px;
+}
+
+.topbar-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.subtitle,
+.subtle {
+  color: #5a6470;
+}
+
+.tiny {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #e8edf2;
+  font-size: 13px;
+}
+
+.toolbar-row {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  padding: 8px 12px;
+  border: 1px solid #c5ced8;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid #d8dee6;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.panel.strong {
+  border-color: #b8c4d4;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field.full {
+  grid-column: 1 / -1;
+}
+
+.notice {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #f0f4f8;
+  font-size: 14px;
+}
+
+.error-boundary {
+  max-width: 720px;
+  margin: 48px auto;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #f0b4b4;
+  border-radius: 12px;
+}
+
+.error-message {
+  color: #b42318;
+  font-weight: 600;
+}
+
+.error-hint code {
+  font-family: ui-monospace, monospace;
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}

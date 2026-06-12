@@ -80,10 +80,33 @@ export interface DraftStore {
   markTaken(playerName: string): void;
   markMine(playerName: string): void;
   toggleQueue(playerName: string): void;
+  setScoringPreset(value: string): void;
+  setRiskTolerance(value: string): void;
+  setLeagueSize(value: number): void;
+  setDraftPosition(value: number): void;
+  setBenchSlots(value: number): void;
   undo(): void;
   redo(): void;
   getState(): Readonly<DraftState>;
   subscribe(listener: () => void): () => void;
+}
+
+export function nextPickNumber(
+  currentPickNumber: number,
+  draftPosition: number,
+  leagueSize: number,
+): number {
+  const current = Math.max(1, Number(currentPickNumber) || 1);
+  const draft = Math.max(1, Number(draftPosition) || 1);
+  const size = Math.max(1, Number(leagueSize) || 1);
+  const rounds = Math.max(1, Math.ceil(current / size) + 2);
+  for (let round = 1; round <= rounds; round += 1) {
+    const pick = round % 2 === 1 ? (round - 1) * size + draft : round * size - draft + 1;
+    if (pick > current) {
+      return pick;
+    }
+  }
+  return current + size;
 }
 
 function clone<T>(value: T): T {
@@ -249,6 +272,32 @@ export function createDraftStore(options: CreateDraftStoreOptions = {}): DraftSt
     toggleQueue(playerName: string): void {
       pushHistory();
       applyQueue(playerName);
+      commit();
+    },
+
+    setScoringPreset(value: string): void {
+      state.scoringPreset = value;
+      commit();
+    },
+
+    setRiskTolerance(value: string): void {
+      state.riskTolerance = safeLower(value);
+      commit();
+    },
+
+    setLeagueSize(value: number): void {
+      state.leagueSize = Math.max(2, Number(value) || 10);
+      state.draftPosition = Math.min(state.draftPosition, state.leagueSize);
+      commit();
+    },
+
+    setDraftPosition(value: number): void {
+      state.draftPosition = Math.max(1, Math.min(Number(value) || 1, state.leagueSize));
+      commit();
+    },
+
+    setBenchSlots(value: number): void {
+      state.benchSlots = Math.max(0, Number(value) || 0);
       commit();
     },
 
