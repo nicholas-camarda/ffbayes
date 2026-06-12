@@ -13,7 +13,8 @@
     "typecheck": "tsc -b --noEmit",
     "generate:types": "json2ts -i ../src/ffbayes/dashboard/schemas/dashboard_payload.schema.json -o src/payload/types.generated.ts --bannerComment '/* AUTO-GENERATED from dashboard_payload.schema.json — run npm run generate:types */'",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:template": "npm run build && node scripts/build_template.mjs"
   },
   "dependencies": {
     "react": "^19.2.6",
