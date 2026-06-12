@@ -17,7 +17,7 @@ The interactive draft dashboard is produced entirely inside `src/ffbayes/draft_s
 
 **Payload injection for publish.** `src/ffbayes/publish_pages.py` re-injects payload into staged HTML using string markers: `PAYLOAD_ASSIGNMENT_PREFIX = 'window.FFBAYES_DASHBOARD = '` and `PAYLOAD_ASSIGNMENT_SUFFIX = ';\n\n    (() => {'` (lines 22–23). `_inject_dashboard_payload_into_html()` (lines 94–103) finds these markers and splices in fresh JSON during `stage_pages_site()` (lines 107–222).
 
-**Artifact authority model.** Canonical season artifacts resolve under `seasons/<year>/draft_strategy/` via `get_draft_strategy_dir()` → `get_pre_draft_artifacts_dir()` → `get_run_root()` (`path_constants.py:100–115`, `164–168`). Payload and HTML paths are `get_dashboard_payload_path()` and `get_dashboard_html_path()` (`path_constants.py:187–202`), yielding `dashboard_payload_<year>.json` and `draft_board_<year>.html`. Derived shortcuts land at `<runtime>/dashboard/` and `<repo>/dashboard/` (`draft_decision_system.py:6785–6791`, `6825–6861`). Published output is staged to `<repo>/site/` via `get_pages_site_dir()` (`path_constants.py:408–412`).
+**Artifact authority model.** Canonical season artifacts resolve under `seasons/<year>/draft_strategy/` via `get_draft_strategy_dir()` → `get_pre_draft_artifacts_dir()` → `get_run_root()` (`path_constants.py:100–115`, `118–127`, `164–168`). Payload and HTML paths are `get_dashboard_payload_path()` and `get_dashboard_html_path()` (`path_constants.py:187–202`), yielding `dashboard_payload_<year>.json` and `draft_board_<year>.html`. Derived shortcuts land at `<runtime>/dashboard/` and `<repo>/dashboard/` (`draft_decision_system.py:6785–6791`, `6825–6861`). Published output is staged to `<repo>/site/` via `get_pages_site_dir()` (`path_constants.py:408–412`).
 
 **Refresh and validation.** `src/ffbayes/refresh_dashboard.py` loads an existing payload and re-renders HTML. Required-key validation is hand-rolled: `REQUIRED_PAYLOAD_KEYS` and `_validate_dashboard_payload()` (lines 33–91) check four top-level keys plus nested `decision_evidence` freshness rules. `load_dashboard_payload()` (lines 94–107) reads JSON and calls the validator. No JSON Schema or generated types exist today.
 
@@ -77,7 +77,7 @@ Default-flip to `frontend` is a follow-up PR after a draft-day dry run.
   output via `FFBAYES_SMOKE_SITE_DIR`. Parity gate = full smoke suite passes.
 
 ## Compatibility plan
-- All five CLI workflows unchanged. `dashboard/index.html` shortcuts unchanged.
+- All five CLI workflows unchanged: `ffbayes pre-draft`, `ffbayes pre-draft --stage-pages`, `ffbayes draft-strategy`, `ffbayes stage-dashboard --year <year>`, `ffbayes draft-retrospective`. `dashboard/index.html` shortcuts unchanged.
 - `site/` staging unchanged; `publish_pages.py` injection gains a second suffix marker
   (`; /*FFBAYES_PAYLOAD_END*/`) tried before the legacy suffix.
 - Legacy payloads load without `dashboard_schema_version`.
