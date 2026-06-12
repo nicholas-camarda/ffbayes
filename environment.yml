@@ -22,6 +22,7 @@ dependencies:
   - ipykernel
   - pip
   - pip:
+    - jsonschema>=4.17
     - nflreadpy>=0.1.5
     - polars>=1.0
     - fuzzywuzzy
