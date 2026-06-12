@@ -77,10 +77,10 @@ export function TimingFrontier(props: { payload: DashboardPayload; store: DraftS
                   >
                     <span className="frontier-list-head">
                       <span className={`frontier-swatch ${row.lane}`} />
-                      <span>
+                      <span className="frontier-list-copy">
                         <span className="frontier-list-name">
-                          {row.player_name}{' '}
-                          <span className="tiny">• {row.position}</span>
+                          <span className="frontier-player-name">{row.player_name}</span>
+                          <span className="frontier-player-position">• {row.position}</span>
                         </span>
                         <span className="frontier-list-meta">{row.rationale}</span>
                         <span className="frontier-tag-row">
@@ -93,34 +93,36 @@ export function TimingFrontier(props: { payload: DashboardPayload; store: DraftS
                         </span>
                       </span>
                     </span>
-                    <span className="frontier-meter">
-                      <span className="frontier-meter-head">
-                        <span>Pass regret</span>
-                        <strong>{formatNumber(row.wait_regret)}</strong>
+                    <div className="frontier-meters">
+                      <span className="frontier-meter">
+                        <span className="frontier-meter-head">
+                          <span>Pass regret</span>
+                          <strong>{formatNumber(row.wait_regret)}</strong>
+                        </span>
+                        <span className="frontier-meter-track">
+                          <span
+                            className="frontier-meter-fill regret"
+                            style={{
+                              width: `${Math.max(8, Math.round(row.regret_percent * 100))}%`,
+                            }}
+                          />
+                        </span>
                       </span>
-                      <span className="frontier-meter-track">
-                        <span
-                          className="frontier-meter-fill regret"
-                          style={{
-                            width: `${Math.max(8, Math.round(row.regret_percent * 100))}%`,
-                          }}
-                        />
+                      <span className="frontier-meter">
+                        <span className="frontier-meter-head">
+                          <span>Survival</span>
+                          <strong>{formatPercent(row.timing_survival)}</strong>
+                        </span>
+                        <span className="frontier-meter-track">
+                          <span
+                            className="frontier-meter-fill survival"
+                            style={{
+                              width: `${Math.max(8, Math.round(row.survival_percent * 100))}%`,
+                            }}
+                          />
+                        </span>
                       </span>
-                    </span>
-                    <span className="frontier-meter">
-                      <span className="frontier-meter-head">
-                        <span>Survival</span>
-                        <strong>{formatPercent(row.timing_survival)}</strong>
-                      </span>
-                      <span className="frontier-meter-track">
-                        <span
-                          className="frontier-meter-fill survival"
-                          style={{
-                            width: `${Math.max(8, Math.round(row.survival_percent * 100))}%`,
-                          }}
-                        />
-                      </span>
-                    </span>
+                    </div>
                   </button>
                 ))}
               </div>
