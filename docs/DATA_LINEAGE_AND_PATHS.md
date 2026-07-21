@@ -29,6 +29,12 @@ Primary path policy lives in:
 
 - `src/ffbayes/utils/path_constants.py`
 
+Default roots:
+
+- repository: `~/Workspaces/ffbayes/source`
+- runtime: `~/Workspaces/ffbayes/runtime`
+- cloud mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes`
+
 Primary commands that create or move artifacts:
 
 - `ffbayes pre-draft`

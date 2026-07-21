@@ -6,7 +6,7 @@ A fantasy football draft engine that builds season-total player forecasts, conve
 
 The clearest example of what this repo produces is the live draft war room dashboard:
 
-- Live dashboard: https://nicholas-camarda.github.io/ffbayes/
+- Live dashboard: [https://nicholas-camarda.github.io/ffbayes/](https://nicholas-camarda.github.io/ffbayes/)
 
 If you are trying to understand the product before reading the workflow docs, start there.
 
@@ -110,6 +110,7 @@ During the draft, keep the local dashboard open, use the workbook as the tabular
 backup, and check `Decision evidence` before over-trusting the ranking. Treat
 `n/a` or `not estimable` as "this slice could not be judged cleanly," not as a
 measured zero relationship.
+
 - inspect `Freshness and provenance` before assuming the board is current
 - if the current dashboard build includes war-room visuals, use them as decision aids, not as a separate model
 - when you click Finalize, keep the downloaded finalized bundle
@@ -145,14 +146,16 @@ That command auto-discovers imported finalized JSON and writes retrospective JSO
 
 There is one primary workflow command and a few narrower follow-ups:
 
-| Intent | Command |
-| --- | --- |
-| Full rebuild (data → board → dashboard) | `ffbayes pre-draft` |
-| Full rebuild + update GitHub Pages `site/` | `ffbayes pre-draft --stage-pages` |
-| Board + dashboard only (skip data collection) | `ffbayes draft-strategy` |
-| Dashboard HTML + `site/` only | `ffbayes stage-dashboard --year <year>` |
-| Stage dashboard + mirror artifacts to cloud | `ffbayes publish --year <year>` |
-| Post-draft evaluation | `ffbayes draft-retrospective` |
+
+| Intent                                        | Command                                 |
+| --------------------------------------------- | --------------------------------------- |
+| Full rebuild (data → board → dashboard)       | `ffbayes pre-draft`                     |
+| Full rebuild + update GitHub Pages `site/`    | `ffbayes pre-draft --stage-pages`       |
+| Board + dashboard only (skip data collection) | `ffbayes draft-strategy`                |
+| Dashboard HTML + `site/` only                 | `ffbayes stage-dashboard --year <year>` |
+| Stage dashboard + mirror artifacts to cloud   | `ffbayes publish --year <year>`         |
+| Post-draft evaluation                         | `ffbayes draft-retrospective`           |
+
 
 `ffbayes pipeline` and `ffbayes split` are aliases for `ffbayes pre-draft`.
 
@@ -179,7 +182,7 @@ carries uncertainty into the draft board.
 
 Runtime outputs are written under the configured runtime root.
 
-- runtime root: `<runtime-root>`
+- default runtime root: `~/Workspaces/ffbayes/runtime`
 - override only when needed: `FFBAYES_RUNTIME_ROOT=/path/to/runtime`
 
 Main pre-draft runtime tree:

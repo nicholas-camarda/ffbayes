@@ -20,14 +20,16 @@ def get_project_root() -> Path:
 def get_runtime_root() -> Path:
     """Return the canonical runtime root for the active project.
 
-    `~/ProjectsRuntime/ffbayes` is the canonical local runtime tree for this
+    `~/Workspaces/ffbayes/runtime` is the canonical local runtime tree for this
     repository. Use `FFBAYES_RUNTIME_ROOT` to opt into a different location
     explicitly; we do not silently redirect writes to a repo-local fallback.
     """
     env_root = os.getenv('FFBAYES_RUNTIME_ROOT')
     if env_root:
         return Path(env_root).expanduser().resolve()
-    return (Path.home() / 'ProjectsRuntime' / 'ffbayes').expanduser().resolve()
+    return (
+        Path.home() / 'Workspaces' / 'ffbayes' / 'runtime'
+    ).expanduser().resolve()
 
 
 def get_cloud_root() -> Path:
@@ -52,7 +54,7 @@ def get_cloud_root() -> Path:
 
 BASE_DIR = get_project_root()
 RUNTIME_DIR = get_runtime_root()
-PROJECTS_ROOT_DIR = Path.home() / 'Projects'
+PROJECTS_ROOT_DIR = Path.home() / 'Workspaces'
 INPUTS_DIR = RUNTIME_DIR / 'inputs'
 RAW_INPUTS_DIR = INPUTS_DIR / 'raw'
 PROCESSED_INPUTS_DIR = INPUTS_DIR / 'processed'

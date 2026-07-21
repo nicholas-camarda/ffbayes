@@ -133,10 +133,10 @@
     "progress_update_interval": 30
   },
   "output": {
-    "run_root": "~/ProjectsRuntime/ffbayes/seasons/<year>",
-    "artifacts_directory": "~/ProjectsRuntime/ffbayes/seasons/<year>",
-    "diagnostics_directory": "~/ProjectsRuntime/ffbayes/seasons/<year>/diagnostics",
-    "logs_directory": "~/ProjectsRuntime/ffbayes/logs",
+    "run_root": "~/Workspaces/ffbayes/runtime/seasons/<year>",
+    "artifacts_directory": "~/Workspaces/ffbayes/runtime/seasons/<year>",
+    "diagnostics_directory": "~/Workspaces/ffbayes/runtime/seasons/<year>/diagnostics",
+    "logs_directory": "~/Workspaces/ffbayes/runtime/logs",
     "cloud_results_directory": "~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/results",
     "cloud_plots_directory": "~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/plots",
     "cloud_docs_images_directory": "~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes/docs/images",
@@ -145,7 +145,7 @@
   "environment": {
     "python_path": "python",
     "conda_environment": "ffbayes",
-    "working_directory": "~/Projects/ffbayes",
+    "working_directory": "~/Workspaces/ffbayes/source",
     "environment_variables": {
       "MAX_CORES": "4",
       "USE_MULTIPROCESSING": "true"
