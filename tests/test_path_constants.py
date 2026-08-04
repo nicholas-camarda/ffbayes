@@ -54,7 +54,7 @@ def test_get_phase_name_rejects_non_pre_draft(monkeypatch):
         path_constants.get_phase_name()
 
 
-def test_get_cloud_root_defaults_to_side_projects(monkeypatch):
+def test_get_cloud_root_defaults_to_project_vault(monkeypatch):
     monkeypatch.delenv('FFBAYES_CLOUD_ROOT', raising=False)
 
     expected = (
@@ -62,7 +62,8 @@ def test_get_cloud_root_defaults_to_side_projects(monkeypatch):
         / 'Library'
         / 'CloudStorage'
         / 'OneDrive-Personal'
-        / 'SideProjects'
+        / 'Project Vault'
+        / 'Personal Projects'
         / 'ffbayes'
     )
 

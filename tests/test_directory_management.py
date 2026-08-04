@@ -8,7 +8,7 @@ def _reload_path_constants(monkeypatch, tmp_path):
     project_root = tmp_path / 'Projects' / 'ffbayes'
     runtime_root = tmp_path / 'ProjectsRuntime' / 'ffbayes'
     cloud_root = (
-        tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'SideProjects' / 'ffbayes'
+        tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'Project Vault' / 'Personal Projects' / 'ffbayes'
     )
 
     monkeypatch.setenv('FFBAYES_PROJECT_ROOT', str(project_root))
@@ -30,14 +30,14 @@ def test_create_all_required_directories_uses_runtime_only(tmp_path, monkeypatch
     assert path_constants.get_runtime_root() == tmp_path / 'ProjectsRuntime' / 'ffbayes'
     assert (
         path_constants.get_cloud_root()
-        == tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'SideProjects' / 'ffbayes'
+        == tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'Project Vault' / 'Personal Projects' / 'ffbayes'
     )
 
     path_constants.create_all_required_directories(current_year)
 
     runtime_root = tmp_path / 'ProjectsRuntime' / 'ffbayes'
     cloud_root = (
-        tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'SideProjects' / 'ffbayes'
+        tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'Project Vault' / 'Personal Projects' / 'ffbayes'
     )
 
     assert (runtime_root / 'seasons' / str(current_year)).exists()
@@ -79,7 +79,7 @@ def test_manage_visualizations_publishes_selected_phase(tmp_path, monkeypatch):
     current_year = 2026
     runtime_root = tmp_path / 'ProjectsRuntime' / 'ffbayes'
     cloud_root = (
-        tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'SideProjects' / 'ffbayes'
+        tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'Project Vault' / 'Personal Projects' / 'ffbayes'
     )
 
     pre_draft_artifact_dir = runtime_root / 'seasons' / str(current_year)

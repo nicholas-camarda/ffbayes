@@ -9,7 +9,7 @@ from ffbayes.data_pipeline.unified_data_loader import load_unified_dataset
 def _reload_path_constants(monkeypatch, tmp_path):
     project_root = tmp_path / 'Projects' / 'ffbayes'
     runtime_root = tmp_path / 'ProjectsRuntime' / 'ffbayes'
-    cloud_root = tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'SideProjects' / 'ffbayes'
+    cloud_root = tmp_path / 'CloudStorage' / 'OneDrive-Personal' / 'Project Vault' / 'Personal Projects' / 'ffbayes'
 
     monkeypatch.setenv('FFBAYES_PROJECT_ROOT', str(project_root))
     monkeypatch.setenv('FFBAYES_RUNTIME_ROOT', str(runtime_root))

@@ -33,7 +33,7 @@ Default roots:
 
 - repository: `~/Workspaces/ffbayes/source`
 - runtime: `~/Workspaces/ffbayes/runtime`
-- cloud mirror: `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes`
+- cloud mirror: `~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/ffbayes`
 
 Primary commands that create or move artifacts:
 

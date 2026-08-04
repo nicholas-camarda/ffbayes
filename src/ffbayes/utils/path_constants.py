@@ -35,7 +35,8 @@ def get_runtime_root() -> Path:
 def get_cloud_root() -> Path:
     """Return the canonical cloud root for backed-up project artifacts.
 
-    `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes` is the
+    `~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/ffbayes`
+    is the
     canonical cloud mirror location for this repository. Use
     `FFBAYES_CLOUD_ROOT` to opt into a different location explicitly.
     """
@@ -47,7 +48,8 @@ def get_cloud_root() -> Path:
         / 'Library'
         / 'CloudStorage'
         / 'OneDrive-Personal'
-        / 'SideProjects'
+        / 'Project Vault'
+        / 'Personal Projects'
         / 'ffbayes'
     ).expanduser().resolve()
 
