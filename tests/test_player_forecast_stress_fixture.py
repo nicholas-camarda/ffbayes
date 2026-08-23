@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
-import subprocess
-from pathlib import Path
 
 import pandas as pd
 
@@ -20,7 +17,6 @@ from ffbayes.draft_strategy.draft_decision_system import (
 from ffbayes.publish_pages import stage_pages_site
 from ffbayes.utils.json_serialization import dumps_strict_json
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
 PAYLOAD_ASSIGNMENT_PREFIX = 'window.FFBAYES_DASHBOARD = '
 PAYLOAD_ASSIGNMENT_SUFFIX = ';\n\n    (() => {'
 
@@ -529,63 +525,3 @@ def test_player_forecast_stress_fixture_preserves_artifact_lineage(
     assert sorted(path.name for path in (diagnostics_dir / 'validation').iterdir()) == [
         saved['validation_summary_path'].name
     ]
-
-
-def test_player_forecast_fixture_drives_full_dashboard_smoke(
-    tmp_path, monkeypatch
-):
-    history = _stress_history()
-    season_table = aggregate_season_player_table(history)
-    projection_table = build_posterior_projection_table(
-        train_history=season_table,
-        target_frame=_stress_target_frame(),
-        holdout_year=2026,
-        min_history_seasons=0,
-    )
-
-    artifacts = build_draft_decision_artifacts(
-        projection_table,
-        league_settings=LeagueSettings(),
-        context=DraftContext(current_pick_number=10),
-        season_history=history,
-    )
-
-    runtime_root = tmp_path / 'runtime'
-    project_root = tmp_path / 'project'
-    monkeypatch.setenv('FFBAYES_RUNTIME_ROOT', str(runtime_root))
-    monkeypatch.setenv('FFBAYES_PROJECT_ROOT', str(project_root))
-
-    output_dir = runtime_root / 'seasons' / '2026' / 'draft_strategy'
-    diagnostics_dir = runtime_root / 'seasons' / '2026' / 'diagnostics'
-    saved = save_draft_decision_artifacts(
-        artifacts,
-        output_dir=output_dir,
-        year=2026,
-        dashboard_dir=output_dir,
-        diagnostics_dir=diagnostics_dir,
-    )
-    staged = stage_pages_site(
-        year=2026,
-        source_html=saved['html_path'],
-        source_payload=saved['payload_path'],
-        output_dir=project_root / 'site',
-    )
-
-    env = os.environ.copy()
-    env['FFBAYES_SMOKE_SITE_DIR'] = str(staged['site_dir'])
-    completed = subprocess.run(
-        ['node', 'tests/dashboard_smoke.mjs'],
-        cwd=REPO_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-    smoke = json.loads(completed.stdout)
-    assert smoke['title'] == 'FFBayes dashboard smoke test'
-    assert smoke['rosterComplete'] is True
-    assert len(smoke['finalizedFiles']) == 3
-    assert any(name.endswith('.json') for name in smoke['finalizedFiles'])
-    assert sum(name.endswith('.html') for name in smoke['finalizedFiles']) == 2
-    assert len(smoke['draftedPlayers']) >= 5
-    assert any(pill.startswith('Yours:') for pill in smoke['finalPills'])

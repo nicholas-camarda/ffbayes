@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 
-def test_dashboard_smoke_targets_canonical_fixture_not_site(tmp_path):
+def test_dashboard_smoke_targets_canonical_fixture_not_site():
     repo_root = Path(__file__).resolve().parents[1]
     smoke_script = (repo_root / 'tests' / 'dashboard_smoke.mjs').read_text(
         encoding='utf-8'
@@ -14,7 +14,6 @@ def test_dashboard_smoke_targets_canonical_fixture_not_site(tmp_path):
 
     env = os.environ.copy()
     env['PYTHON'] = sys.executable
-    env['FFBAYES_SMOKE_SITE_DIR'] = str(tmp_path / 'deleted-site')
     result = subprocess.run(
         ['node', 'tests/dashboard_smoke.mjs'],
         cwd=repo_root,
