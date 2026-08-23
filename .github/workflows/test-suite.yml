@@ -1,0 +1,68 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python tests and static checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Set up Node.js for browser smoke tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install browser smoke dependencies
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Install Python package and development tools
+        run: python -m pip install -e '.[dev]'
+
+      - name: Run Python tests
+        run: python -m pytest -q
+
+      - name: Run Ruff
+        run: ruff check tests src
+
+      - name: Run mypy
+        run: mypy src
+
+  frontend:
+    name: Frontend tests and typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: dashboard_frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix dashboard_frontend
+
+      - name: Run frontend tests
+        run: npm test --prefix dashboard_frontend
+
+      - name: Run frontend typecheck
+        run: npm run typecheck --prefix dashboard_frontend

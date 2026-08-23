@@ -69,6 +69,32 @@ def test_process_dataset_supports_recent_team_and_home_away_logic():
     assert list(processed_df['is_home']) == [1, 0]
 
 
+def test_process_dataset_preserves_endpoint_values_and_injury_fields():
+    merged_df = _make_merged_frame(team_column='recent_team')
+    merged_df.loc[0, 'game_injury_report_status'] = 'Questionable'
+    merged_df.loc[0, 'practice_injury_report_status'] = 'Limited'
+
+    processed_df = collect_data.process_dataset(merged_df, 2025)
+    first = processed_df.iloc[0]
+
+    assert first.to_dict() == {
+        'G#': 1,
+        'Date': '2025-09-01',
+        'Tm': 'NYG',
+        'Away': 'DAL',
+        'Opp': 'DAL',
+        'FantPt': 12.5,
+        'FantPtPPR': 15.0,
+        'Name': 'Alpha Player',
+        'PlayerID': 'p1',
+        'Position': 'RB',
+        'Season': 2025,
+        'GameInjuryStatus': 'Questionable',
+        'PracticeInjuryStatus': 'Limited',
+        'is_home': 1,
+    }
+
+
 def test_process_dataset_supports_player_team_fallback():
     merged_df = _make_merged_frame(team_column='player_team')
     merged_df = merged_df.drop(columns=['recent_team'], errors='ignore')

@@ -5,6 +5,8 @@ import pandas as pd
 from ffbayes.analysis.bayesian_player_model import (
     MODEL_FEATURE_COLUMNS,
     _player_prior_features,
+    aggregate_season_player_table,
+    build_posterior_projection_table,
     fit_bayesian_regression,
 )
 
@@ -63,6 +65,110 @@ def test_player_prior_features_forward_fills_team_changes():
     )
 
     assert features['team_change_rate'] == 0.5
+
+
+def test_aggregate_season_player_table_preserves_points_and_is_order_invariant():
+    history = pd.DataFrame(
+        [
+            {
+                'Season': 2025,
+                'Name': 'Alpha RB',
+                'Position': 'RB',
+                'FantPt': 10.0,
+                'FantPtPPR': 12.0,
+                'Tm': 'NYG',
+            },
+            {
+                'Season': 2025,
+                'Name': 'Alpha RB',
+                'Position': 'RB',
+                'FantPt': 20.0,
+                'FantPtPPR': 22.0,
+                'Tm': 'NYG',
+            },
+            {
+                'Season': 2025,
+                'Name': 'Beta WR',
+                'Position': 'WR',
+                'FantPt': 15.0,
+                'FantPtPPR': 18.0,
+                'Tm': 'DAL',
+            },
+        ]
+    )
+
+    aggregated = aggregate_season_player_table(
+        history, feature_history=pd.DataFrame()
+    )
+    reordered = aggregate_season_player_table(
+        history.iloc[[2, 0, 1]].reset_index(drop=True), feature_history=pd.DataFrame()
+    )
+
+    alpha = aggregated.set_index(['Season', 'Name', 'Position']).loc[
+        (2025, 'Alpha RB', 'RB')
+    ]
+    assert alpha['fantasy_points'] == 30.0
+    assert alpha['fantasy_points_rate'] == 15.0
+    assert alpha['fantasy_points_ppr'] == 34.0
+    assert alpha['games_played'] == 2
+    assert alpha['games_missed'] == 15.0
+    pd.testing.assert_frame_equal(
+        aggregated.sort_index(axis=1), reordered.sort_index(axis=1), check_dtype=False
+    )
+
+
+def test_posterior_projection_does_not_use_holdout_actual_points():
+    train_history = pd.DataFrame(
+        [
+            {
+                'Season': season,
+                'Name': name,
+                'Position': position,
+                'FantPt': points,
+            }
+            for season, alpha, beta in [
+                (2022, 140.0, 100.0),
+                (2023, 150.0, 110.0),
+                (2024, 160.0, 120.0),
+            ]
+            for name, position, points in [
+                ('Alpha RB', 'RB', alpha),
+                ('Beta RB', 'RB', beta),
+            ]
+        ]
+    )
+    train_table = aggregate_season_player_table(
+        train_history, feature_history=pd.DataFrame()
+    )
+    target = pd.DataFrame(
+        {
+            'Name': ['Alpha RB', 'Beta RB'],
+            'Position': ['RB', 'RB'],
+            'fantasy_points': [170.0, 130.0],
+        }
+    )
+    altered_target = target.assign(fantasy_points=[17000.0, 13000.0])
+
+    first = build_posterior_projection_table(
+        train_table, target, holdout_year=2025, min_history_seasons=0
+    )
+    second = build_posterior_projection_table(
+        train_table, altered_target, holdout_year=2025, min_history_seasons=0
+    )
+
+    projection_columns = [
+        'player_name',
+        'posterior_mean',
+        'posterior_std',
+        'posterior_floor',
+        'posterior_ceiling',
+        'posterior_prob_beats_replacement',
+    ]
+    pd.testing.assert_frame_equal(
+        first[projection_columns], second[projection_columns], check_dtype=False
+    )
+    assert first['actual_points'].tolist() == [170.0, 130.0]
+    assert second['actual_points'].tolist() == [17000.0, 13000.0]
 
 
 def test_fit_bayesian_regression_records_model_diagnostics():
