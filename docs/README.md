@@ -1,72 +1,38 @@
 # FFBayes Documentation
 
-Use this page to choose the right doc. The guides split plain-language use,
-operator workflow, technical math, metric labels, artifact examples, and path
-authority.
+The current 2026 operator workflow is one command:
 
-## Quick Route By Audience
+```bash
+ffbayes dashboard --year 2026
+```
 
-- drafting today: [DASHBOARD_OPERATOR_GUIDE.md](DASHBOARD_OPERATOR_GUIDE.md)
-- plain-language explanation: [LAYPERSON_GUIDE.md](LAYPERSON_GUIDE.md)
-- implemented math and statistics: [TECHNICAL_DEEP_DIVE.md](TECHNICAL_DEEP_DIVE.md)
-- dashboard label lookup: [METRIC_REFERENCE.md](METRIC_REFERENCE.md)
-- artifact shapes: [OUTPUT_EXAMPLES.md](OUTPUT_EXAMPLES.md)
-- path authority and lineage: [DATA_LINEAGE_AND_PATHS.md](DATA_LINEAGE_AND_PATHS.md)
-- dashboard frontend architecture: [DASHBOARD_FRONTEND_ARCHITECTURE.md](DASHBOARD_FRONTEND_ARCHITECTURE.md)
-- dashboard cutover and rollback: [DASHBOARD_FRONTEND_CUTOVER.md](DASHBOARD_FRONTEND_CUTOVER.md)
-- repo setup and quick workflow: [../README.md](../README.md)
+Start with [DASHBOARD_OPERATOR_GUIDE.md](DASHBOARD_OPERATOR_GUIDE.md). It
+describes both named leagues, runtime draft-slot entry, draft-state controls,
+blocked states, and local snapshots.
+
+## Guide map
+
+- [DASHBOARD_OPERATOR_GUIDE.md](DASHBOARD_OPERATOR_GUIDE.md): current draft-day use.
+- [DATA_LINEAGE_AND_PATHS.md](DATA_LINEAGE_AND_PATHS.md): fresh inputs, run roots, and provenance.
+- [METRIC_REFERENCE.md](METRIC_REFERENCE.md): board labels and interpretation boundaries.
+- [OUTPUT_EXAMPLES.md](OUTPUT_EXAMPLES.md): current payload and snapshot shape.
+- [TECHNICAL_DEEP_DIVE.md](TECHNICAL_DEEP_DIVE.md): model and research notes; the current operator path is the dashboard command above.
+- [DASHBOARD_FRONTEND_ARCHITECTURE.md](DASHBOARD_FRONTEND_ARCHITECTURE.md): current service/page boundary.
+- [DASHBOARD_FRONTEND_CUTOVER.md](DASHBOARD_FRONTEND_CUTOVER.md): historical frontend notes, explicitly non-operator.
+- [LAYPERSON_GUIDE.md](LAYPERSON_GUIDE.md): plain-language interpretation.
 
 ## Trust Model
 
-- authoritative runtime artifacts live under the configured runtime root
-- use `<runtime-root>` as the generic local path label in this guide suite
-- repo `dashboard/` is a derived local shortcut for convenience
-- repo `site/` is a staged GitHub Pages copy for publishing, not the authoritative local draft surface
-- dashboard evidence is internal holdout evidence, not external validation
-- `n/a` or `not estimable` validation entries mean the slice could not support that estimate cleanly
+The local service is authoritative for a run. Required public sources use fresh
+cache-off fetches; stale outputs and staged pages are not inputs. A board is
+usable only after current-player, projection, ADP, replacement, league, and
+provenance checks pass. No account, session, or private-league source is used.
 
-## Start Here
+The public GitHub branch is external state. Local documentation in an unpushed
+worktree is not a claim that GitHub has already been updated.
 
-If you are drafting today:
+## Current path
 
-1. Read [../README.md](../README.md) for the supported workflow.
-2. Read [DASHBOARD_OPERATOR_GUIDE.md](DASHBOARD_OPERATOR_GUIDE.md) for the local dashboard, Pages staging, finalize flow, and retrospective path.
-3. Use [METRIC_REFERENCE.md](METRIC_REFERENCE.md) if a dashboard term is unclear.
-
-If you want a plain-language explanation:
-
-1. Read [LAYPERSON_GUIDE.md](LAYPERSON_GUIDE.md).
-2. Use [METRIC_REFERENCE.md](METRIC_REFERENCE.md) when a dashboard label needs a short definition.
-3. Use [OUTPUT_EXAMPLES.md](OUTPUT_EXAMPLES.md) to see the artifact shapes.
-
-If you want the implemented math:
-
-1. Read [TECHNICAL_DEEP_DIVE.md](TECHNICAL_DEEP_DIVE.md).
-2. Use [DATA_LINEAGE_AND_PATHS.md](DATA_LINEAGE_AND_PATHS.md) to connect code, paths, and emitted artifacts.
-
-## Commands And Paths
-
-This index does not duplicate the workflow commands or artifact authority table.
-Use:
-
-- [DASHBOARD_OPERATOR_GUIDE.md](DASHBOARD_OPERATOR_GUIDE.md) for the supported
-  draft-day commands, dashboard opening path, finalize flow, and retrospective
-  import sequence
-- [DATA_LINEAGE_AND_PATHS.md](DATA_LINEAGE_AND_PATHS.md) for authoritative
-  runtime artifacts, derived local shortcuts, staged Pages copies, and optional
-  publish targets
-
-## Documentation Conventions
-
-The guide suite follows one stable pattern:
-
-- audience, scope, and trust boundary appear near the top
-- canonical metric names stay consistent across guides
-- commands and paths are paired with their purpose and authority level
-- optional analyses are labeled optional instead of blended into the default workflow
-
-## What This Guide Suite Does Not Do
-
-- it does not treat GitHub Pages as the primary local draft surface
-- it does not present optional analyses as default `ffbayes pre-draft` outputs
-- it does not treat internal evidence as external proof
+Run the command, select a league, enter the draft slot/current pick, operate the
+state controls, and export a snapshot. The profile JSON files contain stable
+league rules; runtime slot/state never mutates them.

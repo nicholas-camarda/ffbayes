@@ -47,6 +47,7 @@ node_modules/
 
 # Outputs
 *.tsv
+runtime/
 
 # Track Agent OS product docs
 !.agent-os/product/

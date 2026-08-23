@@ -14,8 +14,8 @@
   "vor_settings": {
     "ppr": 0.5,
     "top_rank": 120,
-    "scraping_enabled": true,
-    "fantasy_pros_source": true
+    "scraping_enabled": false,
+    "fantasy_pros_source": false
   },
   
   "model_settings": {
@@ -34,8 +34,8 @@
   
   "data_settings": {
     "auto_update": true,
-    "data_sources": ["nfl_official", "fantasy_pros", "pro_football_reference"],
-    "cache_enabled": true,
+    "data_sources": ["espn_fantasy_2026", "nflverse_rosters"],
+    "cache_enabled": false,
     "validation_strict": true
   },
   

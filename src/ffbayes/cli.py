@@ -23,9 +23,16 @@ class CommandSpec:
     help_text: str
     aliases: tuple[str, ...] = ()
     argv_prefix: tuple[str, ...] = ()
+    public: bool = False
 
 
 COMMANDS: tuple[CommandSpec, ...] = (
+    CommandSpec(
+        name='dashboard',
+        module='ffbayes.draft_2026.dashboard_app',
+        help_text='Start the local 2026 draft dashboard.',
+        public=True,
+    ),
     CommandSpec(
         name='pre-draft',
         module='ffbayes.run_pipeline_split',
@@ -54,8 +61,8 @@ COMMANDS: tuple[CommandSpec, ...] = (
     ),
     CommandSpec(
         name='draft-strategy',
-        module='ffbayes.draft_strategy.draft_decision_strategy',
-        help_text='Regenerate board + dashboard only (skip data collection).',
+        module='ffbayes.draft_2026.pipeline',
+        help_text='Build validated current-season league boards from fresh inputs.',
     ),
     CommandSpec(
         name='draft-backtest',
@@ -109,32 +116,25 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the top-level FFBayes CLI parser."""
     parser = argparse.ArgumentParser(
         prog='ffbayes',
-        description='Unified command-line entry point for the FFBayes project.',
+        description='FFBayes draft-day operator command.',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            'Workflow tiers:\n'
-            '  ffbayes pre-draft                 full rebuild (data → board → dashboard)\n'
-            '  ffbayes pre-draft --stage-pages   full rebuild + update site/ for GitHub Pages\n'
-            '  ffbayes draft-strategy            board + dashboard only\n'
-            '  ffbayes stage-dashboard --year Y  dashboard HTML + site/ only\n'
-            '  ffbayes publish --year Y          stage-dashboard + cloud mirror\n\n'
-            'Aliases: pipeline and split are the same as pre-draft.\n\n'
-            'Examples:\n'
-            '  ffbayes pre-draft\n'
-            '  ffbayes draft-strategy --draft-position 3 --league-size 12\n'
-            '  ffbayes stage-dashboard --year 2026\n'
-            '  ffbayes draft-retrospective --year 2026\n\n'
-            'Extra arguments after the command are forwarded to the underlying module.'
+            'Operator workflow:\n'
+            '  ffbayes dashboard --year 2026\n\n'
+            'Lower-level collection, validation, modelling, publishing, and retrospective\n'
+            'commands remain developer/maintenance surfaces and are intentionally hidden.'
         ),
     )
     parser.add_argument('--version', action='version', version=f'ffbayes {_version()}')
 
     subparsers = parser.add_subparsers(dest='command', metavar='command')
     for spec in COMMANDS:
+        if not spec.public:
+            continue
         subparsers.add_parser(
             spec.name,
             add_help=False,
-            help=spec.help_text,
+            help=spec.help_text if spec.public else argparse.SUPPRESS,
             aliases=list(spec.aliases),
             formatter_class=argparse.RawDescriptionHelpFormatter,
             epilog=f'Forwards to `{spec.module}`.',
@@ -192,12 +192,24 @@ def main(argv: Iterable[str] | None = None) -> int:
         parser.print_help()
         return 0
 
-    parsed_args, remaining_args = parser.parse_known_args(args_list)
-    if parsed_args.command is None:
+    if args_list[0] in {'--help', '-h'}:
         parser.print_help()
         return 0
+    if args_list[0] == '--version':
+        parser.parse_args(args_list)
+        return 0
 
-    return dispatch(parsed_args.command, remaining_args)
+    command = args_list[0]
+    canonical_name = _ALIAS_TO_NAME.get(command, command)
+    if canonical_name not in _COMMAND_BY_NAME:
+        parser.error(f'unknown command: {command}')
+    remaining_args = args_list[1:]
+    if '--help' in remaining_args and canonical_name != 'dashboard':
+        print(
+            f'{command}: developer/maintenance command; help is side-effect free and no work is run.'
+        )
+        return 0
+    return dispatch(command, remaining_args)
 
 
 if __name__ == '__main__':
