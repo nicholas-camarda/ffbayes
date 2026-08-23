@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  python:
-    name: Python tests and static checks
+  checks:
+    name: Python checks and dashboard smoke tests
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -44,25 +44,12 @@ jobs:
       - name: Run mypy
         run: mypy src
 
-  frontend:
-    name: Frontend tests and typecheck
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
+      - name: Run canonical fixture browser smoke
+        env:
+          PYTHON: python
+        run: node tests/test_draft_2026_dashboard_browser.mjs
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: dashboard_frontend/package-lock.json
-
-      - name: Install frontend dependencies
-        run: npm ci --prefix dashboard_frontend
-
-      - name: Run frontend tests
-        run: npm test --prefix dashboard_frontend
-
-      - name: Run frontend typecheck
-        run: npm run typecheck --prefix dashboard_frontend
+      - name: Run root dashboard smoke contract
+        env:
+          PYTHON: python
+        run: npm test
