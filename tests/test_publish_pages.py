@@ -153,12 +153,42 @@ def test_stage_pages_site_prunes_noncanonical_surface_entries(tmp_path):
 
 def test_stage_pages_site_normalizes_local_paths_from_public_payload(tmp_path):
     from ffbayes.publish_pages import stage_pages_site
+    from ffbayes.utils.path_constants import get_runtime_root
 
     source_html = tmp_path / 'draft_board_2026.html'
     source_payload = tmp_path / 'dashboard_payload_2026.json'
+    runtime_root = get_runtime_root()
     source_html.write_text('<html><body>dashboard</body></html>', encoding='utf-8')
     source_payload.write_text(
-        '{"generated_at": "2026-04-04T18:35:49", "analysis_provenance": {"sources": {"season_history": {"source_path": "/Users/ncamarda/Workspaces/ffbayes/runtime/inputs/raw/season_datasets"}}}, "decision_evidence": {"freshness": {"source_path": "/Users/ncamarda/Workspaces/ffbayes/runtime/inputs/processed/unified_dataset/unified_dataset.csv"}}, "war_room_visuals": {"schema_version": "war_room_visuals_v1"}}',
+        json.dumps(
+            {
+                'generated_at': '2026-04-04T18:35:49',
+                'analysis_provenance': {
+                    'sources': {
+                        'season_history': {
+                            'source_path': str(
+                                runtime_root
+                                / 'inputs'
+                                / 'raw'
+                                / 'season_datasets'
+                            )
+                        }
+                    }
+                },
+                'decision_evidence': {
+                    'freshness': {
+                        'source_path': str(
+                            runtime_root
+                            / 'inputs'
+                            / 'processed'
+                            / 'unified_dataset'
+                            / 'unified_dataset.csv'
+                        )
+                    }
+                },
+                'war_room_visuals': {'schema_version': 'war_room_visuals_v1'},
+            }
+        ),
         encoding='utf-8',
     )
 
@@ -171,7 +201,7 @@ def test_stage_pages_site_normalizes_local_paths_from_public_payload(tmp_path):
     )
 
     payload_text = (output_dir / 'dashboard_payload.json').read_text(encoding='utf-8')
-    assert '/Users/' not in payload_text
+    assert str(runtime_root) not in payload_text
     assert '<runtime-root>/inputs/raw/season_datasets' in payload_text
     assert '<runtime-root>/inputs/processed/unified_dataset/unified_dataset.csv' in payload_text
 
