@@ -88,14 +88,16 @@ def validate_data_quality():
     print('🔍 Validating data quality...')
 
     # Check individual datasets
-    from ffbayes.utils.path_constants import SEASON_DATASETS_DIR
+    from ffbayes.utils.path_constants import SEASON_DATASETS_DIR as _DEFAULT_SEASON_DIR
 
-    season_files = glob.glob(str(SEASON_DATASETS_DIR / '*season.csv'))
+    season_dir = globals().get('SEASON_DATASETS_DIR', _DEFAULT_SEASON_DIR)
+    season_files = glob.glob(str(season_dir / '*season.csv'))
 
     validation_results = {
         'season_files': len(season_files),
         'total_rows': 0,
         'missing_data': 0,
+        'invalid_dates': 0,
         'quality_score': 100,
         'errors': [],
         'blockers': [],
@@ -156,6 +158,25 @@ def validate_data_quality():
 
                     df_core = df[core_columns]
 
+                    parsed_dates = pd.to_datetime(
+                        df_core['Date'], errors='coerce', format='mixed'
+                    )
+                    invalid_dates = int(parsed_dates.isna().sum())
+                    validation_results['invalid_dates'] += invalid_dates
+                    invalid_date_fraction = invalid_dates / max(1, len(df_core))
+                    if invalid_date_fraction > 0.05:
+                        _append_blocker(
+                            validation_results,
+                            f'{year}: severe invalid dates '
+                            f'({invalid_dates} of {len(df_core)}, '
+                            f'{invalid_date_fraction:.1%})',
+                        )
+                    elif invalid_dates:
+                        validation_results['warnings'].append(
+                            f'{year}: invalid dates ({invalid_dates} of {len(df_core)}, '
+                            f'{invalid_date_fraction:.1%})'
+                        )
+
                     # CRITICAL: Fantasy point columns required for validation
                     fp_cols = [
                         c for c in ['FantPt', 'FantPtPPR'] if c in df_core.columns
@@ -202,9 +223,15 @@ def validate_data_quality():
             'No fallbacks allowed.'
         )
 
-    # Quality score remains 100 if any files are present; warnings and errors are reported separately.
     if validation_results['season_files'] > 0:
-        validation_results['quality_score'] = 100.0
+        valid_date_fraction = 1.0 - (
+            validation_results['invalid_dates']
+            / max(1, validation_results['total_rows'])
+        )
+        score = 100.0 * valid_date_fraction - 10.0 * files_with_errors
+        if validation_results['blockers']:
+            score = min(score, 79.0)
+        validation_results['quality_score'] = max(0.0, round(score, 1))
 
     return validation_results
 
@@ -240,7 +267,7 @@ def perform_data_consistency_checks(df, year):
         # Check date format consistency
         if 'Date' in df.columns:
             # Vectorized date parsing; no per-row exceptions
-            parsed_dates = pd.to_datetime(df['Date'], errors='coerce')
+            parsed_dates = pd.to_datetime(df['Date'], errors='coerce', format='mixed')
             date_errors = parsed_dates.isna().sum()
             if date_errors > 0:
                 total = max(1, len(df))

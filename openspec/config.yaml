@@ -6,7 +6,7 @@ context: |
   Interfaces: extend the unified `ffbayes` CLI and existing `project.scripts` entrypoints before adding new standalone scripts.
   Testing: Python coverage is pytest in `tests/`; dashboard publication also has smoke coverage via `node tests/dashboard_smoke.mjs` and `tests/test_publish_pages.py`.
   Lint/type style: Ruff formatting and lint rules live in `pyproject.toml` (single quotes, space indentation); `mypy src` is the repo type-check entrypoint.
-  Paths: keep path policy in `src/ffbayes/utils/path_constants.py`; default runtime writes go to `~/ProjectsRuntime/ffbayes` and cloud mirrors to `~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes` unless explicit env overrides are used.
+  Paths: keep path policy in `src/ffbayes/utils/path_constants.py`; the repository lives at `~/Workspaces/ffbayes/source`, default runtime writes go to `~/Workspaces/ffbayes/runtime`, and cloud mirrors go to `~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/ffbayes` unless explicit env overrides are used.
   Artifact flow: canonical outputs are year-scoped under `runs/<year>/pre_draft/...`; `publish-pages` stages repo-tracked `site/` files from runtime dashboard HTML and payload.
   Domain constraint: only the `pre_draft` phase is supported, so preserve existing `pre_draft`, `draft_strategy`, and dashboard artifact naming unless a migration is explicit.
 

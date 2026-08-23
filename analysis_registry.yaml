@@ -1,6 +1,6 @@
 project_type: sideproject
-runtime_home: ~/ProjectsRuntime/ffbayes
-cloud_home: ~/Library/CloudStorage/OneDrive-Personal/SideProjects/ffbayes
+runtime_home: ~/Workspaces/ffbayes/runtime
+cloud_home: ~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/ffbayes
 publish_root_name: Analysis
 publish_layout: split-data-flat-analysis-v1
 publish_denylist:

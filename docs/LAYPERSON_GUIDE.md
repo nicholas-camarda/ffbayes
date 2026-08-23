@@ -3,8 +3,9 @@
 Audience: draft users who want the board explained in plain language, without
 reading model code.
 
-Scope: the supported `pre-draft` workflow, from building the board to reading it
-on draft day.
+Scope: the current `ffbayes dashboard --year 2026` workflow, from opening the
+local board to reading it on draft day. Older workflow names in historical
+notes are not current operator instructions.
 
 Trust boundary: the board is decision support. It predicts and ranks from
 historical evidence; it does not prove what will happen.

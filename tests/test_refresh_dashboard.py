@@ -219,8 +219,16 @@ def test_refresh_runtime_dashboard_rebuilds_html_and_stages_pages(tmp_path, monk
 def test_check_dashboard_freshness_reports_fresh_and_stale(tmp_path, monkeypatch):
     import ffbayes.refresh_dashboard as refresh_dashboard
 
+    project_root = tmp_path / 'project'
     runtime_root = tmp_path / 'runtime'
+    outside_project_root = tmp_path / 'outside-project'
+    outside_dashboard = outside_project_root / 'dashboard'
+    outside_dashboard.mkdir(parents=True)
+    sentinel = outside_dashboard / 'sentinel.txt'
+    sentinel.write_text('untouched', encoding='utf-8')
+    project_root.mkdir()
     runtime_root.mkdir()
+    monkeypatch.setenv('FFBAYES_PROJECT_ROOT', str(project_root))
     monkeypatch.setenv('FFBAYES_RUNTIME_ROOT', str(runtime_root))
 
     payload_path = (
@@ -299,7 +307,7 @@ def test_check_dashboard_freshness_reports_fresh_and_stale(tmp_path, monkeypatch
     )
 
     html_path = payload_path.with_name('draft_board_2026.html')
-    refresh_dashboard.refresh_runtime_dashboard(
+    refreshed = refresh_dashboard.refresh_runtime_dashboard(
         year=2026,
         payload_path=payload_path,
         output_html=html_path,
@@ -323,6 +331,13 @@ def test_check_dashboard_freshness_reports_fresh_and_stale(tmp_path, monkeypatch
     )
     assert stale['status'] == 'stale'
     assert stale['stale_paths'] == [str(html_path)]
+    assert refreshed['repo_dashboard_dir'] == project_root / 'dashboard'
+    assert refreshed['repo_dashboard_index'] == project_root / 'dashboard' / 'index.html'
+    assert refreshed['repo_dashboard_payload'] == (
+        project_root / 'dashboard' / 'dashboard_payload.json'
+    )
+    assert sentinel.exists()
+    assert sentinel.read_text(encoding='utf-8') == 'untouched'
 
 
 def test_check_dashboard_freshness_accepts_staged_site_publish_provenance(

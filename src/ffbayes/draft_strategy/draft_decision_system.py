@@ -6804,7 +6804,7 @@ def _stage_runtime_dashboard_shortcuts(
 
     Canonical, versioned artifacts stay under:
     `<runtime_root>/seasons/<year>/draft_strategy/`, where `<runtime_root>`
-    defaults to `~/ProjectsRuntime/ffbayes`.
+    defaults to `~/Workspaces/ffbayes/runtime`.
 
     For convenience, we also stage stable entrypoints:
     - runtime root: `<runtime_root>/dashboard/index.html`

@@ -214,3 +214,38 @@ def test_validation_normalizes_expected_positions_and_dates(tmp_path, monkeypatc
     assert not any(
         'fantasy point outliers' in issue for issue in results['outlier_detection']
     )
+
+
+def test_severe_invalid_dates_lower_quality_and_block_pipeline(tmp_path, monkeypatch):
+    season_dir = tmp_path / 'season_datasets'
+    raw_dir = tmp_path / 'raw'
+    season_dir.mkdir(parents=True)
+    raw_dir.mkdir(parents=True)
+    rows = []
+    for index in range(20):
+        rows.append(
+            {
+                'G#': index + 1,
+                'Date': 'not-a-date' if index < 11 else f'2025-09-{index:02d}',
+                'Tm': 'BUF',
+                'Away': 'NYJ',
+                'Opp': 'NYJ',
+                'FantPt': 10.0,
+                'FantPtPPR': 12.0,
+                'Name': f'Player {index}',
+                'PlayerID': f'p{index}',
+                'Position': 'WR',
+                'Season': 2025,
+                'is_home': 1,
+            }
+        )
+    pd.DataFrame(rows).to_csv(season_dir / '2025season.csv', index=False)
+
+    monkeypatch.setattr(validate_data, 'SEASON_DATASETS_DIR', season_dir, raising=False)
+    monkeypatch.setattr(validate_data, 'RAW_DATA_DIR', raw_dir, raising=False)
+    monkeypatch.setattr(validate_data, 'ProgressMonitor', _DummyProgressMonitor, raising=False)
+
+    results = validate_data.validate_data_quality()
+
+    assert results['quality_score'] <= 45.0
+    assert any('invalid dates' in blocker for blocker in results['blockers'])

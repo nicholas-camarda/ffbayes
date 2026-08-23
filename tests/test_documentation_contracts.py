@@ -1,391 +1,159 @@
 from __future__ import annotations
 
-import json
-import re
 import shlex
 from pathlib import Path
 
 import ffbayes.cli as cli
-from ffbayes.analysis.draft_retrospective import (
-    build_parser as build_retrospective_parser,
-)
-from ffbayes.refresh_dashboard import build_parser as build_refresh_dashboard_parser
-from ffbayes.stage_dashboard import build_parser as build_stage_dashboard_parser
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-README_PATH = REPO_ROOT / 'README.md'
 DOCS_DIR = REPO_ROOT / 'docs'
-SITE_DIR = REPO_ROOT / 'site'
-
-GUIDE_SUITE_PATHS = [
+CURRENT_DOCS = [
+    REPO_ROOT / 'README.md',
+    DOCS_DIR / 'README.md',
     DOCS_DIR / 'DASHBOARD_OPERATOR_GUIDE.md',
+    DOCS_DIR / 'DATA_LINEAGE_AND_PATHS.md',
+    DOCS_DIR / 'METRIC_REFERENCE.md',
+    DOCS_DIR / 'OUTPUT_EXAMPLES.md',
     DOCS_DIR / 'DASHBOARD_FRONTEND_ARCHITECTURE.md',
     DOCS_DIR / 'DASHBOARD_FRONTEND_CUTOVER.md',
-    DOCS_DIR / 'LAYPERSON_GUIDE.md',
-    DOCS_DIR / 'TECHNICAL_DEEP_DIVE.md',
-    DOCS_DIR / 'METRIC_REFERENCE.md',
-    DOCS_DIR / 'DATA_LINEAGE_AND_PATHS.md',
 ]
-
-DOC_PATHS = [
-    README_PATH,
-    DOCS_DIR / 'README.md',
-    DOCS_DIR / 'OUTPUT_EXAMPLES.md',
-    *GUIDE_SUITE_PATHS,
-]
-
-
-def _reject_json_constant(value):
-    raise ValueError(f'Invalid JSON constant: {value}')
-
-
-def _loads_strict_json(text):
-    return json.loads(text, parse_constant=_reject_json_constant)
-
-
-REQUIRED_GUIDE_MARKERS = [
-    'Audience:',
-    'Scope:',
-    'Trust boundary:',
-    '## What This Is',
-    '## When To Use It',
-    '## What To Inspect',
-    '## Interpretation Boundaries',
-    '## Commands And Paths',
-]
-
-REQUIRED_CANONICAL_TERMS = [
-    'Board value score',
-    'Simple VOR proxy',
-    'Availability to next pick',
-    'Expected regret',
-    'Fragility score',
-    'Upside score',
-    'Decision evidence',
-    'Freshness and provenance',
-    'Projection breakdown',
-    'Season total mean',
-    'Rate when active',
-    'Expected games',
-    'Availability rate',
-]
-
-COMMAND_SOURCE_ALLOWLIST = {
-    'pre-draft': {'--year', '--stage-pages'},
-    'draft-strategy': {
-        '--draft-position',
-        '--league-size',
-        '--risk-tolerance',
-        '--all-slots',
-        '--output-dir',
-    },
-    'publish': {'--year'},
-    'refresh-dashboard': {
-        option
-        for action in build_refresh_dashboard_parser()._actions
-        for option in action.option_strings
-        if option.startswith('--')
-    },
-    'stage-dashboard': {
-        option
-        for action in build_stage_dashboard_parser()._actions
-        for option in action.option_strings
-        if option.startswith('--')
-    },
-    'draft-retrospective': {
-        option
-        for action in build_retrospective_parser()._actions
-        for option in action.option_strings
-        if option.startswith('--')
-    },
-    'collect': set(),
-    'validate': set(),
-    'preprocess': set(),
-    'mc': set(),
-    'bayesian-vor': set(),
-    'draft-backtest': set(),
-}
 
 
 def _read(path: Path) -> str:
     return path.read_text(encoding='utf-8')
 
 
-def _all_doc_text() -> str:
-    return '\n'.join(_read(path) for path in DOC_PATHS)
-
-
-def _extract_bash_commands(path: Path) -> list[str]:
+def _bash_commands(path: Path) -> list[str]:
     commands: list[str] = []
-    inside_bash = False
-    current: list[str] = []
-
-    for raw_line in _read(path).splitlines():
-        line = raw_line.rstrip()
-        stripped = line.strip()
-        if stripped == '```bash':
-            inside_bash = True
-            current = []
-            continue
-        if inside_bash and stripped == '```':
-            if current:
-                commands.extend(_normalize_bash_lines(current))
-            inside_bash = False
-            current = []
-            continue
-        if inside_bash:
-            current.append(line)
-    return commands
-
-
-def _normalize_bash_lines(lines: list[str]) -> list[str]:
-    commands: list[str] = []
+    in_bash = False
     active = ''
-    for raw_line in lines:
-        line = raw_line.strip()
-        if not line or line.startswith('#'):
+    for raw in _read(path).splitlines():
+        line = raw.strip()
+        if line == '```bash':
+            in_bash = True
             continue
-        if active:
-            active = f'{active} {line}'
-        else:
-            active = line
-        if active.endswith('\\'):
-            active = active[:-1].rstrip()
+        if in_bash and line == '```':
+            if active:
+                commands.append(active)
+            active = ''
+            in_bash = False
             continue
-        commands.append(active)
-        active = ''
-    if active:
-        commands.append(active)
+        if in_bash and line and not line.startswith('#'):
+            active = f'{active} {line}'.strip() if active else line
+            if active.endswith('\\'):
+                active = active[:-1].rstrip()
+            elif active:
+                commands.append(active)
+                active = ''
     return [command for command in commands if command.startswith('ffbayes ')]
 
 
-def _extract_flags(command: str) -> tuple[str, list[str]]:
-    tokens = shlex.split(command)
-    assert tokens[0] == 'ffbayes'
-    subcommand = tokens[1]
-    flags = []
-    for token in tokens[2:]:
-        if token.startswith('--'):
-            flags.append(token.split('=', 1)[0])
-    return subcommand, flags
-
-
-def test_docs_index_links_the_full_guide_suite():
-    docs_index = _read(DOCS_DIR / 'README.md')
-    for relative_name in [
+def test_docs_index_links_current_guides() -> None:
+    text = _read(DOCS_DIR / 'README.md')
+    for filename in [
         'DASHBOARD_OPERATOR_GUIDE.md',
-        'LAYPERSON_GUIDE.md',
-        'TECHNICAL_DEEP_DIVE.md',
-        'METRIC_REFERENCE.md',
         'DATA_LINEAGE_AND_PATHS.md',
+        'METRIC_REFERENCE.md',
         'OUTPUT_EXAMPLES.md',
+        'DASHBOARD_FRONTEND_ARCHITECTURE.md',
     ]:
-        assert relative_name in docs_index
+        assert filename in text
 
 
-def test_each_guide_has_shared_documentation_conventions():
-    for path in GUIDE_SUITE_PATHS:
-        text = _read(path)
-        for marker in REQUIRED_GUIDE_MARKERS:
-            assert marker in text, f'{path.name} is missing {marker!r}'
+def test_operator_guide_has_shared_conventions() -> None:
+    text = _read(DOCS_DIR / 'DASHBOARD_OPERATOR_GUIDE.md')
+    for marker in [
+        'Audience:',
+        'Scope:',
+        'Trust boundary:',
+        '## What This Is',
+        '## When To Use It',
+        '## What To Inspect',
+        '## Interpretation Boundaries',
+        '## Commands And Paths',
+    ]:
+        assert marker in text
 
 
-def test_documented_commands_use_supported_subcommands_and_flags():
-    valid_subcommands = {spec.name for spec in cli.COMMANDS}
-
-    for path in DOC_PATHS:
-        for command in _extract_bash_commands(path):
-            subcommand, flags = _extract_flags(command)
-            assert subcommand in valid_subcommands, f'{path.name}: unknown {subcommand}'
-            allowed_flags = COMMAND_SOURCE_ALLOWLIST[subcommand]
-            for flag in flags:
-                assert flag in allowed_flags, (
-                    f'{path.name}: unsupported flag {flag} for {subcommand}'
-                )
+def test_current_docs_document_one_operator_command_and_two_leagues() -> None:
+    combined = '\n'.join(_read(path) for path in CURRENT_DOCS)
+    assert combined.count('ffbayes dashboard --year 2026') >= 3
+    assert "Bill's Underbit" in combined
+    assert 'Camarda-Klein Family' in combined
+    assert 'runtime/runs/dashboard_2026' in combined
+    assert 'loopback' in combined.lower()
+    assert 'nflverse' in combined
 
 
-def test_docs_do_not_use_known_stale_command_examples():
-    combined = _all_doc_text()
-    assert '--payload /path/to/dashboard_payload.json' not in combined
-    assert '--payload ' not in combined
-    assert 'Just get VOR rankings' not in combined
-    assert 'ffbayes agg' not in combined
-    assert 'ffbayes compare' not in combined
-    assert 'hybrid_mc_bayesian' not in combined
-    assert 'hybrid_model_results.json' not in combined
-    assert 'hierarchical_sampled_bayes' not in combined
-    assert 'sampled hierarchical bayes' not in combined.lower()
-
-
-def test_supported_cli_and_docs_do_not_expose_sampled_eval_lane():
-    cli_text = (REPO_ROOT / 'src' / 'ffbayes' / 'cli.py').read_text(encoding='utf-8')
-    combined = _all_doc_text()
-
-    assert 'sampled_bayes' not in cli_text
-    assert 'hierarchical_sampled_bayes' not in cli_text
-    lowered = combined.lower()
-    assert 'hierarchical empirical-bayes estimator' in lowered
-    assert 'diagnostics-only evaluation workflow' not in lowered
-
-
-def test_docs_limit_rookie_context_to_live_board_support():
-    lowered = ' '.join(_all_doc_text().lower().split())
-
-    assert 'broad historical prospect-feature backfill' in lowered
-    assert 'current and immediately prior draft years' in lowered
-    assert 'cannot publish silently null rookie context' in lowered
-    assert 'draft-time-safe features' not in lowered
-    assert 'historical draft/combine modeling support' not in lowered
-    assert 'historical combine backfill' not in lowered
-
-
-def test_docs_explain_unavailable_validation_metrics():
-    combined = _all_doc_text().lower()
-    assert 'not estimable' in combined
-    assert 'does not mean a measured zero relationship' in combined
-
-
-def test_technical_math_avoids_implementation_names_inside_tex_text_macros():
-    technical = _read(DOCS_DIR / 'TECHNICAL_DEEP_DIVE.md')
-
-    fragile_patterns = [
-        r'\\mathrm\{[^}]*_[^}]*\}',
-        r'\\text\{[^}]*_[^}]*\}',
-    ]
-    for pattern in fragile_patterns:
-        assert not re.search(pattern, technical), pattern
-
-    assert r'\operatorname' not in technical
-
-
-def test_docs_path_contract_and_authority_language_remain_explicit():
-    combined = _all_doc_text()
-
-    required_paths = [
-        'seasons/<year>/draft_strategy/draft_board_<year>.xlsx',
-        'seasons/<year>/draft_strategy/dashboard_payload_<year>.json',
-        'seasons/<year>/draft_strategy/draft_board_<year>.html',
-        'seasons/<year>/draft_strategy/draft_decision_backtest_<year_range>.json',
-        'seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_<year>.json',
-        'seasons/<year>/draft_strategy/model_outputs/player_forecast/player_forecast_validation_<year_range>.json',
-        'seasons/<year>/diagnostics/validation/player_forecast_validation_summary_<year_range>.json',
-        '<runtime-root>/dashboard/index.html',
+def test_current_docs_do_not_advertise_legacy_board_commands() -> None:
+    operator_surface = '\n'.join(
+        _read(path)
+        for path in [
+            REPO_ROOT / 'README.md',
+            DOCS_DIR / 'README.md',
+            DOCS_DIR / 'DASHBOARD_OPERATOR_GUIDE.md',
+        ]
+    )
+    for term in [
+        'ffbayes pre-draft',
+        'ffbayes stage-dashboard',
+        'ffbayes draft-strategy',
         'dashboard/index.html',
-        'dashboard/dashboard_payload.json',
-        'site/index.html',
-        'site/dashboard_payload.json',
-        'site/publish_provenance.json',
-    ]
-    for required_path in required_paths:
-        assert required_path in combined
-
-    assert 'authoritative runtime' in combined.lower()
-    assert 'derived local shortcut' in combined.lower()
-    assert 'derived publish surface' in combined.lower()
-    assert 'runs/<year>' not in combined
-    assert 'data/raw' not in combined
-    assert 'data/processed' not in combined
-
-
-def test_docs_use_canonical_terms_for_core_metrics_and_trust_surfaces():
-    combined = _all_doc_text()
-    for term in REQUIRED_CANONICAL_TERMS:
-        assert term in combined
-
-    conflicting_terms = [
-        'overall model score',
-        'validated universally',
-        'proves the board',
-        'deprecated or compatibility-only',
-    ]
-    lowered = combined.lower()
-    for term in conflicting_terms:
-        assert term not in lowered
-
-
-def test_optional_outputs_are_clearly_marked_optional():
-    output_examples = _read(DOCS_DIR / 'OUTPUT_EXAMPLES.md')
-    assert '## Optional Analyses' in output_examples
-    assert 'not be presented as default `ffbayes pre-draft` outputs' in output_examples
-
-
-def test_committed_site_payload_contains_required_guide_fields_and_consistent_provenance():
-    payload = _loads_strict_json(
-        (SITE_DIR / 'dashboard_payload.json').read_text(encoding='utf-8')
-    )
-    provenance = _loads_strict_json(
-        (SITE_DIR / 'publish_provenance.json').read_text(encoding='utf-8')
-    )
-
-    for key in [
-        'runtime_controls',
-        'analysis_provenance',
-        'decision_evidence',
-        'metric_glossary',
-        'model_overview',
-        'publish_provenance',
+        '--stage-pages',
     ]:
-        assert key in payload
-
-    if isinstance(payload.get('war_room_visuals'), dict):
-        assert payload['war_room_visuals']['schema_version'] == 'war_room_visuals_v1'
-        for key in ['timing_frontier', 'positional_cliffs', 'comparative_explainer']:
-            assert key in payload['war_room_visuals']
-
-    assert provenance['schema_version'] == 'publish_provenance_v1'
-    assert payload['publish_provenance']['schema_version'] == 'publish_provenance_v1'
-    assert provenance['surface_sync']['status'] == 'synchronized'
-    assert payload['publish_provenance']['surface_sync']['status'] == 'synchronized'
-    assert payload['publish_provenance']['season_year'] == provenance['season_year']
-    assert payload['publish_provenance']['source_html'] == provenance['source_html']
-    assert (
-        payload['publish_provenance']['source_payload'] == provenance['source_payload']
-    )
-    assert 'supported_model' in payload['model_overview']
-    payload_text = (SITE_DIR / 'dashboard_payload.json').read_text(encoding='utf-8')
-    assert '/Users/' not in payload_text
-    assert 'ProjectsRuntime' not in payload_text
-    assert 'data/raw' not in payload_text
-    assert 'data/processed' not in payload_text
+        assert term not in operator_surface
 
 
-def test_metric_reference_terms_align_with_committed_payload_labels():
-    metric_reference = _read(DOCS_DIR / 'METRIC_REFERENCE.md')
-    payload = _loads_strict_json(
-        (SITE_DIR / 'dashboard_payload.json').read_text(encoding='utf-8')
-    )
-    glossary = payload.get('metric_glossary') or {}
+def test_documented_ffbayes_commands_match_the_public_cli() -> None:
+    public_commands = {'dashboard'}
+    for path in CURRENT_DOCS:
+        for command in _bash_commands(path):
+            tokens = shlex.split(command)
+            assert tokens[0] == 'ffbayes'
+            assert tokens[1] in public_commands
+            assert '--year' in tokens
+            assert tokens[tokens.index('--year') + 1] == '2026'
 
-    for key in [
-        'draft_score',
-        'replacement_delta',
-        'availability_to_next_pick',
-        'expected_regret',
-        'fragility_score',
-        'upside_score',
+    help_text = cli.build_parser().format_help()
+    assert 'ffbayes dashboard --year 2026' in help_text
+    assert 'pre-draft' not in help_text
+
+
+def test_metric_reference_defines_current_model_labels() -> None:
+    text = _read(DOCS_DIR / 'METRIC_REFERENCE.md')
+    for label in [
+        'Projected points',
+        'Replacement level',
+        'VOR',
+        'Scarcity',
+        'ADP',
+        'Availability to next pick',
+        'Board value score',
+        'Simple VOR proxy',
+        'Expected regret',
+        'Fragility score',
+        'Upside score',
+        'Decision evidence',
+        'Freshness and provenance',
+        'Projection breakdown',
     ]:
-        label = glossary[key]['label']
-        assert label in metric_reference
+        assert label in text
+    assert 'does not mean a measured zero relationship' in text
 
 
-def test_metric_reference_uses_committed_payload_glossary_keys():
-    metric_reference = _read(DOCS_DIR / 'METRIC_REFERENCE.md')
-    payload = _loads_strict_json(
-        (SITE_DIR / 'dashboard_payload.json').read_text(encoding='utf-8')
-    )
-    glossary = payload.get('metric_glossary') or {}
+def test_output_example_records_stable_ids_and_provenance() -> None:
+    text = _read(DOCS_DIR / 'OUTPUT_EXAMPLES.md')
+    for marker in [
+        '"schema_version": "draft_2026_v1"',
+        '"espn_id"',
+        '"runtime_state"',
+        '"state_sha256"',
+        '"source_manifests"',
+    ]:
+        assert marker in text
 
-    for key in glossary:
-        assert f'`{key}`' in metric_reference
 
-    assert '`availability_rate`' not in metric_reference
-
-
-def test_docs_pair_paths_and_commands_with_contextual_language():
-    operator_guide = _read(DOCS_DIR / 'DASHBOARD_OPERATOR_GUIDE.md')
-    path_guide = _read(DOCS_DIR / 'DATA_LINEAGE_AND_PATHS.md')
-
-    assert 'Purpose:' in operator_guide
-    assert 'Authority' in operator_guide
-    assert 'Purpose:' in path_guide
-    assert 'Authority' in path_guide
+def test_current_docs_state_external_github_is_not_updated_by_worktree() -> None:
+    combined = '\n'.join(_read(path) for path in CURRENT_DOCS)
+    assert 'public GitHub' in combined
+    assert 'unpushed worktree' in combined

@@ -158,7 +158,7 @@ def test_stage_pages_site_normalizes_local_paths_from_public_payload(tmp_path):
     source_payload = tmp_path / 'dashboard_payload_2026.json'
     source_html.write_text('<html><body>dashboard</body></html>', encoding='utf-8')
     source_payload.write_text(
-        '{"generated_at": "2026-04-04T18:35:49", "analysis_provenance": {"sources": {"season_history": {"source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/inputs/raw/season_datasets"}}}, "decision_evidence": {"freshness": {"source_path": "/Users/ncamarda/ProjectsRuntime/ffbayes/inputs/processed/unified_dataset/unified_dataset.csv"}}, "war_room_visuals": {"schema_version": "war_room_visuals_v1"}}',
+        '{"generated_at": "2026-04-04T18:35:49", "analysis_provenance": {"sources": {"season_history": {"source_path": "/Users/ncamarda/Workspaces/ffbayes/runtime/inputs/raw/season_datasets"}}}, "decision_evidence": {"freshness": {"source_path": "/Users/ncamarda/Workspaces/ffbayes/runtime/inputs/processed/unified_dataset/unified_dataset.csv"}}, "war_room_visuals": {"schema_version": "war_room_visuals_v1"}}',
         encoding='utf-8',
     )
 

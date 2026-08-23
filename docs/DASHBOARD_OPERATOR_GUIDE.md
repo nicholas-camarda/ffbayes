@@ -1,409 +1,101 @@
 # Dashboard Operator Guide
 
-Audience: the person running the draft-day workflow.
+Audience: the person running the 2026 fantasy-football draft.
 
-Scope: how to build, open, trust, stage, finalize, and later evaluate the current
-draft dashboard.
+Scope: the one local command, the two league profiles, draft-day controls,
+blocked states, and snapshots.
 
-Trust boundary: the runtime HTML and payload are authoritative. Repo
-`dashboard/` and `site/` are derived copies. Decision evidence is internal
-holdout evidence, not external proof.
+Trust boundary: the loopback service owns one fresh, validated input snapshot;
+the browser displays the Python response and never supplies valuation defaults.
 
 ## What This Is
 
-This is the runbook. It tells you which command to run, which dashboard to open,
-what to check before trusting it, and how to capture the final draft.
+The supported operator workflow is:
+
+```bash
+ffbayes dashboard --year 2026
+```
+
+It fetches only public ESPN and nflverse data, validates the current-player
+universe, projections, ADP, replacement depth, league rules, and provenance,
+then opens a local dashboard. No account or private-league connection is used.
 
 ## When To Use It
 
-Use this guide when you need to:
-
-- run the supported workflow end to end
-- know which dashboard file to open
-- understand the main dashboard sections
-- stage GitHub Pages without confusing it with the local working surface
-- import finalized draft artifacts and run the retrospective later
+Use this guide when you need to run the dashboard before or during the draft.
+Draft slot is entered at runtime because it is not known in advance. The same
+command is the only supported way to create the current 2026 board.
 
 ## What To Inspect
 
-Primary commands:
+Select the appropriate independent profile:
 
-- `ffbayes pre-draft`
-- `ffbayes pre-draft --stage-pages`
-- `ffbayes draft-strategy`
-- `ffbayes stage-dashboard --year <year>`
-- `ffbayes draft-retrospective --import-finalized ... --ingest-only --year <year>`
-- `ffbayes draft-retrospective --year <year>`
+| Profile | League identity | Roster |
+| --- | --- | --- |
+| `league-1-2026` | Bill's Underbit… — Med School Friends | 1 QB, 2 RB, 2 WR, 1 TE, 2 FLEX, 1 D/ST, 1 K, 6 bench, 1 IR |
+| `league-2-2026` | Nicholas's Nif… — Camarda-Klein Family | 1 QB, 2 RB, 2 WR, 1 TE, 1 FLEX, 1 D/ST, 1 K, 7 bench, 1 IR |
 
-Primary surfaces:
-
-- authoritative runtime HTML: `seasons/<year>/draft_strategy/draft_board_<year>.html`
-- authoritative runtime payload: `seasons/<year>/draft_strategy/dashboard_payload_<year>.json`
-- derived runtime-root shortcut: `<runtime-root>/dashboard/index.html`
-- derived local shortcut: `dashboard/index.html`
-- staged Pages copy: `site/index.html`
+Stable scoring, team count, snake format, FLEX eligibility, and waiver fields
+are displayed read-only. Enter draft slot (1 through team count) and current
+overall pick explicitly. Until a slot is entered the board may show valuation,
+but availability and timing actions are `Draft slot required`.
 
 ## Interpretation Boundaries
 
-- Do not treat `site/index.html` as the authoritative local dashboard.
-- Do not treat the recommendation lanes as externally validated truth.
-- Do not assume a visual panel is a separate model. If present, it is an interpretation layer on top of the same board.
-
-## Surface Authority
-
-| Surface | Purpose | Authority |
-| --- | --- | --- |
-| `seasons/<year>/draft_strategy/draft_board_<year>.html` | authoritative local HTML | authoritative |
-| `seasons/<year>/draft_strategy/dashboard_payload_<year>.json` | authoritative local payload | authoritative |
-| `<runtime-root>/dashboard/index.html` | easy local shortcut beside runtime artifacts | derived local shortcut |
-| `<runtime-root>/dashboard/dashboard_payload.json` | paired runtime shortcut payload | derived local shortcut |
-| `dashboard/index.html` | easy local shortcut from the repo root | derived local shortcut |
-| `dashboard/dashboard_payload.json` | paired shortcut payload | derived local shortcut |
-| `site/index.html` | staged GitHub Pages copy | derived publish surface |
-| `site/dashboard_payload.json` | staged Pages payload | derived publish surface |
-| `site/publish_provenance.json` | staged Pages publish metadata | derived publish surface |
+- `draft_now`, `fallback`, and `can_wait` are decision aids, not guarantees.
+- VOR and scarcity are descriptive model outputs, not causal claims.
+- ADP is a market reference; it is not substituted for missing projections.
+- A blocked state means the board is not certified and must not be used.
 
 ## Commands And Paths
 
-### CLI At A Glance
+The normal command surface has one entrypoint. The service prints a loopback URL
+and writes run-scoped material under `runtime/runs/dashboard_2026/<timestamp>/`.
+Snapshots are written under that run's `snapshots/` directory. No `site/`,
+GitHub Pages, cloud mirror, or older staged HTML is consulted by this workflow.
 
-| Tier | When to use it | Command |
-| --- | --- | --- |
-| 1 — full | New data, new season, or full trust refresh | `ffbayes pre-draft` |
-| 1 — full + Pages | Same as tier 1 and update `site/` | `ffbayes pre-draft --stage-pages` |
-| 2 — board | Processed inputs already exist; change league settings or rerun models | `ffbayes draft-strategy` |
-| 3 — dashboard | Payload is current; template/UI iteration or restage Pages only | `ffbayes stage-dashboard --year <year>` |
-| 4 — publish | Stage dashboard and mirror selected runtime artifacts to cloud | `ffbayes publish --year <year>` |
-
-`ffbayes pipeline` and `ffbayes split` are aliases for tier 1 (`pre-draft`).
-`ffbayes refresh-dashboard` is a developer drift-check helper, not the normal operator path.
-
-### Full Supported Refresh
-
-Purpose: rebuild the supported pre-draft stack from source data through dashboard artifacts.
-
-```bash
-ffbayes pre-draft
-```
-
-To rebuild the full workflow and stage the public GitHub Pages copy in the same run:
-
-```bash
-ffbayes pre-draft --stage-pages
-```
-
-### Board-Only Refresh
-
-Purpose: regenerate the board and dashboard from current processed inputs and current league settings.
-
-```bash
-ffbayes draft-strategy
-```
-
-### Dashboard-Only Pages Refresh
-
-Purpose: rebuild dashboard HTML from the authoritative payload and restage the repo's GitHub Pages copy without rerunning collection, preprocessing, or player modeling. Use this when you are iterating on dashboard/template changes only.
-
-```bash
-ffbayes stage-dashboard --year 2026
-```
-
-### Lower-Level Dashboard Helpers
-
-These are developer helpers for narrow checks or unusual staging cases, not the normal operator path.
-
-Purpose: rebuild HTML from an authoritative payload without rerunning the broader analysis stack.
-
-```bash
-ffbayes refresh-dashboard --year 2026
-```
-
-### Dashboard Renderer Selection
-
-Purpose: choose which HTML renderer produces dashboard artifacts. **Default: `frontend`** (React+Vite template committed in the Python package).
-
-Environment variable: `FFBAYES_DASHBOARD_RENDERER=legacy|frontend` (default `frontend` when unset).
-
-- `frontend` — current default; single-file React dashboard (passes the Playwright smoke suite)
-- `legacy` — fallback Python-rendered dashboard if you need to roll back
-
-Normal operator commands use the frontend renderer automatically:
-
-```bash
-ffbayes stage-dashboard --year 2026
-```
-
-Rollback to legacy for one run:
-
-```bash
-FFBAYES_DASHBOARD_RENDERER=legacy ffbayes stage-dashboard --year 2026
-```
-
-If the packaged template is missing, the command fails with instructions to run `npm run build:template` or set `FFBAYES_DASHBOARD_RENDERER=legacy`. Node is only required when frontend source changes, not during normal pipeline runs.
-
-See [DASHBOARD_FRONTEND_CUTOVER.md](DASHBOARD_FRONTEND_CUTOVER.md) for the cutover
-checklist and [DASHBOARD_FRONTEND_ARCHITECTURE.md](DASHBOARD_FRONTEND_ARCHITECTURE.md)
-for the module layout. Legacy rollback imports live in
-`ffbayes.dashboard.legacy_renderer`.
-
-### Frontend Template Build
-
-Purpose: rebuild the committed dashboard template after changing `dashboard_frontend/` source.
-
-```bash
-cd dashboard_frontend && npm ci && npm run build:template
-```
-
-This writes `src/ffbayes/dashboard/assets/dashboard_template.html`. Commit the template when frontend source changes; pipeline runtime never invokes Node.
-
-### Derived-Surface Drift Check
-
-Purpose: verify whether a target HTML file still matches regeneration from its authoritative payload.
-
-```bash
-ffbayes refresh-dashboard --check --json \
-  --payload-path /path/to/dashboard_payload.json \
-  --output-html /path/to/index.html
-```
-
-### Import Finalized Draft Artifacts
-
-Purpose: move browser-downloaded finalized artifacts into the canonical runtime folder.
-
-```bash
-ffbayes draft-retrospective \
-  --import-finalized ~/Downloads/ffbayes_finalized_*_2026_* \
-  --ingest-only \
-  --year 2026
-```
+Lower-level collection, model, publishing, and retrospective modules remain
+developer/maintenance code for tests and research. They are intentionally not
+documented as alternate ways to produce the draft board.
 
 ## Before The Draft
 
-1. Run `ffbayes pre-draft` unless you are intentionally doing a narrower refresh.
-2. Open `dashboard/index.html`.
-3. Confirm the dashboard reflects your league settings.
-4. Check `Freshness and provenance` before trusting the board.
-5. Keep the workbook handy as a tabular backup.
-
-What to inspect in the payload if you need to audit the run:
-
-```json
-{
-  "runtime_controls": {
-    "risk_tolerance_options": ["low", "medium", "high"],
-    "supported_scoring_presets": ["standard", "half_ppr", "ppr"],
-    "active_scoring_preset": "half_ppr"
-  },
-  "analysis_provenance": {
-    "overall_freshness": {
-      "status": "fresh",
-      "override_used": false
-    }
-  }
-}
-```
-
-What to notice:
-
-- `runtime_controls` tells you what the dashboard expects locally
-- `overall_freshness` tells you whether the underlying inputs were fresh or degraded
+1. Run `ffbayes dashboard --year 2026`.
+2. Confirm the status says the source snapshot and coverage validation passed.
+3. Select the league and verify its read-only roster shape.
+4. Enter your draft slot and current overall pick.
+5. Check the freshness/provenance panel and export a snapshot if desired.
 
 ## During The Draft
 
-### Recommendation Lanes
+- Update current overall pick after every selection.
+- Mark another team's selection as **Taken**; mark your selection as **Mine**.
+- Add candidates to **Queue**. The complete state is sent to the service for
+  each recalculation.
+- Switching leagues restores the other profile's independent slot, pick, and
+  player state.
 
-Purpose: separate immediate take-now candidates from fallback options and safer wait candidates.
+Rows show projected points, replacement level, VOR, scarcity, ADP,
+availability at the next snake pick, and the Python-generated action. Stable
+`espn_id` values identify all state actions.
 
-What to inspect:
+## Blocked States
 
-- the top `pick now` candidate
-- the `can wait` lane before passing on a player you like
-- `why_flags`, `Availability to next pick`, and `Expected regret`
+The dashboard remains open with an exact message when ESPN or nflverse is
+unavailable, truncated, stale, wrong-season, or semantically inadequate; when
+league configuration is invalid; when a slot/current pick is impossible; or
+when a provenance digest is inconsistent. It never falls back to an older
+runtime output or a neutral/default market value.
 
-What not to infer:
+## Snapshot Contents
 
-- a `pick now` recommendation is not a guarantee the player is the only correct choice
-- a `can wait` label is not certainty that the player will survive
+A snapshot is a local, read-only JSON artifact containing effective profile
+settings, runtime draft state, board rows, source manifests and SHA-256 values,
+profile/runtime/state/board digests, code revision, and generation time. The
+service writes it atomically only after the board passes provenance validation.
 
-### Player Inspector
+## Historical and Developer Material
 
-Purpose: show the selected player's board value, baseline comparison, risk and upside signals, and supporting reasons.
-
-What to inspect:
-
-- `Board value score`
-- `Simple VOR proxy`
-- `Fragility score`
-- `Upside score`
-- `starter_delta`
-- `why_flags`
-
-Projection detail stays behind the `Projection breakdown` disclosure. That is where the dashboard shows:
-
-- `Season total mean`
-- `Rate when active`
-- `Expected games`
-- `Availability rate`
-- `Current team`
-- `Team change`
-
-When relevant, the same section also surfaces current/prior draft-year rookie context such as draft pick, combine signal, and depth-chart rank. Keep that detail in the inspector; the main board should stay lean.
-
-### Decision Evidence
-
-Purpose: show internal backtest evidence and interpretation limits.
-
-Production dashboard generation requires this evidence to be available and fresh.
-Missing, unavailable, or degraded evidence is a failed dashboard build, not a
-successful dashboard with a warning.
-
-Minimal shape:
-
-```json
-{
-  "decision_evidence": {
-    "status": "available",
-    "headline": "Contextual draft score outperforms the simple VOR proxy in backtests.",
-    "winner": "draft_score",
-    "season_count": 4
-  }
-}
-```
-
-What to inspect:
-
-- evidence status should be `available` on production dashboards
-- the winner label and season count
-- the compact cohort validation table in the first view
-- interpretation limits and freshness status
-- any `n/a` or `not estimable` validation entries as a sign that the slice could not support that metric cleanly
-
-What not to infer:
-
-- this is not external validation
-- degraded or unavailable evidence belongs in non-production investigation only
-- `n/a` in a validation table does not mean a measured zero relationship
-
-The first visible evidence surface is intentionally compact:
-
-- one summary block
-- summary metrics
-- one compact validation table
-
-Season-level deltas, strategy rows, and disagreement tables live under the nested `Detailed evidence` disclosure.
-
-Sampled-Bayes comparison artifacts are diagnostic history only. The live dashboard uses the empirical-Bayes estimator and does not show sampled comparison rows.
-
-### If Production Evidence Fails Closed
-
-Purpose: diagnose a failed production dashboard build without treating degraded
-evidence as acceptable output.
-
-Check in this order:
-
-1. confirm the latest pre-draft run completed rather than opening an older
-   dashboard shortcut
-2. inspect the decision-backtest artifact for `status`, `winner`, and
-   `season_count`
-3. inspect validation summaries for `n/a` or `not estimable` slices
-4. rerun the supported pre-draft command after fixing the missing or stale input
-   rather than editing the dashboard payload by hand
-
-If the evidence remains unavailable, keep the run out of production review and
-use the artifacts only for investigation.
-
-### Freshness And Provenance
-
-Purpose: show whether the board and evidence were built from current expected inputs.
-
-What to inspect:
-
-- freshness status
-- override usage
-- warnings
-- publish provenance if you are looking at a staged Pages copy
-
-## War-Room Visuals When Present
-
-If the current dashboard build includes war-room visuals, use them as quick interpretation aids:
-
-- `Wait vs Pick Frontier`: timing tradeoff between value and next-pick survival
-- `Positional Cliffs`: where a position group is about to thin out
-- `Contextual vs baseline` explainer: why the contextual board differs from the `Simple VOR proxy`
-
-What not to infer:
-
-- these visuals do not create a separate model
-- they do not strengthen the evidence beyond what the underlying `Decision evidence` surface already supports
-
-## Finalize Flow
-
-Purpose: capture the draft result in the format the retrospective expects later.
-
-During the draft:
-
-1. use the dashboard to track taken players and your roster
-2. when the draft is over, click Finalize
-3. keep the downloaded finalized bundle
-4. do not treat the browser download folder as the canonical long-term storage location
-
-Canonical runtime destination after import:
-
-```text
-seasons/<year>/draft_strategy/finalized_drafts/
-```
-
-The import and autodiscovery paths exclude finalized files named like `*_test.*`.
-Those files are test artifacts, not production retrospective inputs.
-
-## After The Draft
-
-### Ingest Only
-
-Purpose: import finalized artifacts and stop.
-
-```bash
-ffbayes draft-retrospective \
-  --import-finalized ~/Downloads/ffbayes_finalized_*_2026_* \
-  --ingest-only \
-  --year 2026
-```
-
-### Retrospective
-
-Purpose: compare finalized draft artifacts against realized season outcomes.
-
-```bash
-ffbayes draft-retrospective --year 2026
-```
-
-Runtime-local retrospective artifacts:
-
-- `seasons/<year>/draft_strategy/draft_retrospective_<year>.json`
-- `seasons/<year>/draft_strategy/draft_retrospective_<year>.html`
-
-## Publish Public Surfaces Only When Needed
-
-Use `ffbayes pre-draft --stage-pages` when you want a full data/model refresh and the repo's public Pages copy updated in one command.
-
-Use `ffbayes stage-dashboard --year <year>` when you are only iterating on dashboard/template changes and do not need a full pre-draft rerun.
-
-What to inspect in the staged Pages payload:
-
-```json
-{
-  "publish_provenance": {
-    "schema_version": "publish_provenance_v1",
-    "source_html": "draft_board_2026.html",
-    "source_payload": "dashboard_payload_2026.json",
-    "surface_sync": {
-      "status": "synchronized"
-    }
-  }
-}
-```
-
-What to notice:
-
-- the staged Pages bundle records where it came from
-- the staged site is for publishing, not local source-of-truth drafting
+The repository contains historical analysis and frontend research notes. Those
+documents are not current operator instructions. The public GitHub `master`
+branch is external state and is not changed by an unpushed worktree.

@@ -1,0 +1,73 @@
+{
+  "profile_id": "league-2-2026",
+  "league_name": "Nicholas's Nif…",
+  "season": 2026,
+  "team_count": 10,
+  "draft_format": "snake",
+  "draft_slot": null,
+  "scoring_label": "Half PPR",
+  "scoring_items": {
+    "3": 0.04,
+    "4": 4.0,
+    "24": 0.1,
+    "25": 6.0,
+    "42": 0.1,
+    "43": 6.0,
+    "53": 0.5,
+    "80": 1.0,
+    "85": 1.0
+  },
+  "scoring_overrides": {
+    "K": {
+      "74": 5.0,
+      "76": -1.0,
+      "77": 4.0,
+      "79": -1.0,
+      "80": 3.0,
+      "82": -1.0,
+      "85": -1.0,
+      "86": 1.0,
+      "88": -1.0
+    },
+    "DST": {
+      "89": 10.0,
+      "90": 7.0,
+      "91": 4.0,
+      "92": 1.0,
+      "93": 6.0,
+      "94": 6.0,
+      "95": 2.0,
+      "96": 2.0,
+      "97": 2.0,
+      "98": 2.0,
+      "99": 1.0,
+      "101": 6.0,
+      "102": 6.0,
+      "103": 6.0,
+      "104": 6.0,
+      "105": 6.0,
+      "121": 0.0,
+      "122": 0.0,
+      "123": -1.0,
+      "124": -4.0,
+      "125": -4.0
+    }
+  },
+  "bonuses": [],
+  "roster_slots": {
+    "QB": 1,
+    "RB": 2,
+    "WR": 2,
+    "TE": 1,
+    "FLEX": 1,
+    "DST": 1,
+    "K": 1
+  },
+  "bench_slots": 7,
+  "ir_slots": 1,
+  "flex_eligible": ["RB", "WR", "TE"],
+  "waiver_type": "unknown",
+  "waiver_constraints": [],
+  "settings_source": "Explicit local standard-scoring configuration; draft slot entered at runtime",
+  "settings_verified_at": "2026-08-23T00:00:00Z"
+}

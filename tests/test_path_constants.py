@@ -12,10 +12,10 @@ def test_get_runtime_root_honors_explicit_env_override(monkeypatch, tmp_path):
     assert path_constants.get_runtime_root() == override.resolve()
 
 
-def test_get_runtime_root_defaults_to_projects_runtime(monkeypatch):
+def test_get_runtime_root_defaults_to_workspace_runtime(monkeypatch):
     monkeypatch.delenv('FFBAYES_RUNTIME_ROOT', raising=False)
 
-    expected = Path.home() / 'ProjectsRuntime' / 'ffbayes'
+    expected = Path.home() / 'Workspaces' / 'ffbayes' / 'runtime'
 
     assert path_constants.get_runtime_root() == expected
 
@@ -54,7 +54,7 @@ def test_get_phase_name_rejects_non_pre_draft(monkeypatch):
         path_constants.get_phase_name()
 
 
-def test_get_cloud_root_defaults_to_side_projects(monkeypatch):
+def test_get_cloud_root_defaults_to_project_vault(monkeypatch):
     monkeypatch.delenv('FFBAYES_CLOUD_ROOT', raising=False)
 
     expected = (
@@ -62,7 +62,8 @@ def test_get_cloud_root_defaults_to_side_projects(monkeypatch):
         / 'Library'
         / 'CloudStorage'
         / 'OneDrive-Personal'
-        / 'SideProjects'
+        / 'Project Vault'
+        / 'Personal Projects'
         / 'ffbayes'
     )
 
