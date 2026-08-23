@@ -77,7 +77,7 @@ $$
 where $D_p$ is league-wide demand. Value over replacement is:
 
 $$
-\operatorname{VOR}_i = P_i - R_{p(i)}
+\mathrm{VOR}_i = P_i - R_{p(i)}
 $$
 
 The board combines standardized VOR and local positional drop-off, then blends
