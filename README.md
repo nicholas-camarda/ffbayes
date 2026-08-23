@@ -61,24 +61,24 @@ availability.
 For each player, the engine first converts projected stat lines into league
 points:
 
-\[
+$$
 P_i = \sum_s x_{i,s} w_s + \text{configured bonuses}
-\]
+$$
 
 Roster demand is built from required starters, an optimization of FLEX slots
 across eligible positions, and bench demand allocated in current ADP order. The
-replacement level for position \(p\) is the projected score at the last roster
+replacement level for position $p$ is the projected score at the last roster
 slot required for that position:
 
-\[
+$$
 R_p = P_{p,(D_p)}
-\]
+$$
 
-where \(D_p\) is league-wide demand. Value over replacement is:
+where $D_p$ is league-wide demand. Value over replacement is:
 
-\[
+$$
 \operatorname{VOR}_i = P_i - R_{p(i)}
-\]
+$$
 
 The board combines standardized VOR and local positional drop-off, then blends
 that model signal with ADP rank. If a draft slot is supplied, next-pick
