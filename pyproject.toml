@@ -51,8 +51,6 @@ ignore = [
 ]
 
 [tool.ruff]
-extend-exclude = ["archive"]
-
 [tool.ruff.format]
 quote-style = "single"
 indent-style = "space"
@@ -67,10 +65,6 @@ warn_unused_ignores = true
 disable_error_code = [
   "import-untyped",
 ]
-exclude = [
-  "^archive/",
-]
-
 [[tool.mypy.overrides]]
 module = [
   "ffbayes.run_pipeline_split",
