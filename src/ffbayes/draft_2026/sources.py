@@ -332,6 +332,7 @@ def fetch_espn_player_payload(
         'url': url,
         'season': season,
         'fetched_at': fetched_at,
+        'cache_mode': 'off',
         'http_status': response.status_code,
         'bytes': len(raw),
         'sha256': hashlib.sha256(canonical_payload).hexdigest(),

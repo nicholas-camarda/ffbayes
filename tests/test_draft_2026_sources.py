@@ -6,10 +6,35 @@ import pytest
 from ffbayes.draft_2026.sources import (
     CoverageRequirements,
     SemanticInputError,
+    fetch_espn_player_payload,
     parse_espn_player_payload,
     reconcile_current_players,
     validate_source_coverage,
 )
+
+
+class _Response:
+    status_code = 200
+    content = b'{"players": []}'
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict[str, object]:
+        return {'players': []}
+
+
+class _Session:
+    def get(self, *args: object, **kwargs: object) -> _Response:
+        return _Response()
+
+
+def test_espn_manifest_records_cache_off_provenance() -> None:
+    _, manifest = fetch_espn_player_payload(2026, session=_Session())
+
+    assert manifest['cache_mode'] == 'off'
+    assert manifest['http_status'] == 200
+    assert manifest['season'] == 2026
 
 
 def _entry(
