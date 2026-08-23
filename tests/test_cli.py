@@ -284,73 +284,39 @@ def test_draft_retrospective_import_command_forwards_extra_arguments(monkeypatch
     ]
 
 
-def test_draft_retrospective_help_is_forwarded_to_module(monkeypatch):
+def test_draft_retrospective_help_is_side_effect_free(monkeypatch, capsys):
     captured = {}
 
     def fake_import(module_name):
-        captured['module_name'] = module_name
-
-        def fake_main():
-            captured['argv'] = sys.argv[:]
-            raise SystemExit(0)
-
-        return SimpleNamespace(main=fake_main)
+        raise AssertionError('help must not import a work-producing module')
 
     monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
 
     exit_code = cli.main(['draft-retrospective', '--help'])
 
     assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.analysis.draft_retrospective'
-    assert captured['argv'] == [
-        'ffbayes.analysis.draft_retrospective',
-        '--help',
-    ]
+    assert 'side-effect free' in capsys.readouterr().out
 
 
-def test_refresh_dashboard_help_is_forwarded_to_module(monkeypatch):
-    captured = {}
-
+def test_refresh_dashboard_help_is_side_effect_free(monkeypatch, capsys):
     def fake_import(module_name):
-        captured['module_name'] = module_name
-
-        def fake_main():
-            captured['argv'] = sys.argv[:]
-            raise SystemExit(0)
-
-        return SimpleNamespace(main=fake_main)
+        raise AssertionError('help must not import a work-producing module')
 
     monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
 
     exit_code = cli.main(['refresh-dashboard', '--help'])
 
     assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.refresh_dashboard'
-    assert captured['argv'] == [
-        'ffbayes.refresh_dashboard',
-        '--help',
-    ]
+    assert 'side-effect free' in capsys.readouterr().out
 
 
-def test_stage_dashboard_help_is_forwarded_to_module(monkeypatch):
-    captured = {}
-
+def test_stage_dashboard_help_is_side_effect_free(monkeypatch, capsys):
     def fake_import(module_name):
-        captured['module_name'] = module_name
-
-        def fake_main():
-            captured['argv'] = sys.argv[:]
-            raise SystemExit(0)
-
-        return SimpleNamespace(main=fake_main)
+        raise AssertionError('help must not import a work-producing module')
 
     monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
 
     exit_code = cli.main(['stage-dashboard', '--help'])
 
     assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.stage_dashboard'
-    assert captured['argv'] == [
-        'ffbayes.stage_dashboard',
-        '--help',
-    ]
+    assert 'side-effect free' in capsys.readouterr().out

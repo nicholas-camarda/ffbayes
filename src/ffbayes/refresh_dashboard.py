@@ -17,11 +17,11 @@ from ffbayes.dashboard.frontend_renderer import (
     active_renderer,
     render_dashboard_html,
 )
+from ffbayes.dashboard.legacy_renderer import export_dashboard_html
 from ffbayes.dashboard.payload_contract import (
     LEGACY_REQUIRED_PAYLOAD_KEYS,
     validate_dashboard_payload,
 )
-from ffbayes.dashboard.legacy_renderer import export_dashboard_html
 from ffbayes.draft_strategy.draft_decision_system import (
     LeagueSettings,
     _stage_runtime_dashboard_shortcuts,

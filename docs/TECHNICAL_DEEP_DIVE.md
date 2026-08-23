@@ -3,8 +3,10 @@
 Audience: statisticians, technical reviewers, and contributors who need the
 implemented math and decision logic.
 
-Scope: the supported `pre-draft` workflow, player posterior model, board-value
-formula, recommendation policy, and trust surfaces.
+Scope: the current 2026 dashboard model, player posterior notes, board-value
+formula, recommendation policy, and trust surfaces. References to older
+`pre-draft` artifacts below are historical research notes, not operator
+instructions; the current command is `ffbayes dashboard --year 2026`.
 
 Trust boundary: this describes the current implemented board. Internal holdout
 backtests are directional evidence, not external validation. Non-default analyses
@@ -16,7 +18,9 @@ measured zero relationship.
 
 ## What This Is
 
-This is the technical source for what the supported draft board actually does.
+This is the technical source for the implemented model. The current draft board
+is created by `ffbayes dashboard --year 2026`; older analyses described below
+are not inputs to that board.
 It separates:
 
 - implemented current board behavior: what the supported `pre-draft` board actually does

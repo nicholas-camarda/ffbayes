@@ -378,7 +378,35 @@ def run_pre_draft(argv: list[str] | None = None) -> int:
         action='store_true',
         help='After a successful pre-draft run, stage the public GitHub Pages copy.',
     )
+    parser.add_argument(
+        '--profile',
+        action='append',
+        help='Explicit league-profile JSON path for the current-season pipeline.',
+    )
+    parser.add_argument(
+        '--output-root',
+        help='Run-scoped output root for the current-season pipeline.',
+    )
     args, _ = parser.parse_known_args(argv)
+
+    resolved_year = args.year or datetime.now().year
+    if resolved_year >= 2026:
+        if args.stage_pages:
+            print(
+                '💥 Current-season boards must be validated before any Pages staging; '
+                '--stage-pages is not supported by the fail-closed 2026 pipeline.'
+            )
+            return 2
+        from ffbayes.draft_2026.pipeline import main as run_current_pipeline
+        from ffbayes.utils.path_constants import RUNTIME_DIR
+
+        current_args = [
+            '--output-root',
+            args.output_root or str(RUNTIME_DIR / 'runs' / 'draft_2026'),
+        ]
+        for profile_path in args.profile or []:
+            current_args.extend(['--profile', profile_path])
+        return run_current_pipeline(current_args)
 
     try:
         runner = SplitPipelineRunner(year=args.year)
