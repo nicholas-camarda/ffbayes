@@ -42,7 +42,7 @@ export function ProvenanceBanner(props: { payload: DashboardPayload }) {
       <div className="summary-box">
         {publishProvenance.published_at
           ? `Pages staged ${formatTimestamp(publishProvenance.published_at)} from ${publishProvenance.source_html || 'index.html'}.`
-          : 'Publish provenance will appear after `ffbayes pre-draft --stage-pages`, `ffbayes stage-dashboard`, or `ffbayes publish` stages this dashboard.'}
+          : 'This local dashboard was not staged for publishing. Generate a current board with `ffbayes dashboard --year 2026`.'}
       </div>
       <div className="tiny">Dashboard generated: {formatTimestamp(payload.generated_at)}</div>
       <div className="tiny">

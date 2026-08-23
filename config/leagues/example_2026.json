@@ -1,8 +1,8 @@
 {
-  "profile_id": "league-2-2026",
-  "league_name": "Nicholas's Nif…",
+  "profile_id": "example-2026",
+  "league_name": "Example League",
   "season": 2026,
-  "team_count": 10,
+  "team_count": 12,
   "draft_format": "snake",
   "draft_slot": null,
   "scoring_label": "Half PPR",
@@ -63,11 +63,11 @@
     "DST": 1,
     "K": 1
   },
-  "bench_slots": 7,
+  "bench_slots": 6,
   "ir_slots": 1,
   "flex_eligible": ["RB", "WR", "TE"],
   "waiver_type": "unknown",
   "waiver_constraints": [],
-  "settings_source": "Explicit local standard-scoring configuration; draft slot entered at runtime",
-  "settings_verified_at": "2026-08-23T00:00:00Z"
+  "settings_source": "Portable example configuration; customize before use",
+  "settings_verified_at": "2026-01-01T00:00:00Z"
 }

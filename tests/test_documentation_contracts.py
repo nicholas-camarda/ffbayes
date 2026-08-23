@@ -63,23 +63,22 @@ def test_docs_index_links_current_guides() -> None:
 def test_operator_guide_has_shared_conventions() -> None:
     text = _read(DOCS_DIR / 'DASHBOARD_OPERATOR_GUIDE.md')
     for marker in [
-        'Audience:',
-        'Scope:',
-        'Trust boundary:',
-        '## What This Is',
-        '## When To Use It',
-        '## What To Inspect',
-        '## Interpretation Boundaries',
-        '## Commands And Paths',
+        '## One command',
+        '## First-time setup',
+        '## Draft-day workflow',
+        '## What the board checks before it opens',
+        'runtime/runs/dashboard_2026',
     ]:
         assert marker in text
 
 
-def test_current_docs_document_one_operator_command_and_two_leagues() -> None:
+def test_current_docs_document_one_operator_command_and_generic_profiles() -> None:
     combined = '\n'.join(_read(path) for path in CURRENT_DOCS)
     assert combined.count('ffbayes dashboard --year 2026') >= 3
-    assert "Bill's Underbit" in combined
-    assert 'Camarda-Klein Family' in combined
+    assert 'example_2026.json' in combined
+    assert '*.local.json' in combined
+    assert "Bill's Underbit" not in combined
+    assert 'Camarda-Klein Family' not in combined
     assert 'runtime/runs/dashboard_2026' in combined
     assert 'loopback' in combined.lower()
     assert 'nflverse' in combined
@@ -122,20 +121,14 @@ def test_documented_ffbayes_commands_match_the_public_cli() -> None:
 def test_metric_reference_defines_current_model_labels() -> None:
     text = _read(DOCS_DIR / 'METRIC_REFERENCE.md')
     for label in [
-        'Projected points',
-        'Replacement level',
+        'Scoring',
+        'Roster demand and replacement',
         'VOR',
         'Scarcity',
-        'ADP',
-        'Availability to next pick',
-        'Board value score',
-        'Simple VOR proxy',
-        'Expected regret',
-        'Fragility score',
-        'Upside score',
-        'Decision evidence',
-        'Freshness and provenance',
-        'Projection breakdown',
+        'ADP timing',
+        'draft_now',
+        'slot_required',
+        'board_priority',
     ]:
         assert label in text
     assert 'does not mean a measured zero relationship' in text
@@ -153,7 +146,10 @@ def test_output_example_records_stable_ids_and_provenance() -> None:
         assert marker in text
 
 
-def test_current_docs_state_external_github_is_not_updated_by_worktree() -> None:
+def test_current_docs_do_not_contain_private_workflow_or_stale_trust_language() -> None:
     combined = '\n'.join(_read(path) for path in CURRENT_DOCS)
-    assert 'public GitHub' in combined
-    assert 'unpushed worktree' in combined
+    assert 'public GitHub' not in combined
+    assert 'unpushed worktree' not in combined
+    assert 'Trust boundary:' not in combined
+    assert "Bill's Underbit" not in combined
+    assert 'Camarda-Klein Family' not in combined

@@ -48,6 +48,7 @@ node_modules/
 # Outputs
 *.tsv
 runtime/
+config/leagues/*.local.json
 
 # Track Agent OS product docs
 !.agent-os/product/
