@@ -1,101 +1,72 @@
-# Dashboard Operator Guide
+# Dashboard operator guide
 
-Audience: the person running the 2026 fantasy-football draft.
+This is the user-facing guide for a draft-day board. The repository is
+league-agnostic: the checked-in example profile is a template, and each user
+keeps their own league rules in an ignored local profile.
 
-Scope: the one local command, the two league profiles, draft-day controls,
-blocked states, and snapshots.
-
-Trust boundary: the loopback service owns one fresh, validated input snapshot;
-the browser displays the Python response and never supplies valuation defaults.
-
-## What This Is
-
-The supported operator workflow is:
+## One command
 
 ```bash
 ffbayes dashboard --year 2026
 ```
 
-It fetches only public ESPN and nflverse data, validates the current-player
-universe, projections, ADP, replacement depth, league rules, and provenance,
-then opens a local dashboard. No account or private-league connection is used.
+The command fetches the public 2026 inputs, validates the player universe,
+projections, ADP, replacement depth, and league profiles, then opens a local
+dashboard. It does not require a fantasy-platform account, password, or
+private-league connection.
 
-## When To Use It
+## First-time setup
 
-Use this guide when you need to run the dashboard before or during the draft.
-Draft slot is entered at runtime because it is not known in advance. The same
-command is the only supported way to create the current 2026 board.
+1. Copy `config/leagues/example_2026.json` to
+   `config/leagues/my-league.local.json`.
+2. Edit the copy to match the league: team count, scoring, roster slots,
+   FLEX eligibility, bench/IR slots, and snake-draft settings.
+3. Leave `draft_slot` as `null` if the draft order is not known yet.
+4. Run the command above. Local `*.local.json` profiles are discovered
+   automatically. Use `--profile path/to/profile.json` when an explicit profile
+   list is preferred.
 
-## What To Inspect
+The `.local.json` suffix is ignored by Git, so private league names and rules
+are not part of the public repository.
 
-Select the appropriate independent profile:
+## Draft-day workflow
 
-| Profile | League identity | Roster |
-| --- | --- | --- |
-| `league-1-2026` | Bill's Underbit… — Med School Friends | 1 QB, 2 RB, 2 WR, 1 TE, 2 FLEX, 1 D/ST, 1 K, 6 bench, 1 IR |
-| `league-2-2026` | Nicholas's Nif… — Camarda-Klein Family | 1 QB, 2 RB, 2 WR, 1 TE, 1 FLEX, 1 D/ST, 1 K, 7 bench, 1 IR |
+1. Select the profile and confirm its read-only roster/scoring summary.
+2. Enter your draft slot (1 through the configured team count) and current
+   overall pick. The board cannot estimate snake timing until the slot is set.
+3. After each pick, update the current overall pick and mark players as
+   **Taken** or **Mine**. Add candidates to **Queue** when useful.
+4. Use the recommendation, availability, VOR, scarcity, and ADP columns as
+   decision aids. Export a snapshot when you want a durable record of the
+   validated state.
 
-Stable scoring, team count, snake format, FLEX eligibility, and waiver fields
-are displayed read-only. Enter draft slot (1 through team count) and current
-overall pick explicitly. Until a slot is entered the board may show valuation,
-but availability and timing actions are `Draft slot required`.
+Each profile has independent draft state. Changing the selected league does not
+carry over slot, pick, taken IDs, roster IDs, or queue IDs.
 
-## Interpretation Boundaries
+## What the board checks before it opens
 
-- `draft_now`, `fallback`, and `can_wait` are decision aids, not guarantees.
-- VOR and scarcity are descriptive model outputs, not causal claims.
-- ADP is a market reference; it is not substituted for missing projections.
-- A blocked state means the board is not certified and must not be used.
+- Current-season, active, fantasy-relevant player IDs and positions.
+- Sufficient projection depth for every configured position and replacement
+  calculation.
+- Fresh, complete ADP for the market universe; missing ADP is an error, not a
+  50% availability guess.
+- Explicit league settings and valid snake-draft bounds.
+- Output/provenance digests that connect the board to the current inputs,
+  profile, runtime state, and code revision.
 
-## Commands And Paths
+If a required source or check fails, the page shows a blocked state and does
+not present a board from an older run.
 
-The normal command surface has one entrypoint. The service prints a loopback URL
-and writes run-scoped material under `runtime/runs/dashboard_2026/<timestamp>/`.
-Snapshots are written under that run's `snapshots/` directory. No `site/`,
-GitHub Pages, cloud mirror, or older staged HTML is consulted by this workflow.
+## Run artifacts
 
-Lower-level collection, model, publishing, and retrospective modules remain
-developer/maintenance code for tests and research. They are intentionally not
-documented as alternate ways to produce the draft board.
+Run-scoped material is written under
+`runtime/runs/dashboard_2026/<timestamp>/`. Exported snapshots are under that
+run's `snapshots/` directory and contain the profile, runtime state, board,
+coverage report, source manifests, timestamps, and SHA-256 digests.
 
-## Before The Draft
+## Related documentation
 
-1. Run `ffbayes dashboard --year 2026`.
-2. Confirm the status says the source snapshot and coverage validation passed.
-3. Select the league and verify its read-only roster shape.
-4. Enter your draft slot and current overall pick.
-5. Check the freshness/provenance panel and export a snapshot if desired.
-
-## During The Draft
-
-- Update current overall pick after every selection.
-- Mark another team's selection as **Taken**; mark your selection as **Mine**.
-- Add candidates to **Queue**. The complete state is sent to the service for
-  each recalculation.
-- Switching leagues restores the other profile's independent slot, pick, and
-  player state.
-
-Rows show projected points, replacement level, VOR, scarcity, ADP,
-availability at the next snake pick, and the Python-generated action. Stable
-`espn_id` values identify all state actions.
-
-## Blocked States
-
-The dashboard remains open with an exact message when ESPN or nflverse is
-unavailable, truncated, stale, wrong-season, or semantically inadequate; when
-league configuration is invalid; when a slot/current pick is impossible; or
-when a provenance digest is inconsistent. It never falls back to an older
-runtime output or a neutral/default market value.
-
-## Snapshot Contents
-
-A snapshot is a local, read-only JSON artifact containing effective profile
-settings, runtime draft state, board rows, source manifests and SHA-256 values,
-profile/runtime/state/board digests, code revision, and generation time. The
-service writes it atomically only after the board passes provenance validation.
-
-## Historical and Developer Material
-
-The repository contains historical analysis and frontend research notes. Those
-documents are not current operator instructions. The public GitHub `master`
-branch is external state and is not changed by an unpushed worktree.
+- [Metric reference](METRIC_REFERENCE.md) — definitions and equations.
+- [Data lineage and paths](DATA_LINEAGE_AND_PATHS.md) — sources and provenance.
+- [Output examples](OUTPUT_EXAMPLES.md) — payload fields and snapshot shape.
+- [Technical deep dive](TECHNICAL_DEEP_DIVE.md) — implemented calculation flow.

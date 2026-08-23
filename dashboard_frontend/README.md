@@ -1,31 +1,32 @@
-# FFBayes Dashboard Frontend
+# FFBayes dashboard frontend
 
-React + Vite source for the draft war room dashboard. Python remains the
-payload source of truth; this package builds a single self-contained HTML
-template that the pipeline injects at artifact-write time.
+This React/Vite package is an optional frontend development surface. The
+draft-day operator path is the Python service:
 
-## Operator note
+```bash
+ffbayes dashboard --year 2026
+```
 
-Normal draft-day commands (`ffbayes draft-strategy`, `ffbayes stage-dashboard`)
-do **not** require Node. The committed template lives at
-`src/ffbayes/dashboard/assets/dashboard_template.html`.
+The Python service owns the current payload and all valuation/provenance logic.
+Node is not required to run the dashboard.
 
 ## Developer workflow
 
 ```bash
 cd dashboard_frontend
 npm ci
-npm run dev          # local UI against public/dashboard_payload.json (gitignored)
-npm test             # Vitest unit tests
+npm test
 npm run typecheck
-npm run build:template   # writes packaged template into src/ffbayes/dashboard/
+npm run build
+npm run build:template
 ```
 
-Commit both frontend source changes and the regenerated
-`dashboard_template.html` when UI behavior changes.
+`build:template` copies the single-file build to
+`src/ffbayes/dashboard/assets/dashboard_template.html`, where the Python
+package can use it. Review the generated template with frontend source changes.
 
-## Docs
+## Documentation
 
-- Architecture: `docs/DASHBOARD_FRONTEND_ARCHITECTURE.md`
-- Cutover and rollback: `docs/DASHBOARD_FRONTEND_CUTOVER.md`
-- Operator guide: `docs/DASHBOARD_OPERATOR_GUIDE.md`
+- [Dashboard architecture](../docs/DASHBOARD_FRONTEND_ARCHITECTURE.md)
+- [Frontend maintenance](../docs/DASHBOARD_FRONTEND_CUTOVER.md)
+- [Operator guide](../docs/DASHBOARD_OPERATOR_GUIDE.md)

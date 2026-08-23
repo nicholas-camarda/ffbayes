@@ -17,7 +17,7 @@ it('shows a fallback with a regeneration hint when a child throws', () => {
 
   expect(screen.getByRole('alert')).toBeInTheDocument();
   expect(screen.getByText(/payload parse failed/)).toBeInTheDocument();
-  expect(screen.getByText(/ffbayes stage-dashboard --year/i)).toBeInTheDocument();
+  expect(screen.getByText(/ffbayes dashboard --year 2026/i)).toBeInTheDocument();
 
   consoleError.mockRestore();
 });

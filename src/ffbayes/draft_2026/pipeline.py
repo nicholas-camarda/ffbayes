@@ -31,10 +31,14 @@ from ffbayes.draft_2026.sources import (
 
 SCHEMA_VERSION = 'draft_2026_v1'
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_PROFILES = (
-    PROJECT_ROOT / 'config/leagues/league_1_2026.json',
-    PROJECT_ROOT / 'config/leagues/league_2_2026.json',
-)
+PROFILE_ROOT = PROJECT_ROOT / 'config' / 'leagues'
+EXAMPLE_PROFILE = PROFILE_ROOT / 'example_2026.json'
+
+
+def default_profile_paths() -> tuple[Path, ...]:
+    """Return local profiles when present, otherwise the portable example."""
+    local_profiles = tuple(sorted(PROFILE_ROOT.glob('*.local.json')))
+    return local_profiles or (EXAMPLE_PROFILE,)
 
 
 class OutputProvenanceError(ValueError):
@@ -361,7 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     project_root = PROJECT_ROOT
-    profile_paths = tuple(args.profile or DEFAULT_PROFILES)
+    profile_paths = tuple(args.profile or default_profile_paths())
     profiles: list[LeagueProfile] = []
     failures: list[dict[str, Any]] = []
     for path in profile_paths:

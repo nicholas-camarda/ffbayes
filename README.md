@@ -1,94 +1,137 @@
-# FFBayes 2026 fantasy-football draft dashboard
+# FFBayes
 
-FFBayes provides one draft-day workflow:
+FFBayes is a reproducible fantasy-football draft board. It combines public
+current-season projections and market data with explicit league settings to
+produce a local, interactive board.
 
-```bash
-ffbayes dashboard --year 2026
-```
-
-That command fetches fresh public ESPN fantasy projections/ADP and the current
-nflverse roster feed, validates them, starts a loopback-only dashboard, and
-opens it in your browser. There is no account, session, private-league, or
-credential dependency.
-
-## Draft-day workflow
-
-1. Run the command above.
-2. Choose either league in the dashboard:
-   - **Bill's Underbit… — Med School Friends:** 1 QB, 2 RB, 2 WR, 1 TE, 2 FLEX,
-     1 D/ST, 1 K, 6 bench, 1 IR.
-   - **Nicholas's Nif… — Camarda-Klein Family:** 1 QB, 2 RB, 2 WR, 1 TE,
-     1 FLEX, 1 D/ST, 1 K, 7 bench, 1 IR.
-3. Enter that league's draft slot when the draft room reveals it. Enter the
-   current overall pick explicitly; the initial pick defaults to the entered
-   slot (round one) and can be edited at any time.
-4. Use the row controls to mark players taken, mark your players, and maintain
-   a queue. Every change is sent back to the Python model and recalculated.
-5. Export a local snapshot when you want a durable record of the board and
-   state.
-
-League settings are explicit, read-only profile data. The draft slot and draft
-state live only in the dashboard run and exported snapshots; profile JSON is not
-mutated.
-
-## Trust boundary
-
-The board is fail-closed. The run stops with a visible blocked state when the
-public sources are unavailable, the season is wrong, the player universe is
-not current, projections or ADP are too shallow/stale, replacement demand
-cannot be filled, league settings are incomplete, or provenance digests do not
-match. There is no guessed ADP availability, neutral market value, stale-cache
-rescue, or silent reuse of an older output.
-
-The current-player universe is reconciled against nflverse and includes stable
-ESPN IDs. Historical-only players cannot become actionable through the normal
-data flow. The Python engine is the only implementation of scoring,
-replacement levels, VOR, scarcity, availability, and recommendations; the
-browser renders returned values and does not recalculate them.
-
-## Fresh inputs and outputs
-
-Each run uses cache mode `off` for required sources and creates a timestamped
-directory under `runtime/runs/dashboard_2026/` containing source manifests,
-coverage statistics, and any exported snapshots. A snapshot includes the
-effective league settings, runtime slot/current pick, taken/your/queue IDs,
-board rows, source digests, profile/state/board digests, code revision, and
-generation time.
-
-If ESPN or nflverse cannot be accessed or fails semantic validation, the exact
-source and failure mode are shown in the dashboard. No alternate source is
-silently substituted.
-
-## Setup
+## Quick start
 
 ```bash
 conda env create -f environment.yml
 conda activate ffbayes
 pip install -e .
+ffbayes dashboard --year 2026
 ```
 
-The package exposes only the `ffbayes` operator executable. Lower-level Python
-modules remain available for tests and maintenance, but they are not alternate
-draft-day workflows.
+The command fetches the required public inputs, validates them, starts a local
+dashboard, and opens it in the browser. It does not connect to a fantasy
+platform, require an account, or use private-league credentials.
 
-## Validation
+## Configure a league
 
-Relevant checks include:
+The repository includes [`config/leagues/example_2026.json`](config/leagues/example_2026.json)
+as a complete, portable example. It is intentionally not tied to a real league.
+Copy it to a local-only file whose name ends in `.local.json`, then edit the
+league name, team count, draft format, scoring, roster slots, FLEX eligibility,
+bench, IR, and waiver settings. Local profile files are ignored by Git.
+
+```bash
+cp config/leagues/example_2026.json config/leagues/my-league.local.json
+ffbayes dashboard --year 2026
+```
+
+When local profiles are present, the command loads them automatically. You can
+also pass one or more profiles explicitly:
+
+```bash
+ffbayes dashboard --year 2026 \
+  --profile config/leagues/my-league.local.json
+```
+
+Draft slot and current overall pick are entered in the dashboard at draft time;
+they are not stored in the public example profile.
+
+## What the command does
+
+1. Fetches the current-season ESPN fantasy player, projection, and ADP feed.
+2. Fetches the matching nflverse roster release for current-player checks.
+3. Rejects wrong-season, inactive, duplicate, shallow, stale, or incomplete
+   inputs before valuation.
+4. Applies the selected league's scoring and roster rules.
+5. Calculates replacement levels, VOR, scarcity, market blend, and snake-draft
+   timing.
+6. Serves the board locally. Browser actions are sent back to the Python model.
+
+If a required source or league setting is unavailable, the dashboard reports the
+failure and does not substitute stale data, neutral market values, or guessed
+availability.
+
+## Model summary
+
+For each player, the engine first converts projected stat lines into league
+points:
+
+\[
+P_i = \sum_s x_{i,s} w_s + \text{configured bonuses}
+\]
+
+Roster demand is built from required starters, an optimization of FLEX slots
+across eligible positions, and bench demand allocated in current ADP order. The
+replacement level for position \(p\) is the projected score at the last roster
+slot required for that position:
+
+\[
+R_p = P_{p,(D_p)}
+\]
+
+where \(D_p\) is league-wide demand. Value over replacement is:
+
+\[
+\operatorname{VOR}_i = P_i - R_{p(i)}
+\]
+
+The board combines standardized VOR and local positional drop-off, then blends
+that model signal with ADP rank. If a draft slot is supplied, next-pick
+availability uses an ADP-centered normal approximation with a minimum standard
+deviation; without a slot, timing is explicitly marked `slot_required`.
+
+These are decision-support quantities, not guarantees of player performance.
+The complete definitions and assumptions are in
+[`docs/METRIC_REFERENCE.md`](docs/METRIC_REFERENCE.md) and
+[`docs/TECHNICAL_DEEP_DIVE.md`](docs/TECHNICAL_DEEP_DIVE.md).
+
+## Inputs and outputs
+
+Required sources are public:
+
+- ESPN current-season fantasy player/projection/ADP feed
+- nflverse current-season roster release, accessed through `nflreadpy`
+
+Required fetches use cache mode `off`. Each run writes timestamped artifacts
+under `runtime/runs/dashboard_2026/`, including source manifests, coverage
+statistics, board payloads, and optional snapshots. Runtime artifacts are local
+and ignored by Git.
+
+## Development checks
 
 ```bash
 PYTHONPATH=src pytest -q
 PYTHONPATH=src mypy src/ffbayes
 PYTHONPATH=src ruff check src tests
+npm ci
+npm --prefix dashboard_frontend ci
 npm --prefix dashboard_frontend test
 npm --prefix dashboard_frontend run typecheck
 npm --prefix dashboard_frontend run build
-node tests/test_draft_2026_dashboard_browser.mjs
+PYTHON=/path/to/ffbayes/bin/python node tests/test_draft_2026_dashboard_browser.mjs
 ```
 
-See [docs/DASHBOARD_OPERATOR_GUIDE.md](docs/DASHBOARD_OPERATOR_GUIDE.md) for
-the operational runbook, [docs/DATA_LINEAGE_AND_PATHS.md](docs/DATA_LINEAGE_AND_PATHS.md)
-for provenance, and [docs/METRIC_REFERENCE.md](docs/METRIC_REFERENCE.md) for
-metric definitions.
+The public operator surface is the single `ffbayes dashboard` command. Lower-
+level modules remain available for development and testing.
+
+## Documentation
+
+- [`docs/DASHBOARD_OPERATOR_GUIDE.md`](docs/DASHBOARD_OPERATOR_GUIDE.md):
+  running and operating the dashboard.
+- [`docs/DATA_LINEAGE_AND_PATHS.md`](docs/DATA_LINEAGE_AND_PATHS.md): inputs,
+  artifacts, and reproducibility.
+- [`docs/METRIC_REFERENCE.md`](docs/METRIC_REFERENCE.md): field definitions and
+  formulas.
+- [`docs/TECHNICAL_DEEP_DIVE.md`](docs/TECHNICAL_DEEP_DIVE.md): implemented
+  pipeline and mathematical details.
+- [`docs/OUTPUT_EXAMPLES.md`](docs/OUTPUT_EXAMPLES.md): generic payload shape.
+- [`dashboard_frontend/README.md`](dashboard_frontend/README.md): frontend
+  development workflow.
 
 ## License
 

@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           <p className="error-message">{error.message}</p>
           <p className="error-hint">
             The dashboard payload may be malformed — regenerate with{' '}
-            <code>ffbayes stage-dashboard --year &lt;year&gt;</code>
+            <code>ffbayes dashboard --year 2026</code>
           </p>
         </div>
       );

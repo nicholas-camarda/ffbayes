@@ -21,12 +21,12 @@ import requests
 from ffbayes.draft_2026.engine import build_draft_board
 from ffbayes.draft_2026.league import LeagueProfile, LeagueProfileError
 from ffbayes.draft_2026.pipeline import (
-    DEFAULT_PROFILES,
     PROJECT_ROOT,
     FreshInputs,
     OutputProvenanceError,
     _git_revision,
     build_dashboard_payload,
+    default_profile_paths,
     load_fresh_inputs,
 )
 from ffbayes.draft_2026.sources import SemanticInputError
@@ -418,7 +418,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.year != 2026:
         print(json.dumps({'status': 'blocked', 'error': 'Only --year 2026 is supported'}))
         return 2
-    profile_paths = tuple(args.profile or DEFAULT_PROFILES)
+    profile_paths = tuple(args.profile or default_profile_paths())
     profiles, profile_error = _load_profiles(profile_paths)
     blocked_error = profile_error
     blocked_details: dict[str, Any] = {}

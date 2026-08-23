@@ -242,15 +242,35 @@ def test_slot_neutral_static_renderer_shows_explicit_requirement() -> None:
 
 
 def test_checked_in_profiles_have_explicit_stable_settings_and_runtime_slot() -> None:
-    for filename in ['league_1_2026.json', 'league_2_2026.json']:
-        path = __import__('pathlib').Path('config/leagues') / filename
-        data = json.loads(path.read_text(encoding='utf-8'))
-        profile = LeagueProfile.from_mapping(data)
-        assert profile.team_count == 10
-        assert profile.draft_format == 'snake'
-        assert profile.scoring_label == 'Half PPR'
-        assert profile.draft_slot is None
-        assert profile.flex_eligible == ('RB', 'WR', 'TE')
+    path = __import__('pathlib').Path('config/leagues') / 'example_2026.json'
+    data = json.loads(path.read_text(encoding='utf-8'))
+    profile = LeagueProfile.from_mapping(data)
+    assert profile.profile_id == 'example-2026'
+    assert profile.league_name == 'Example League'
+    assert profile.team_count == 12
+    assert profile.draft_format == 'snake'
+    assert profile.scoring_label == 'Half PPR'
+    assert profile.draft_slot is None
+    assert profile.flex_eligible == ('RB', 'WR', 'TE')
+
+
+def test_default_profile_discovery_prefers_ignored_local_profiles(tmp_path, monkeypatch) -> None:
+    from ffbayes.draft_2026 import pipeline
+
+    example = tmp_path / 'example_2026.json'
+    local_one = tmp_path / 'alpha.local.json'
+    local_two = tmp_path / 'beta.local.json'
+    example.write_text('{}', encoding='utf-8')
+    local_one.write_text('{}', encoding='utf-8')
+    local_two.write_text('{}', encoding='utf-8')
+    monkeypatch.setattr(pipeline, 'PROFILE_ROOT', tmp_path)
+    monkeypatch.setattr(pipeline, 'EXAMPLE_PROFILE', example)
+
+    assert pipeline.default_profile_paths() == (local_one, local_two)
+
+    local_one.unlink()
+    local_two.unlink()
+    assert pipeline.default_profile_paths() == (example,)
 
 
 def test_main_fetches_one_validated_snapshot_for_all_leagues(

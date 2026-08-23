@@ -1,40 +1,38 @@
-# 2026 Dashboard Frontend Architecture
+# 2026 dashboard architecture
 
-Audience: maintainers reviewing the current draft-day surface.
+The draft-day surface is a local Python service with a same-origin browser
+page. Python is the single implementation of scoring, replacement, VOR,
+scarcity, ADP timing, and provenance.
 
-Scope: the local Python service and same-origin interactive page.
+## Service
 
-Trust boundary: Python owns all valuation and provenance; browser JavaScript
-only collects state and renders the validated response.
+```bash
+ffbayes dashboard --year 2026
+```
 
-## What This Is
+The command starts a standard-library `ThreadingHTTPServer` on loopback and
+serves one self-contained page. Its endpoints are:
 
-`ffbayes dashboard --year 2026` starts a standard-library
-`ThreadingHTTPServer` bound to `127.0.0.1`. It serves one self-contained page
-and four JSON endpoints:
+- `GET /api/status` — source freshness, coverage, and blocked errors.
+- `GET /api/leagues` — sanitized profile metadata.
+- `POST /api/board` — strict runtime state and a freshly calculated payload.
+- `POST /api/snapshot` — atomic export of the validated payload.
 
-- `GET /api/status`: source freshness, coverage, and blocking errors;
-- `GET /api/leagues`: sanitized stable profile metadata;
-- `POST /api/board`: strict runtime state and a fresh Python-calculated payload;
-- `POST /api/snapshot`: atomic local export of that validated payload.
-
-## State flow
-
-The service loads one `FreshInputs` snapshot for both leagues. State is keyed by
-profile ID and contains draft slot, current overall pick, taken IDs, your IDs,
-and queue IDs. A state mutation is committed only after `build_draft_board`,
-payload creation, and provenance validation all succeed. A failed request cannot
-replace the last valid state with a partial board.
+The service loads one `FreshInputs` snapshot for the run. Profile state contains
+the draft slot, current overall pick, taken IDs, your IDs, and queue IDs. A
+mutation is committed only after board construction, payload creation, and
+provenance validation succeed.
 
 ## Browser responsibilities
 
-The page provides loading and blocked states, league selection, read-only league
-settings, slot/current-pick inputs, Taken/Mine/Queue actions, a board table,
-provenance display, and snapshot export. It does not calculate scoring,
-replacement levels, VOR, scarcity, ADP availability, or recommendations.
+The page handles loading and blocked states, profile selection, read-only league
+settings, slot/current-pick inputs, Taken/Mine/Queue actions, table rendering,
+provenance display, and snapshot export. It does not recalculate fantasy
+points, replacement levels, VOR, scarcity, ADP availability, or recommendations.
 
-## Current path versus historical notes
+## Optional React package
 
-The older React dashboard and staged `site/` surface are retained as research and
-maintenance material only. They are not used by the current 2026 command and
-must not be treated as a second valuation implementation or a fallback.
+`dashboard_frontend/` contains a tested React/Vite template for frontend
+development. It is not a second draft-day calculation path. The operator only
+needs the Python command above; Node is required for frontend development and
+template regeneration, not for using a generated board.
