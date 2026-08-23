@@ -129,6 +129,41 @@ def test_decision_table_builds_expected_columns():
     assert table.iloc[0]['draft_score'] >= table.iloc[-1]['draft_score']
 
 
+def test_decision_table_uses_position_baselines_and_signed_deltas():
+    players = pd.DataFrame(
+        {
+            'player_name': ['RB One', 'RB Two', 'RB Three'],
+            'position': ['RB', 'RB', 'RB'],
+            'proj_points_mean': [200.0, 150.0, 100.0],
+            'adp': [1.0, 2.0, 3.0],
+        }
+    )
+    settings = LeagueSettings(
+        league_size=2,
+        draft_position=1,
+        roster_spots={
+            'QB': 0,
+            'RB': 1,
+            'WR': 0,
+            'TE': 0,
+            'FLEX': 0,
+            'DST': 0,
+            'K': 0,
+        },
+        bench_slots=0,
+    )
+
+    table = build_decision_table(
+        players, settings, DraftContext(current_pick_number=1)
+    ).set_index('player_name')
+
+    assert table.loc['RB One', 'starter_baseline'] == pytest.approx(150.0)
+    assert table.loc['RB One', 'replacement_baseline'] == pytest.approx(150.0)
+    assert table.loc['RB One', 'starter_delta'] == pytest.approx(50.0)
+    assert table.loc['RB Two', 'replacement_delta'] == pytest.approx(0.0)
+    assert table.loc['RB Three', 'replacement_delta'] == pytest.approx(-50.0)
+
+
 def test_decision_table_collapses_duplicate_player_rows():
     players = pd.concat(
         [_synthetic_players(), _synthetic_players().iloc[[0]]], ignore_index=True
