@@ -48,7 +48,7 @@ def _entry(
     adp: float | None = 25.0,
     projected_points: float = 200.0,
 ) -> dict:
-    ownership = {'date': 1_787_400_000_000}
+    ownership: dict[str, int | float] = {'date': 1_787_400_000_000}
     if adp is not None:
         ownership['averageDraftPosition'] = adp
     return {

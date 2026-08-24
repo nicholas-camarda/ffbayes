@@ -5,6 +5,7 @@ import json
 import pandas as pd
 import pytest
 
+from ffbayes.draft_2026 import dashboard_app
 from ffbayes.draft_2026.dashboard_app import (
     DashboardRequestError,
     DashboardService,
@@ -210,3 +211,48 @@ def test_blocked_status_preserves_external_source_failure_details(tmp_path) -> N
     assert status['source'].startswith('ESPN public')
     assert status['failure_mode'] == 'HTTPError: 503'
     assert status['fallback'] is False
+
+
+def test_main_blocks_dashboard_when_fresh_inputs_cannot_build_a_profile(
+    monkeypatch, tmp_path
+) -> None:
+    players = _players()
+    players.loc[players['position'].eq('DST'), 'projection_stats'] = [
+        {'80': 0.0}
+    ] * int(players['position'].eq('DST').sum())
+    inputs = FreshInputs(
+        payload={'players': []},
+        source_manifest={
+            'season': 2026,
+            'sha256': 'espn-fixture',
+            'fetched_at': '2026-08-23T00:00:00Z',
+        },
+        roster=pd.DataFrame(),
+        roster_manifest={
+            'season': 2026,
+            'sha256': 'roster-fixture',
+            'fetched_at': '2026-08-23T00:00:00Z',
+        },
+        players=players,
+        coverage={'status': 'passed', 'rows': len(players)},
+    )
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(dashboard_app, 'default_profile_paths', lambda: ())
+    monkeypatch.setattr(
+        dashboard_app, '_load_profiles', lambda _: ([_profile('bill', 2)], None)
+    )
+    monkeypatch.setattr(dashboard_app, 'load_fresh_inputs', lambda _: inputs)
+    monkeypatch.setattr(
+        dashboard_app,
+        'serve_dashboard',
+        lambda service, **_: captured.setdefault('status', service.status_payload())
+        and 0,
+    )
+
+    assert dashboard_app.main(['--year', '2026', '--no-browser']) == 0
+    status = captured['status']
+    assert isinstance(status, dict)
+    assert status['status'] == 'blocked'
+    assert status['fallback'] is False
+    assert 'Projection scoring has no usable signal for DST' in status['error']

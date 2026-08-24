@@ -8,7 +8,6 @@ from test_draft_2026_dashboard_service import _players, _profile
 from ffbayes.draft_2026.dashboard_app import DashboardService, create_http_server
 from ffbayes.draft_2026.pipeline import FreshInputs, _sha256_json
 
-
 players = _players()
 players.loc[players.index[0], 'name'] = (
     '<img src=x onerror="window.__hostileExecuted=true"> hostile-player'

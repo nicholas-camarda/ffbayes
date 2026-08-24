@@ -426,6 +426,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     if blocked_error is None:
         try:
             fresh_inputs = load_fresh_inputs(args.year)
+            for profile in profiles:
+                build_draft_board(fresh_inputs.players, profile)
         except Exception as exc:
             blocked_error = f'{type(exc).__name__}: {exc}'
             blocked_details = _source_failure_details(exc)
