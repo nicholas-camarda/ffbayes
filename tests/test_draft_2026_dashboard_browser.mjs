@@ -28,9 +28,12 @@ try {
   page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()); });
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'networkidle' });
   await page.locator('#ready').waitFor({ state: 'visible' });
-  for (const panel of ['#recommendation-panel', '#timing-frontier', '#positional-cliffs', '#comparative-explainer', '#roster-panel', '#queue-panel', '#freshness-panel', '#provenance']) {
+  for (const panel of ['#recommendation-panel', '#timing-frontier', '#positional-cliffs', '#comparative-explainer', '#roster-panel', '#queue-panel', '#freshness-panel', '#provenance-details']) {
     await page.locator(panel).waitFor({ state: 'visible' });
   }
+  if (await page.locator('#provenance-details').getAttribute('open') !== null) throw new Error('Technical provenance should be collapsed by default');
+  if (await page.locator('#provenance').isVisible()) throw new Error('Raw provenance JSON should not be prominent by default');
+  if ((await page.locator('#freshness').textContent()).includes('{')) throw new Error('Data health should be human-readable, not raw JSON');
 
   await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Current pick 1'));
   await page.locator('#draft-slot').fill('2');
