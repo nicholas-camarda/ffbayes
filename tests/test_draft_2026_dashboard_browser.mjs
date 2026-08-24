@@ -62,6 +62,8 @@ try {
 
   await page.locator('#league').selectOption('family');
   await page.waitForTimeout(100);
+  await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Current pick 1'));
+  if (await page.locator('#draft-slot').inputValue() !== '') throw new Error('League state leaked draft slot across profiles');
   await page.waitForFunction((id) => !document.querySelector(`#board tr[data-player-id="${id}"]`)?.textContent?.includes('taken'), firstId);
 
   consoleErrors.length = 0;
