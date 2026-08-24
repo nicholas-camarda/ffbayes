@@ -88,15 +88,6 @@ def _records(frame: pd.DataFrame) -> list[dict[str, Any]]:
     return clean(frame.to_dict(orient='records'))
 
 
-def _finite_number(value: Any, default: float = 0.0) -> float:
-    """Return a finite numeric value for display metrics, never a sentinel."""
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return default
-    return number if math.isfinite(number) else default
-
-
 def _required_number(value: Any, field: str) -> float:
     """Require a finite canonical metric; never invent a neutral value."""
     try:
@@ -130,6 +121,11 @@ def _build_analytics(
         vor = _required_number(row.get('vor'), 'vor')
         adp = _required_number(row.get('adp'), 'adp')
         probability = row.get('availability_next_pick')
+        primary_projection = (
+            _required_number(primary.get('projected_points'), 'projected_points')
+            if primary is not None
+            else projected
+        )
         return {
             'espn_id': int(row['espn_id']),
             'name': str(row.get('name', '')),
@@ -140,11 +136,9 @@ def _build_analytics(
             'vor': vor,
             'adp': adp,
             'availability_next_pick': (
-                None if probability is None else _finite_number(probability)
+                None if probability is None else _required_number(probability, 'availability_next_pick')
             ),
-            'expected_regret': max(0.0, _finite_number(primary.get('projected_points')) - projected)
-            if primary is not None
-            else 0.0,
+            'expected_regret': max(0.0, primary_projection - projected),
             'position_run_risk': min(
                 1.0,
                 max(0.0, _required_number(row.get('scarcity'), 'scarcity') / 25.0),
@@ -201,10 +195,13 @@ def _build_analytics(
     cliffs: list[dict[str, Any]] = []
     for position in sorted({str(row.get('position', '')) for row in decision_table}):
         rows = [row for row in available if row.get('position') == position]
-        rows.sort(key=lambda row: _finite_number(row.get('projected_points')), reverse=True)
+        rows.sort(
+            key=lambda row: _required_number(row.get('projected_points'), 'projected_points'),
+            reverse=True,
+        )
         gaps = [
-            _finite_number(rows[index].get('projected_points'))
-            - _finite_number(rows[index + 1].get('projected_points'))
+            _required_number(rows[index].get('projected_points'), 'projected_points')
+            - _required_number(rows[index + 1].get('projected_points'), 'projected_points')
             for index in range(len(rows) - 1)
         ]
         strongest = max(gaps) if gaps else 0.0
