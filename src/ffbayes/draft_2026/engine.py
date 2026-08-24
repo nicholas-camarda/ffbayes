@@ -175,12 +175,21 @@ def calculate_replacement_levels(
     }
 
 
-def next_snake_pick(current_pick: int, profile: LeagueProfile) -> int:
-    """Return the user's next pick strictly after the current overall pick."""
+def next_snake_pick(current_pick: int, profile: LeagueProfile) -> int | None:
+    """Return the user's next pick strictly after the current overall pick.
+
+    The clock may equal one past the final configured pick so a completed
+    draft can be represented without inventing a future turn.
+    """
     if profile.draft_slot is None:
         raise SemanticInputError('Draft slot is required for snake-pick timing')
-    if not 1 <= current_pick <= profile.total_draft_picks():
+    final_pick = profile.total_draft_picks()
+    if isinstance(current_pick, bool) or not isinstance(current_pick, int):
+        raise SemanticInputError('Current pick must be an integer')
+    if not 1 <= current_pick <= final_pick + 1:
         raise SemanticInputError('Current pick is outside the configured draft')
+    if current_pick == final_pick + 1:
+        return None
     picks: list[int] = []
     for round_number in range(1, profile.active_roster_size() + 1):
         if round_number % 2:
@@ -189,9 +198,7 @@ def next_snake_pick(current_pick: int, profile: LeagueProfile) -> int:
             pick = round_number * profile.team_count - profile.draft_slot + 1
         if pick > current_pick:
             picks.append(pick)
-    if not picks:
-        raise SemanticInputError('No future snake pick exists in the configured draft')
-    return min(picks)
+    return min(picks) if picks else None
 
 
 def _availability_probability(adp: pd.Series, target_pick: int) -> pd.Series:
@@ -261,10 +268,15 @@ def build_draft_board(
     else:
         if profile.draft_slot is None:
             raise SemanticInputError('Draft slot is required for snake-pick timing')
-        if not 1 <= active_pick <= profile.total_draft_picks():
+        if not 1 <= active_pick <= profile.total_draft_picks() + 1:
             raise SemanticInputError('Current pick is outside the configured draft')
         next_pick = next_snake_pick(active_pick, profile)
-        frame['availability_next_pick'] = _availability_probability(frame['adp'], next_pick)
+        if next_pick is None:
+            frame['availability_next_pick'] = np.nan
+        else:
+            frame['availability_next_pick'] = _availability_probability(
+                frame['adp'], next_pick
+            )
 
     vor_scale = max(float(frame['vor'].std(ddof=0)), 1.0)
     scarcity_scale = max(float(frame['scarcity'].std(ddof=0)), 1.0)
