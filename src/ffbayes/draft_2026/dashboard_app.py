@@ -18,6 +18,7 @@ from typing import Any, Mapping, Sequence
 import pandas as pd
 import requests
 
+from ffbayes.draft_2026.draft_state import DraftState
 from ffbayes.draft_2026.engine import build_draft_board
 from ffbayes.draft_2026.league import LeagueProfile, LeagueProfileError
 from ffbayes.draft_2026.pipeline import (
@@ -88,14 +89,8 @@ class DashboardService:
         self.code_revision = code_revision
         self.blocked_error = blocked_error
         self.blocked_details = dict(blocked_details or {})
-        self._state: dict[str, dict[str, Any]] = {
-            profile.profile_id: {
-                'draft_slot': profile.draft_slot,
-                'current_pick': None,
-                'taken_ids': [],
-                'your_ids': [],
-                'queue_ids': [],
-            }
+        self._state: dict[str, DraftState] = {
+            profile.profile_id: DraftState(draft_slot=profile.draft_slot)
             for profile in profiles
         }
 
@@ -155,62 +150,75 @@ class DashboardService:
         values = pd.to_numeric(self.fresh_inputs.players['espn_id'], errors='coerce').dropna()
         return {int(value) for value in values}
 
-    def _request_state(self, request: Mapping[str, Any]) -> tuple[LeagueProfile, dict[str, Any]]:
+    def _request_profile(self, request: Mapping[str, Any]) -> tuple[LeagueProfile, DraftState]:
         if self.blocked_error or self.fresh_inputs is None:
             raise DashboardBlockedError(self.blocked_error or 'Fresh inputs are unavailable')
         profile_id = request.get('profile_id')
         if not isinstance(profile_id, str) or profile_id not in self.profiles:
             raise DashboardRequestError('Unknown profile_id')
-        profile = self.profiles[profile_id]
-        raw_slot = request.get('draft_slot')
-        if raw_slot is not None and (isinstance(raw_slot, bool) or not isinstance(raw_slot, int)):
-            raise DashboardRequestError('draft_slot must be an integer or null')
-        slot = raw_slot
-        if slot is not None:
-            try:
-                profile.validate_runtime_slot(slot)
-            except LeagueProfileError as exc:
-                raise DashboardRequestError(str(exc)) from exc
-        raw_current = request.get('current_pick')
-        if raw_current is not None and (
-            isinstance(raw_current, bool) or not isinstance(raw_current, int)
-        ):
-            raise DashboardRequestError('current_pick must be an integer or null')
-        current_pick = raw_current
-        if current_pick is None and slot is not None:
-            current_pick = slot
-        if current_pick is not None and not 1 <= current_pick <= profile.total_draft_picks():
-            raise DashboardRequestError('current_pick is outside the configured draft')
-        taken_ids = _integer_list(request.get('taken_ids'), 'taken_ids')
-        your_ids = _integer_list(request.get('your_ids'), 'your_ids')
-        queue_ids = _integer_list(request.get('queue_ids'), 'queue_ids')
-        if set(taken_ids).intersection(your_ids):
-            raise DashboardRequestError('A player cannot be both taken and yours')
-        unknown = (set(taken_ids) | set(your_ids) | set(queue_ids)).difference(self._known_ids())
-        if unknown:
-            raise DashboardRequestError(f'unknown player espn_id values: {sorted(unknown)}')
-        state = {
-            'draft_slot': slot,
-            'current_pick': current_pick,
-            'taken_ids': taken_ids,
-            'your_ids': your_ids,
-            'queue_ids': queue_ids,
-        }
-        return replace(profile, draft_slot=slot), state
+        if any(key in request for key in ('taken_ids', 'your_ids', 'queue_ids', 'actions')):
+            raise DashboardRequestError(
+                'Client-owned draft arrays are not accepted; use /api/action'
+            )
+        state = self._state[profile_id]
+        if 'draft_slot' in request:
+            raw_slot = request.get('draft_slot')
+            if raw_slot is not None and (
+                isinstance(raw_slot, bool) or not isinstance(raw_slot, int)
+            ):
+                raise DashboardRequestError('draft_slot must be an integer or null')
+            if raw_slot is not None:
+                try:
+                    self.profiles[profile_id].validate_runtime_slot(raw_slot)
+                except LeagueProfileError as exc:
+                    raise DashboardRequestError(str(exc)) from exc
+            state = replace(state, draft_slot=raw_slot)
+        return replace(self.profiles[profile_id], draft_slot=state.draft_slot), state
 
-    def handle_board(self, request: Mapping[str, Any]) -> dict[str, Any]:
-        profile, state = self._request_state(request)
+    def _validate_pick(self, profile: LeagueProfile, value: object) -> int:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise DashboardRequestError('current_pick must be an integer')
+        if not 1 <= value <= profile.total_draft_picks() + 1:
+            raise DashboardRequestError('current_pick is outside the configured draft')
+        return value
+
+    def _validate_player_id(self, value: object) -> int:
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise DashboardRequestError('player_id must be a positive integer')
+        if value not in self._known_ids():
+            raise DashboardRequestError(f'unknown player espn_id value: {value}')
+        return value
+
+    @staticmethod
+    def _runtime_state(state: DraftState) -> dict[str, Any]:
+        return {
+            'draft_slot': state.draft_slot,
+            'current_pick': state.current_pick,
+            'taken_ids': list(state.taken_ids),
+            'your_ids': list(state.your_ids),
+            'queue_ids': list(state.queue_ids),
+            'actions': [
+                {
+                    'pick': action.pick,
+                    'player_id': action.player_id,
+                    'disposition': action.disposition,
+                }
+                for action in state.actions
+            ],
+        }
+
+    def _render(self, profile: LeagueProfile, state: DraftState) -> dict[str, Any]:
         fresh_inputs = self.fresh_inputs
         if fresh_inputs is None:
             raise DashboardBlockedError('Fresh inputs are unavailable')
         board = build_draft_board(
             fresh_inputs.players,
             profile,
-            current_pick=state['current_pick'],
-            taken_ids=state['taken_ids'],
-            your_ids=state['your_ids'],
+            current_pick=state.current_pick,
+            taken_ids=state.taken_ids,
+            your_ids=state.your_ids,
         )
-        board.attrs['runtime_state'] = state
+        board.attrs['runtime_state'] = self._runtime_state(state)
         payload = build_dashboard_payload(
             board,
             profile,
@@ -219,6 +227,37 @@ class DashboardService:
             coverage_report=fresh_inputs.coverage,
             code_revision=self.code_revision,
         )
+        return payload
+
+    def handle_board(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        profile, state = self._request_profile(request)
+        if 'current_pick' in request:
+            state = state.sync_clock(self._validate_pick(profile, request['current_pick']))
+        payload = self._render(profile, state)
+        self._state[profile.profile_id] = state
+        return payload
+
+    def handle_action(self, request: Mapping[str, Any]) -> dict[str, Any]:
+        profile, state = self._request_profile(request)
+        action = request.get('action')
+        if not isinstance(action, Mapping):
+            raise DashboardRequestError('action must be an object')
+        action_type = action.get('type')
+        if action_type == 'record':
+            player_id = self._validate_player_id(action.get('player_id'))
+            disposition = action.get('disposition')
+            if disposition not in ('taken', 'mine'):
+                raise DashboardRequestError("disposition must be 'taken' or 'mine'")
+            state = state.record(player_id, disposition)
+        elif action_type == 'queue':
+            state = state.toggle_queue(self._validate_player_id(action.get('player_id')))
+        elif action_type == 'undo':
+            state = state.undo()
+        elif action_type == 'sync':
+            state = state.sync_clock(self._validate_pick(profile, action.get('current_pick')))
+        else:
+            raise DashboardRequestError('Unsupported action type')
+        payload = self._render(profile, state)
         self._state[profile.profile_id] = state
         return payload
 
@@ -247,28 +286,29 @@ class DashboardService:
 def _dashboard_html() -> str:
     return """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>FFBayes 2026 Draft Dashboard</title>
+<title>FFBayes 2026 Draft War Room</title>
 <style>
-:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif}body{margin:0;background:#07111f;color:#e2e8f0}main{max-width:1500px;margin:0 auto;padding:24px}h1{margin:0 0 6px}.muted{color:#94a3b8}.blocked{background:#451a1a;border:1px solid #ef4444;padding:16px;border-radius:8px}.panel{background:#0f172a;border:1px solid #334155;border-radius:8px;padding:16px;margin:14px 0}.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.control{display:flex;flex-direction:column;gap:5px}input,select,button{font:inherit;background:#111827;color:#f8fafc;border:1px solid #475569;border-radius:5px;padding:7px}button{cursor:pointer}button:hover{border-color:#38bdf8}.table-wrap{overflow:auto;max-height:65vh}table{border-collapse:collapse;width:100%;font-size:14px}th,td{padding:8px;border-bottom:1px solid #334155;text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#111827}.status-available{color:#86efac}.status-taken{color:#fca5a5}.status-mine{color:#93c5fd}.notice{color:#fbbf24}.hidden{display:none}.pill{display:inline-block;border:1px solid #475569;border-radius:999px;padding:3px 8px;margin-right:5px;font-size:12px}</style></head>
-<body><main><h1>FFBayes 2026 Draft Dashboard</h1><p class="muted">Fresh public inputs, Python-calculated values, local loopback only.</p>
-<section id="blocked" class="blocked hidden" role="alert"></section>
-<section id="ready" class="hidden">
-<div class="panel"><div class="controls"><label class="control">League<select id="league"></select></label><label class="control">Draft slot<input id="draft-slot" type="number" min="1"></label><label class="control">Current overall pick<input id="current-pick" type="number" min="1"></label><button id="recalculate">Recalculate board</button><button id="snapshot">Export snapshot</button></div><p id="league-settings" class="muted"></p><p id="status"></p></div>
-<div class="panel"><strong>Provenance</strong><pre id="provenance" class="muted"></pre></div>
-<div class="panel"><p class="muted">Use the row buttons to mark a player taken, yours, or queue them. Every change is recalculated by the Python service.</p><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Player</th><th>Pos</th><th>Proj</th><th>Replacement</th><th>VOR</th><th>Scarcity</th><th>ADP</th><th>Next pick</th><th>Action</th><th>State</th></tr></thead><tbody id="board"></tbody></table></div></div>
-</section>
+:root{color-scheme:dark;font-family:Inter,system-ui,-apple-system,sans-serif}body{margin:0;background:#07111f;color:#e2e8f0}main{max-width:1600px;margin:auto;padding:24px}h1,h2,h3{margin:0 0 8px}.muted{color:#94a3b8}.blocked{background:#451a1a;border:1px solid #ef4444;padding:16px;border-radius:10px}.panel{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:16px;margin:14px 0}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.control{display:flex;flex-direction:column;gap:5px}input,select,button{font:inherit;background:#111827;color:#f8fafc;border:1px solid #475569;border-radius:6px;padding:8px}button{cursor:pointer}button:hover{border-color:#38bdf8}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.wide{grid-column:span 2}.metric{font-size:1.6rem;font-weight:700}.notice{color:#fbbf24}.good{color:#86efac}.warn{color:#fca5a5}.table-wrap{overflow:auto;max-height:58vh}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:7px;border-bottom:1px solid #334155;text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#111827}.status-taken{color:#fca5a5}.status-mine{color:#93c5fd}.bar{height:7px;background:#1e293b;border-radius:6px;overflow:hidden;min-width:90px}.bar i{display:block;height:100%;background:#38bdf8}.pill{display:inline-block;border:1px solid #475569;border-radius:999px;padding:3px 8px;margin:2px;font-size:12px}.hidden{display:none}.list{display:grid;gap:7px}.list-item{padding:8px;border:1px solid #334155;border-radius:7px}.small{font-size:12px}.cliff{display:flex;align-items:center;gap:8px;margin:7px 0}.cliff strong{width:40px}.frontier{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px}.frontier .list-item{background:#111c31}</style></head>
+<body><main><h1>FFBayes 2026 Draft War Room</h1><p class="muted">One canonical Python board, live server-confirmed actions, fresh public 2026 inputs, loopback only.</p>
+<section id="blocked" class="blocked hidden" role="alert"></section><section id="ready" class="hidden">
+<div class="panel"><div class="controls"><label class="control">League<select id="league"></select></label><label class="control">Draft slot<input id="draft-slot" type="number" min="1"></label><label class="control">Current overall pick<input id="current-pick" type="number" min="1"></label><button id="sync-clock">Sync clock</button><button id="recalculate">Recalculate board</button><button id="undo">Undo last pick</button><button id="snapshot">Export snapshot</button></div><p id="league-settings" class="muted"></p><p id="status"></p></div>
+<div class="grid"><section class="panel" id="recommendation-panel"><h2>Recommendation</h2><div id="recommendation"></div></section><section class="panel" id="roster-panel"><h2>My roster</h2><div id="roster" class="list"></div></section><section class="panel" id="queue-panel"><h2>Queue</h2><div id="queue" class="list"></div></section><section class="panel wide" id="timing-frontier"><h2>Timing frontier</h2><p class="muted small">Pick-now value, next-pick survival, and regret are calculated by Python.</p><div id="frontier" class="frontier"></div></section><section class="panel" id="positional-cliffs"><h2>Positional cliffs</h2><div id="cliffs"></div></section><section class="panel" id="comparative-explainer"><h2>Comparative explainer</h2><div id="comparative" class="list"></div></section><section class="panel wide" id="freshness-panel"><h2>Freshness and provenance</h2><pre id="freshness" class="muted small"></pre></section></div>
+<section class="panel"><h2>Draft board</h2><p class="muted small">Taken and Mine advance the server clock once. Queue never advances it. Repeating or correcting a player is idempotent and Undo restores the consumed pick.</p><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Player</th><th>Pos</th><th>Proj</th><th>VOR</th><th>ADP</th><th>Survival</th><th>Action</th><th>State</th></tr></thead><tbody id="board"></tbody></table></div></section></section></main>
 <script>
-const stateByLeague = new Map(); let leagues = []; let currentPayload = null;
-const $ = (id) => document.getElementById(id);
-function showBlocked(message){ $('blocked').classList.remove('hidden'); $('ready').classList.add('hidden'); $('blocked').textContent = 'Dashboard blocked: ' + message; }
-function currentState(){ const id=$('league').value; return stateByLeague.get(id) || {profile_id:id,draft_slot:null,current_pick:null,taken_ids:[],your_ids:[],queue_ids:[]}; }
-function setSettings(){ const league=leagues.find(item=>item.profile_id===$('league').value); if(!league)return; $('draft-slot').max=league.team_count; $('current-pick').max=league.team_count*(Object.values(league.roster_slots).reduce((a,b)=>a+b,0)+league.bench_slots); $('league-settings').textContent=`${league.league_name} · ${league.team_count}-team ${league.draft_format} · ${league.scoring_label} · FLEX ${league.roster_slots.FLEX} · bench ${league.bench_slots} · IR ${league.ir_slots}`; const s=currentState(); $('draft-slot').value=s.draft_slot ?? ''; $('current-pick').value=s.current_pick ?? ''; }
-function requestState(){ const state=currentState(); return {...state,draft_slot:$('draft-slot').value===''?null:Number($('draft-slot').value),current_pick:$('current-pick').value===''?null:Number($('current-pick').value)}; }
-function renderBoard(){ const body=$('board'); body.replaceChildren(); if(!currentPayload)return; const statusClasses={available:'status-available',taken:'status-taken',mine:'status-mine'}; const textCell=(value)=>{ const cell=document.createElement('td'); cell.textContent=String(value); return cell; }; for(const row of currentPayload.decision_table.slice(0,100)){ const tr=document.createElement('tr'); tr.dataset.playerId=String(row.espn_id); const status=row.roster_status||'available'; const queued=currentPayload.runtime_state.queue_ids.includes(row.espn_id); tr.append(textCell(row.board_rank),textCell(row.name),textCell(row.position),textCell(Number(row.projected_points).toFixed(1)),textCell(Number(row.replacement_level).toFixed(1)),textCell(Number(row.vor).toFixed(1)),textCell(Number(row.scarcity).toFixed(1)),textCell(Number(row.adp).toFixed(1)),textCell(row.availability_next_pick==null?'Draft slot required':(Number(row.availability_next_pick)*100).toFixed(0)+'%')); const actionCell=document.createElement('td'); for(const [action,label] of [['taken','Taken'],['mine','Mine'],['queue','Queue']]){ if(actionCell.childNodes.length)actionCell.appendChild(document.createTextNode(' ')); const button=document.createElement('button'); button.type='button'; button.dataset.action=action; button.dataset.id=String(row.espn_id); button.textContent=label; actionCell.appendChild(button); } tr.appendChild(actionCell); const statusCell=textCell(`${queued?'queued · ':''}${status} · ${row.recommendation}`); if(statusClasses[status])statusCell.classList.add(statusClasses[status]); tr.appendChild(statusCell); body.appendChild(tr); } $('status').textContent=`Current pick ${currentPayload.current_pick ?? '—'} · next pick ${currentPayload.next_pick ?? '—'} · ${currentPayload.decision_table.length} validated players`; $('provenance').textContent=JSON.stringify(currentPayload.provenance,null,2); }
-async function recalculate(){ const response=await fetch('/api/board',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(requestState())}); const data=await response.json(); if(!response.ok){$('status').textContent=data.error||'Board recalculation failed';$('status').className='notice';return;} currentPayload=data; const state=requestState(); stateByLeague.set(state.profile_id,state); renderBoard(); }
-$('league').addEventListener('change',()=>{setSettings(); currentPayload=null; recalculate();}); $('recalculate').addEventListener('click',recalculate); $('snapshot').addEventListener('click',async()=>{const response=await fetch('/api/snapshot',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(requestState())}); const data=await response.json(); $('status').textContent=response.ok?'Snapshot written to '+data.path:(data.error||'Snapshot failed');}); $('board').addEventListener('click',(event)=>{const button=event.target.closest('button[data-action]');if(!button)return;const state=currentState();const id=Number(button.dataset.id);const action=button.dataset.action;for(const key of ['taken_ids','your_ids'])state[key]=state[key].filter(value=>value!==id);if(action==='taken')state.taken_ids.push(id);if(action==='mine')state.your_ids.push(id);if(action==='queue'){state.queue_ids=state.queue_ids.includes(id)?state.queue_ids.filter(value=>value!==id):[...state.queue_ids,id];}stateByLeague.set(state.profile_id,state);recalculate();});
-(async()=>{try{const status=await (await fetch('/api/status')).json();if(status.status!=='ready'){showBlocked(status.error||'source validation failed');return;}leagues=(await (await fetch('/api/leagues')).json()).leagues||[];if(!leagues.length){showBlocked('no league profiles are available');return;}for(const league of leagues){stateByLeague.set(league.profile_id,{profile_id:league.profile_id,draft_slot:null,current_pick:null,taken_ids:[],your_ids:[],queue_ids:[]});const option=document.createElement('option');option.value=league.profile_id;option.textContent=league.league_name;$('league').appendChild(option);} $('ready').classList.remove('hidden');setSettings();await recalculate();}catch(error){showBlocked(error instanceof Error?error.message:String(error));}})();
-</script></main></body></html>"""
+let leagues=[];let currentPayload=null;const $=id=>document.getElementById(id);const fmt=(v,d=1)=>v==null?'—':Number(v).toFixed(d);const esc=v=>String(v==null?'—':v);
+function showBlocked(message){$('blocked').classList.remove('hidden');$('ready').classList.add('hidden');$('blocked').textContent='Dashboard blocked: '+message;}
+function selectedLeague(){return leagues.find(x=>x.profile_id===$('league').value);}
+function setSettings(){const league=selectedLeague();if(!league)return;$('draft-slot').max=league.team_count;$('current-pick').max=league.team_count*(Object.values(league.roster_slots).reduce((a,b)=>a+b,0)+league.bench_slots);$('league-settings').textContent=league.league_name+' · '+league.team_count+' teams · '+league.draft_format+' · '+league.scoring_label+' · FLEX '+league.roster_slots.FLEX+' · bench '+league.bench_slots+' · IR '+league.ir_slots;if(currentPayload){$('draft-slot').value=currentPayload.runtime_state.draft_slot??'';$('current-pick').value=currentPayload.current_pick??1;}}
+function requestClock(){return{profile_id:$('league').value,draft_slot:$('draft-slot').value===''?null:Number($('draft-slot').value),current_pick:Number($('current-pick').value||1)};}
+async function post(path,body){const response=await fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw new Error(data.error||'Request failed');return data;}
+function cell(value){const node=document.createElement('td');node.textContent=esc(value);return node;}
+function item(row,extra){const node=document.createElement('div');node.className='list-item';node.textContent=row.name+' · '+row.position+' · VOR '+fmt(row.vor)+' · '+(extra||row.recommendation);return node;}
+function renderAnalytics(){const a=currentPayload.analytics||{};const rec=$('recommendation');rec.replaceChildren();const primary=a.recommendation&&a.recommendation.primary;if(primary){const title=document.createElement('div');title.className='metric';title.textContent=primary.name;rec.appendChild(title);const why=document.createElement('p');why.textContent=primary.rationale+' VOR '+fmt(primary.vor)+' · survival '+fmt(primary.availability_next_pick*100,0)+'%';rec.appendChild(why);}else rec.textContent='No available players.';const fallback=document.createElement('div');for(const row of (a.recommendation?.fallbacks||[]))fallback.appendChild(item(row,'fallback · regret '+fmt(row.expected_regret)));rec.appendChild(fallback);$('roster').replaceChildren(...(a.roster||[]).map(row=>item(row,'mine')));$('queue').replaceChildren(...(a.queue||[]).map(row=>item(row,'queued')));$('frontier').replaceChildren(...(a.timing_frontier||[]).slice(0,12).map(row=>item(row,'lane '+row.lane+' · regret '+fmt(row.expected_regret))));const cliffs=$('cliffs');cliffs.replaceChildren();for(const row of (a.positional_cliffs||[])){const wrap=document.createElement('div');wrap.className='cliff';const label=document.createElement('strong');label.textContent=row.position;const bar=document.createElement('div');bar.className='bar';const fill=document.createElement('i');fill.style.width=Math.min(100,Number(row.strongest_cliff||0))+'%';bar.appendChild(fill);const text=document.createElement('span');text.className='small';text.textContent='cliff '+fmt(row.strongest_cliff)+' after '+esc(row.cliff_after_rank);wrap.append(label,bar,text);cliffs.appendChild(wrap);}const comparative=$('comparative');comparative.replaceChildren();for(const row of (a.comparative||[]).filter(x=>Math.abs(Number(x.rank_gap))>=3).slice(0,8)){comparative.appendChild(item(row,'model '+fmt(row.model_rank,0)+' vs market '+fmt(row.market_rank,0)+' (gap '+fmt(row.rank_gap,0)+')'));}}
+function renderBoard(){const body=$('board');body.replaceChildren();if(!currentPayload)return;const queued=new Set(currentPayload.runtime_state.queue_ids||[]);for(const row of currentPayload.decision_table.slice(0,100)){const tr=document.createElement('tr');tr.dataset.playerId=String(row.espn_id);const status=row.roster_status||'available';tr.append(cell(row.board_rank),cell(row.name),cell(row.position),cell(fmt(row.projected_points)),cell(fmt(row.vor)),cell(fmt(row.adp)),cell(row.availability_next_pick==null?'slot required':fmt(Number(row.availability_next_pick)*100,0)+'%'));const actions=document.createElement('td');for(const [type,label] of [['taken','Taken'],['mine','Mine'],['queue',queued.has(row.espn_id)?'Unqueue':'Queue']]){const button=document.createElement('button');button.type='button';button.dataset.type=type;button.dataset.action=type;button.dataset.id=String(row.espn_id);button.textContent=label;actions.appendChild(button);if(type!=='queue')actions.appendChild(document.createTextNode(' '));}tr.appendChild(actions);const state=cell((queued.has(row.espn_id)?'queued · ':'')+status+' · '+row.recommendation);state.className=status==='mine'?'status-mine':status==='taken'?'status-taken':'';tr.appendChild(state);body.appendChild(tr);}$('status').textContent='Current pick '+esc(currentPayload.current_pick)+' · next pick '+esc(currentPayload.next_pick)+' · '+currentPayload.decision_table.length+' validated players';$('freshness').textContent=JSON.stringify({generated_at:currentPayload.generated_at,coverage:currentPayload.coverage_report,provenance:currentPayload.provenance},null,2);renderAnalytics();}
+async function refresh(){try{currentPayload=await post('/api/board',requestClock());setSettings();renderBoard();$('status').className='';}catch(error){$('status').textContent=error.message;$('status').className='notice';}}
+$('league').addEventListener('change',()=>{currentPayload=null;setSettings();refresh();});$('sync-clock').addEventListener('click',refresh);$('recalculate').addEventListener('click',refresh);$('undo').addEventListener('click',async()=>{try{currentPayload=await post('/api/action',{profile_id:$('league').value,action:{type:'undo'}});setSettings();renderBoard();}catch(error){$('status').textContent=error.message;$('status').className='notice';}});$('snapshot').addEventListener('click',async()=>{try{const result=await post('/api/snapshot',requestClock());$('status').textContent='Snapshot written to '+result.path;}catch(error){$('status').textContent=error.message;$('status').className='notice';}});$('board').addEventListener('click',async event=>{const button=event.target.closest('button[data-type]');if(!button)return;const type=button.dataset.type;try{currentPayload=await post('/api/action',{profile_id:$('league').value,action:{type:type==='queue'?'queue':'record',player_id:Number(button.dataset.id),disposition:type==='mine'?'mine':'taken'}});setSettings();renderBoard();}catch(error){$('status').textContent=error.message;$('status').className='notice';}});
+(async()=>{try{const status=await(await fetch('/api/status')).json();if(status.status!=='ready'){showBlocked(status.error||'source validation failed');return;}leagues=(await(await fetch('/api/leagues')).json()).leagues||[];if(!leagues.length){showBlocked('no league profiles are available');return;}for(const league of leagues){const option=document.createElement('option');option.value=league.profile_id;option.textContent=league.league_name;$('league').appendChild(option);} $('ready').classList.remove('hidden');await refresh();}catch(error){showBlocked(error instanceof Error?error.message:String(error));}})();
+</script></body></html>"""
 
 
 def create_http_server(service: DashboardService, port: int = 0) -> ThreadingHTTPServer:
@@ -297,7 +337,7 @@ def create_http_server(service: DashboardService, port: int = 0) -> ThreadingHTT
                 self._send(404, {'error': 'Not found'})
 
         def do_POST(self) -> None:  # noqa: N802
-            if self.path not in {'/api/board', '/api/snapshot'}:
+            if self.path not in {'/api/board', '/api/action', '/api/snapshot'}:
                 self._send(404, {'error': 'Not found'})
                 return
             try:
@@ -307,6 +347,8 @@ def create_http_server(service: DashboardService, port: int = 0) -> ThreadingHTT
                     raise DashboardRequestError('Request body must be a JSON object')
                 if self.path == '/api/board':
                     result = service.handle_board(request)
+                elif self.path == '/api/action':
+                    result = service.handle_action(request)
                 else:
                     result = {'path': str(service.write_snapshot(request))}
                 self._send(200, result)

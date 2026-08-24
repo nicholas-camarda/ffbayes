@@ -39,7 +39,11 @@ ffbayes dashboard --year 2026 \
 ```
 
 Draft slot and current overall pick are entered in the dashboard at draft time;
-they are not stored in the public example profile.
+they are not stored in the public example profile. A new board starts at overall
+pick 1, independent of the draft slot. After you click **Taken** or **Mine**, the
+server advances the clock once and refreshes every analytical panel; **Queue**
+does not advance it. Use **Undo last pick** for a mistake and **Sync clock** when
+joining late or correcting the clock.
 
 ## What the command does
 

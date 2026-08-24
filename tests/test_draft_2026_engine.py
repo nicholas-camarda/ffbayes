@@ -6,6 +6,7 @@ import pytest
 from ffbayes.draft_2026.engine import (
     build_draft_board,
     calculate_replacement_levels,
+    next_snake_pick,
     score_projections,
 )
 from ffbayes.draft_2026.league import LeagueProfile, LeagueProfileError
@@ -105,6 +106,18 @@ def test_unresolved_local_league_settings_fail_closed() -> None:
         _profile(scoring_items={})
     with pytest.raises(LeagueProfileError, match='waiver_constraints'):
         _profile(waiver_constraints=None)
+
+
+@pytest.mark.parametrize(
+    ('team_count', 'draft_slot', 'current_pick', 'expected'),
+    [(10, 10, 10, 11), (10, 10, 11, 30), (12, 12, 12, 13), (12, 12, 13, 36), (8, 8, 8, 9)],
+)
+def test_snake_pick_boundaries_keep_back_to_back_turns(
+    team_count: int, draft_slot: int, current_pick: int, expected: int
+) -> None:
+    profile = _profile(team_count=team_count, draft_slot=draft_slot)
+
+    assert next_snake_pick(current_pick, profile) == expected
 
 
 def test_scoring_configuration_changes_player_values() -> None:

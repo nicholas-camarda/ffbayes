@@ -266,17 +266,19 @@ def build_draft_board(
         next_pick = None
         frame['availability_next_pick'] = np.nan
     else:
-        if profile.draft_slot is None:
-            raise SemanticInputError('Draft slot is required for snake-pick timing')
         if not 1 <= active_pick <= profile.total_draft_picks() + 1:
             raise SemanticInputError('Current pick is outside the configured draft')
-        next_pick = next_snake_pick(active_pick, profile)
-        if next_pick is None:
+        if profile.draft_slot is None:
+            next_pick = None
             frame['availability_next_pick'] = np.nan
         else:
-            frame['availability_next_pick'] = _availability_probability(
-                frame['adp'], next_pick
-            )
+            next_pick = next_snake_pick(active_pick, profile)
+            if next_pick is None:
+                frame['availability_next_pick'] = np.nan
+            else:
+                frame['availability_next_pick'] = _availability_probability(
+                    frame['adp'], next_pick
+                )
 
     vor_scale = max(float(frame['vor'].std(ddof=0)), 1.0)
     scarcity_scale = max(float(frame['scarcity'].std(ddof=0)), 1.0)

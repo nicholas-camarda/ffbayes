@@ -88,6 +88,132 @@ def _records(frame: pd.DataFrame) -> list[dict[str, Any]]:
     return clean(frame.to_dict(orient='records'))
 
 
+def _finite_number(value: Any, default: float = 0.0) -> float:
+    """Return a finite numeric value for display metrics, never a sentinel."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return number if math.isfinite(number) else default
+
+
+def _build_analytics(
+    decision_table: list[dict[str, Any]],
+    runtime_state: Mapping[str, Any],
+    replacement: Mapping[str, Any],
+    source_manifests: Sequence[Mapping[str, Any]],
+    generated_at: str,
+) -> dict[str, Any]:
+    """Build the rich visual contract from canonical board values only."""
+    available = [row for row in decision_table if row.get('is_available', True)]
+    available.sort(key=lambda row: int(row.get('board_rank', 10**9)))
+    primary = available[0] if available else None
+
+    def evidence(row: Mapping[str, Any]) -> dict[str, Any]:
+        projected = _finite_number(row.get('projected_points'))
+        replacement_level = _finite_number(row.get('replacement_level'))
+        vor = _finite_number(row.get('vor'))
+        adp = row.get('adp')
+        probability = row.get('availability_next_pick')
+        return {
+            'espn_id': int(row['espn_id']),
+            'name': str(row.get('name', '')),
+            'position': str(row.get('position', '')),
+            'board_rank': int(row.get('board_rank', 0)),
+            'projected_points': projected,
+            'replacement_level': replacement_level,
+            'vor': vor,
+            'adp': None if adp is None else _finite_number(adp),
+            'availability_next_pick': (
+                None if probability is None else _finite_number(probability)
+            ),
+            'expected_regret': max(0.0, _finite_number(primary.get('projected_points')) - projected)
+            if primary is not None
+            else 0.0,
+            'position_run_risk': min(1.0, max(0.0, _finite_number(row.get('scarcity')) / 25.0)),
+            'recommendation': row.get('recommendation'),
+            'lane': (
+                'pick_now'
+                if row.get('recommendation') == 'draft_now'
+                else 'wait'
+                if row.get('recommendation') == 'can_wait'
+                else 'unavailable'
+            ),
+            'rationale': (
+                'Highest available contextual board value.'
+                if primary is row
+                else 'Available alternative ranked by the league-specific board.'
+            ),
+        }
+
+    recommendation = {
+        'primary': evidence(primary) if primary is not None else None,
+        'fallbacks': [evidence(row) for row in available[1:5]],
+        'can_wait': [
+            evidence(row)
+            for row in available
+            if row.get('recommendation') == 'can_wait'
+        ][:5],
+    }
+
+    comparative = []
+    for row in decision_table[:100]:
+        comparative.append(
+            {
+                'espn_id': int(row['espn_id']),
+                'name': str(row.get('name', '')),
+                'position': str(row.get('position', '')),
+                'model_rank': _finite_number(row.get('model_rank'), 0.0),
+                'market_rank': _finite_number(row.get('market_rank'), 0.0),
+                'rank_gap': _finite_number(row.get('market_rank'), 0.0)
+                - _finite_number(row.get('model_rank'), 0.0),
+                'contextual_score': _finite_number(row.get('decision_score')),
+                'baseline_score': _finite_number(row.get('vor')),
+            }
+        )
+
+    cliffs: list[dict[str, Any]] = []
+    for position in sorted({str(row.get('position', '')) for row in decision_table}):
+        rows = [row for row in available if row.get('position') == position]
+        rows.sort(key=lambda row: _finite_number(row.get('projected_points')), reverse=True)
+        gaps = [
+            _finite_number(rows[index].get('projected_points'))
+            - _finite_number(rows[index + 1].get('projected_points'))
+            for index in range(len(rows) - 1)
+        ]
+        strongest = max(gaps) if gaps else 0.0
+        edge = gaps.index(strongest) + 1 if gaps else None
+        cliffs.append(
+            {
+                'position': position,
+                'players_available': len(rows),
+                'replacement_level': _finite_number(
+                    (replacement.get('levels') or {}).get(position)
+                ),
+                'strongest_cliff': strongest,
+                'cliff_after_rank': edge,
+            }
+        )
+
+    timing_frontier = [evidence(row) for row in available[:20]]
+    roster_ids = {int(value) for value in runtime_state.get('your_ids', [])}
+    queue_ids = {int(value) for value in runtime_state.get('queue_ids', [])}
+    by_id = {int(row['espn_id']): row for row in decision_table}
+    return {
+        'recommendation': recommendation,
+        'comparative': comparative,
+        'positional_cliffs': cliffs,
+        'timing_frontier': timing_frontier,
+        'roster': [evidence(by_id[player_id]) for player_id in sorted(roster_ids) if player_id in by_id],
+        'queue': [evidence(by_id[player_id]) for player_id in sorted(queue_ids) if player_id in by_id],
+        'freshness': {
+            'generated_at': generated_at,
+            'source_manifests': [dict(manifest) for manifest in source_manifests],
+            'coverage_status': 'passed',
+        },
+    }
+
+
 def build_dashboard_payload(
     board: pd.DataFrame,
     profile: LeagueProfile,
@@ -104,11 +230,16 @@ def build_dashboard_payload(
         'espn_id',
         'name',
         'position',
+        'team',
         'projected_points',
         'replacement_level',
         'vor',
         'scarcity',
         'adp',
+        'model_rank',
+        'market_rank',
+        'board_priority',
+        'decision_score',
         'availability_next_pick',
         'recommendation',
         'roster_status',
@@ -132,6 +263,14 @@ def build_dashboard_payload(
     for key in ('taken_ids', 'your_ids', 'queue_ids'):
         runtime_state[key] = sorted({int(value) for value in runtime_state.get(key, [])})
     generated_at = datetime.now(timezone.utc).isoformat()
+    source_manifests = [dict(source_manifest), dict(roster_manifest)]
+    analytics = _build_analytics(
+        decision_table,
+        runtime_state,
+        board.attrs['replacement'],
+        source_manifests,
+        generated_at,
+    )
     payload = {
         'schema_version': SCHEMA_VERSION,
         'season': profile.season,
@@ -148,8 +287,10 @@ def build_dashboard_payload(
             'profile_sha256': _sha256_json(profile_value),
             'state_sha256': _sha256_json(runtime_state),
             'board_sha256': _sha256_json(decision_table),
-            'source_manifests': [dict(source_manifest), dict(roster_manifest)],
+            'source_manifests': source_manifests,
+            'analytics_sha256': _sha256_json(analytics),
         },
+        'analytics': analytics,
     }
     validate_output_provenance(payload)
     return payload
@@ -191,11 +332,58 @@ def validate_output_provenance(payload: Mapping[str, Any]) -> None:
         raise OutputProvenanceError('Decision table is empty')
     if provenance.get('board_sha256') != _sha256_json(table):
         raise OutputProvenanceError('Decision table digest is inconsistent')
+    analytics = payload.get('analytics')
+    if not isinstance(analytics, Mapping):
+        raise OutputProvenanceError('Analytics payload is missing')
+    if provenance.get('analytics_sha256') != _sha256_json(analytics):
+        raise OutputProvenanceError('Analytics digest is inconsistent')
     runtime_state = payload.get('runtime_state')
     if not isinstance(runtime_state, Mapping):
         raise OutputProvenanceError('Runtime state is missing')
     if provenance.get('state_sha256') != _sha256_json(runtime_state):
         raise OutputProvenanceError('Runtime state digest is inconsistent')
+    current_pick = runtime_state.get('current_pick')
+    if (
+        isinstance(current_pick, bool)
+        or not isinstance(current_pick, int)
+        or current_pick < 1
+    ):
+        raise OutputProvenanceError('Runtime state current_pick is invalid')
+    taken_ids = runtime_state.get('taken_ids', [])
+    your_ids = runtime_state.get('your_ids', [])
+    queue_ids = runtime_state.get('queue_ids', [])
+    if not all(isinstance(values, list) for values in (taken_ids, your_ids, queue_ids)):
+        raise OutputProvenanceError('Runtime state player lists are invalid')
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 1
+        for values in (taken_ids, your_ids, queue_ids)
+        for value in values
+    ):
+        raise OutputProvenanceError('Runtime state player lists are invalid')
+    if set(taken_ids).intersection(your_ids):
+        raise OutputProvenanceError('Runtime state overlaps taken and yours')
+    actions = runtime_state.get('actions', [])
+    if not isinstance(actions, list):
+        raise OutputProvenanceError('Runtime state action history is invalid')
+    action_ids: set[int] = set()
+    for action in actions:
+        if not isinstance(action, Mapping):
+            raise OutputProvenanceError('Runtime state action is invalid')
+        player_id = action.get('player_id')
+        pick = action.get('pick')
+        if (
+            isinstance(pick, bool)
+            or not isinstance(pick, int)
+            or pick < 1
+            or
+            isinstance(player_id, bool)
+            or not isinstance(player_id, int)
+            or player_id < 1
+            or player_id in action_ids
+            or action.get('disposition') not in ('mine', 'taken')
+        ):
+            raise OutputProvenanceError('Runtime state action is invalid')
+        action_ids.add(player_id)
     if any(row.get('espn_id') is None for row in table if isinstance(row, Mapping)):
         raise OutputProvenanceError('Decision table contains a missing espn_id')
 
@@ -224,6 +412,24 @@ def render_dashboard_html(payload: Mapping[str, Any]) -> str:
             f'<td>{html.escape(str(player["recommendation"]))}</td>'
             '</tr>'
         )
+    primary = (payload['analytics'].get('recommendation') or {}).get('primary')
+    primary_text = (
+        'No available player'
+        if primary is None
+        else (
+            f"{html.escape(str(primary['name']))} ({html.escape(str(primary['position']))}) · "
+            f"VOR {float(primary['vor']):.1f} · "
+            f"{html.escape(str(primary.get('rationale', '')))}"
+        )
+    )
+    cliff_rows = ''.join(
+        '<li>'
+        f"{html.escape(str(cliff['position']))}: "
+        f"{float(cliff['strongest_cliff']):.1f} point drop after "
+        f"{html.escape(str(cliff.get('cliff_after_rank', '—')))}"
+        '</li>'
+        for cliff in payload['analytics'].get('positional_cliffs', [])
+    )
     embedded = (
         _canonical_json(payload)
         .replace('&', '\\u0026')
@@ -236,6 +442,8 @@ def render_dashboard_html(payload: Mapping[str, Any]) -> str:
 <style>body{{font-family:system-ui;margin:2rem;background:#07111f;color:#f8fafc}}table{{border-collapse:collapse;width:100%}}th,td{{padding:.55rem;border-bottom:1px solid #334155;text-align:left}}th{{position:sticky;top:0;background:#0f172a}}.meta{{color:#94a3b8}}</style></head>
 <body><h1>{title} — 2026 Draft Board</h1>
 <p class="meta">Generated {html.escape(str(payload['generated_at']))}; next pick {payload['next_pick'] if payload['next_pick'] is not None else 'slot required'}; validated current inputs only.</p>
+<section id="recommendation-panel"><h2>Recommendation and evidence</h2><p>{primary_text}</p></section>
+<section id="positional-cliffs"><h2>Positional cliffs</h2><ul>{cliff_rows}</ul></section>
 <table id="draft-board"><thead><tr><th>Rank</th><th>Player</th><th>Pos</th><th>Proj</th><th>VOR</th><th>ADP</th><th>Next-pick availability</th><th>Action</th></tr></thead>
 <tbody>{''.join(rows)}</tbody></table>
 <script id="draft-2026-payload" type="application/json">{embedded}</script></body></html>"""

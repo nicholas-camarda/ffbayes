@@ -32,8 +32,8 @@ Profiles explicitly define season, team count, snake format, optional runtime
 draft slot, scoring weights and position overrides, weekly bonuses, starter
 slots, FLEX eligibility, bench/IR slots, waiver fields, and settings metadata.
 The profile is validated before it can reach the engine. A draft slot may be
-`null` until draft day; a current pick without a valid slot cannot produce
-snake-pick timing.
+`null` until draft day; the live state still starts at overall pick 1, while
+snake-pick timing remains unavailable until a slot is supplied.
 
 ## 3. Scoring
 
@@ -101,11 +101,14 @@ recommendation is `slot_required`. There is no 50% missing-data fallback.
 
 ## 7. Runtime state and output
 
-State is keyed by profile ID and stable ESPN IDs. Taken and yours cannot overlap;
-unknown IDs are rejected. Successful board responses contain the decision table,
-replacement demand/levels, coverage report, runtime state, and provenance
-digests. Snapshot export is atomic and occurs only after
-`validate_output_provenance` passes.
+State is keyed by profile ID and stable ESPN IDs. `DraftAction` records the
+overall pick, player ID, and Taken/Mine disposition. Taken and yours cannot
+overlap; unknown IDs are rejected. Queue is separate from action history. Each
+successful transition rebuilds the decision table and the canonical `analytics`
+object containing recommendation evidence, comparative ranks, positional
+cliffs, timing frontier, roster, queue, and freshness. Snapshot export is
+atomic and occurs only after `validate_output_provenance` passes, including
+state, board, analytics, profile, and source digests.
 
 ## 8. What this path does not claim
 

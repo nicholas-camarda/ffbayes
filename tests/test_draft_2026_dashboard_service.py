@@ -127,26 +127,56 @@ def test_service_lists_two_named_leagues_and_ready_status(service) -> None:
     assert leagues[1]['roster_slots']['FLEX'] == 1
 
 
+def test_live_actions_advance_once_queue_is_inert_and_undo_recomputes(service) -> None:
+    initial = service.handle_board({'profile_id': 'bill', 'draft_slot': 2})
+    assert initial['current_pick'] == 1
+    first_id = int(initial['decision_table'][0]['espn_id'])
+    second_id = int(initial['decision_table'][1]['espn_id'])
+
+    taken = service.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'}}
+    )
+    assert taken['current_pick'] == 2
+    assert first_id in taken['runtime_state']['taken_ids']
+    corrected = service.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'mine'}}
+    )
+    assert corrected['current_pick'] == 2
+    assert first_id in corrected['runtime_state']['your_ids']
+    queued = service.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'queue', 'player_id': second_id}}
+    )
+    assert queued['current_pick'] == 2
+    assert second_id in queued['runtime_state']['queue_ids']
+    undone = service.handle_action({'profile_id': 'bill', 'action': {'type': 'undo'}})
+    assert undone['current_pick'] == 1
+    assert first_id not in undone['runtime_state']['your_ids']
+    assert second_id in undone['runtime_state']['queue_ids']
+
+
 def test_service_recalculates_board_and_isolates_league_state(service) -> None:
     bill = service.handle_board(
         {
             'profile_id': 'bill',
             'draft_slot': 2,
             'current_pick': 2,
-            'taken_ids': [1000],
-            'your_ids': [],
-            'queue_ids': [1001],
         }
+    )
+    bill = service.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': 1000, 'disposition': 'taken'}}
+    )
+    bill = service.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'queue', 'player_id': 1001}}
     )
     family = service.handle_board(
         {
             'profile_id': 'family',
             'draft_slot': 9,
             'current_pick': 9,
-            'taken_ids': [],
-            'your_ids': [1000],
-            'queue_ids': [],
         }
+    )
+    family = service.handle_action(
+        {'profile_id': 'family', 'action': {'type': 'record', 'player_id': 1000, 'disposition': 'mine'}}
     )
 
     assert bill['league_profile']['profile_id'] == 'bill'
@@ -161,25 +191,22 @@ def test_service_rejects_invalid_slots_and_unknown_players(service) -> None:
     with pytest.raises(DashboardRequestError, match='draft_slot'):
         service.handle_board({'profile_id': 'bill', 'draft_slot': 0, 'current_pick': 1})
     with pytest.raises(DashboardRequestError, match='unknown player'):
-        service.handle_board(
-            {
-                'profile_id': 'bill',
-                'draft_slot': 1,
-                'current_pick': 1,
-                'taken_ids': [999999],
-            }
+        service.handle_action(
+            {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': 999999, 'disposition': 'taken'}}
         )
+    with pytest.raises(DashboardRequestError, match='Client-owned'):
+        service.handle_board({'profile_id': 'bill', 'taken_ids': [1000]})
 
 
 def test_service_snapshot_is_provenance_bound_and_atomic(service, tmp_path) -> None:
+    service.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'queue', 'player_id': 1000}}
+    )
     snapshot = service.write_snapshot(
         {
             'profile_id': 'bill',
             'draft_slot': 1,
             'current_pick': 1,
-            'taken_ids': [],
-            'your_ids': [],
-            'queue_ids': [1000],
         }
     )
 

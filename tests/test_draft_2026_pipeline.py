@@ -89,6 +89,9 @@ def test_dashboard_payload_binds_sources_profile_code_and_board() -> None:
     assert payload['league_profile']['profile_id'] == 'league-a'
     assert payload['provenance']['code_revision'] == 'deadbeef'
     assert payload['decision_table'][0]['name'] == 'Player One'
+    assert payload['analytics']['recommendation']['primary']['name'] == 'Player One'
+    assert payload['analytics']['positional_cliffs'][0]['position'] == 'WR'
+    assert payload['provenance']['analytics_sha256']
 
 
 def test_dashboard_payload_rejects_mismatched_or_stale_provenance() -> None:
@@ -239,6 +242,22 @@ def test_output_provenance_rejects_tampered_runtime_state() -> None:
     payload['runtime_state']['current_pick'] = 5
 
     with pytest.raises(OutputProvenanceError, match='state digest'):
+        validate_output_provenance(payload)
+
+
+def test_output_provenance_rejects_tampered_analytics() -> None:
+    manifest = {'season': 2026, 'sha256': 'abc', 'fetched_at': '2026-08-22T12:00:00Z'}
+    payload = build_dashboard_payload(
+        _payload_board(),
+        _profile(),
+        source_manifest=manifest,
+        roster_manifest={**manifest, 'sha256': 'def'},
+        coverage_report={'status': 'passed'},
+        code_revision='deadbeef',
+    )
+    payload['analytics']['recommendation']['primary']['name'] = 'tampered'
+
+    with pytest.raises(OutputProvenanceError, match='Analytics digest'):
         validate_output_provenance(payload)
 
 
