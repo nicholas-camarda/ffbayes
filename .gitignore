@@ -20,6 +20,7 @@ __pycache__/
 # Node and browser-test dependencies
 node_modules/
 .playwright-mcp/
+.superpowers/
 
 # Local data and generated runtime artifacts
 datasets/
