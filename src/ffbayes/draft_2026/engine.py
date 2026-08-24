@@ -259,7 +259,10 @@ def build_draft_board(
     frame['scarcity'] = _position_scarcity(frame, replacement)
 
     if current_pick is None:
-        active_pick = profile.draft_slot
+        # The draft clock is an overall-pick clock, not the user's roster slot.
+        # A fresh board always starts before the first selection; the service
+        # passes an explicit clock for later synchronization.
+        active_pick = 1
     else:
         active_pick = current_pick
     if active_pick is None:

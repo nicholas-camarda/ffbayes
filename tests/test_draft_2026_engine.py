@@ -235,6 +235,12 @@ def test_slot_neutral_board_has_no_guessed_timing_recommendation() -> None:
     assert set(board['recommendation']) == {'slot_required'}
 
 
+def test_engine_default_clock_starts_at_overall_pick_one() -> None:
+    board = build_draft_board(_players(), _profile(draft_slot=10))
+
+    assert board.attrs['current_pick'] == 1
+
+
 def test_runtime_draft_state_uses_stable_ids_and_is_actionable() -> None:
     players = _players().copy()
     players['espn_id'] = range(1000, 1000 + len(players))
