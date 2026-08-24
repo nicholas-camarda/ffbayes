@@ -493,7 +493,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         revision = 'unknown'
     service = DashboardService(
         fresh_inputs,
-        profiles,
+        profiles if profile_error is None else [],
         project_root=PROJECT_ROOT,
         run_root=run_root,
         code_revision=revision,

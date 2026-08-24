@@ -308,3 +308,29 @@ def test_dashboard_service_rejects_duplicate_profile_ids(tmp_path) -> None:
             run_root=tmp_path / 'run',
             code_revision='fixture-revision',
         )
+
+
+def test_main_serves_blocked_status_when_profile_loading_reports_duplicates(
+    monkeypatch, tmp_path
+) -> None:
+    captured: dict[str, object] = {}
+    profile = _profile('duplicate', 2)
+
+    monkeypatch.setattr(dashboard_app, 'default_profile_paths', lambda: ())
+    monkeypatch.setattr(
+        dashboard_app,
+        '_load_profiles',
+        lambda _: ([profile, profile], 'duplicate profile_id values are not allowed'),
+    )
+    monkeypatch.setattr(
+        dashboard_app,
+        'serve_dashboard',
+        lambda service, **_: captured.setdefault('status', service.status_payload())
+        and 0,
+    )
+
+    assert dashboard_app.main(['--year', '2026', '--no-browser']) == 0
+    status = captured['status']
+    assert isinstance(status, dict)
+    assert status['status'] == 'blocked'
+    assert 'duplicate profile_id' in status['error']

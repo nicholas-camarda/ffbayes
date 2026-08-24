@@ -156,6 +156,26 @@ def test_reconciliation_rejects_name_match_with_conflicting_position_or_team() -
     assert set(current['name']) == {'Stable ID Match', 'Bills D/ST'}
 
 
+def test_reconciliation_accepts_nflverse_arizona_alias_for_espn_team_id_22() -> None:
+    espn = parse_espn_player_payload(
+        {'players': [_entry(401, 'Carson Beck', 1, pro_team_id=22)]}, season=2026
+    )
+    roster = pd.DataFrame(
+        {
+            'espn_id': [None],
+            'full_name': ['Carson Beck'],
+            'position': ['QB'],
+            'team': ['AZ'],
+            'status': ['RES'],
+            'season': [2026],
+        }
+    )
+
+    current = reconcile_current_players(espn, roster, season=2026)
+
+    assert current['name'].tolist() == ['Carson Beck']
+
+
 def test_projection_coverage_fails_closed_for_truncated_pool() -> None:
     frame = pd.DataFrame(
         {

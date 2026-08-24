@@ -35,7 +35,7 @@ ESPN_TEAM_ABBRS = {
     19: {'NYG'},
     20: {'NYJ'},
     21: {'PHI'},
-    22: {'ARI'},
+    22: {'ARI', 'AZ'},
     23: {'PIT'},
     24: {'LAC'},
     25: {'SF'},
