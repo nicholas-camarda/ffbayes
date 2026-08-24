@@ -5,6 +5,7 @@
 .history/
 .idea/
 .vscode/
+.codex/
 
 # Python environments, caches, and build output
 .env
