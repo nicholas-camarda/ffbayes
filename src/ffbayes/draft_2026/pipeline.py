@@ -88,6 +88,197 @@ def _records(frame: pd.DataFrame) -> list[dict[str, Any]]:
     return clean(frame.to_dict(orient='records'))
 
 
+def _required_number(value: Any, field: str) -> float:
+    """Require a finite canonical metric; never invent a neutral value."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise OutputProvenanceError(f'Analytics field {field} is missing or invalid') from exc
+    if not math.isfinite(number):
+        raise OutputProvenanceError(f'Analytics field {field} is missing or invalid')
+    return number
+
+
+def _build_analytics(
+    decision_table: list[dict[str, Any]],
+    runtime_state: Mapping[str, Any],
+    replacement: Mapping[str, Any],
+    source_manifests: Sequence[Mapping[str, Any]],
+    generated_at: str,
+) -> dict[str, Any]:
+    """Build the rich visual contract from canonical board values only."""
+    if any('is_available' not in row for row in decision_table):
+        raise OutputProvenanceError('Decision table is missing is_available')
+    available = [row for row in decision_table if row['is_available']]
+    available.sort(key=lambda row: int(row.get('board_rank', 10**9)))
+    primary = available[0] if available else None
+
+    def evidence(row: Mapping[str, Any]) -> dict[str, Any]:
+        projected = _required_number(row.get('projected_points'), 'projected_points')
+        replacement_level = _required_number(
+            row.get('replacement_level'), 'replacement_level'
+        )
+        vor = _required_number(row.get('vor'), 'vor')
+        adp = _required_number(row.get('adp'), 'adp')
+        probability = row.get('availability_next_pick')
+        primary_projection = (
+            _required_number(primary.get('projected_points'), 'projected_points')
+            if primary is not None
+            else projected
+        )
+        return {
+            'espn_id': int(row['espn_id']),
+            'name': str(row.get('name', '')),
+            'position': str(row.get('position', '')),
+            'board_rank': int(row.get('board_rank', 0)),
+            'projected_points': projected,
+            'replacement_level': replacement_level,
+            'vor': vor,
+            'adp': adp,
+            'availability_next_pick': (
+                None if probability is None else _required_number(probability, 'availability_next_pick')
+            ),
+            'expected_regret': max(0.0, primary_projection - projected),
+            'position_run_risk': min(
+                1.0,
+                max(0.0, _required_number(row.get('scarcity'), 'scarcity') / 25.0),
+            ),
+            'recommendation': row.get('recommendation'),
+            'lane': (
+                'pick_now'
+                if row.get('recommendation') == 'draft_now'
+                else 'wait'
+                if row.get('recommendation') == 'can_wait'
+                else 'unavailable'
+            ),
+            'rationale': (
+                'Highest available contextual board value.'
+                if primary is row
+                else 'Available alternative ranked by the league-specific board.'
+            ),
+        }
+
+    recommendation = {
+        'primary': evidence(primary) if primary is not None else None,
+        'fallbacks': [evidence(row) for row in available[1:5]],
+        'can_wait': [
+            evidence(row)
+            for row in available
+            if row.get('recommendation') == 'can_wait'
+        ][:5],
+    }
+
+    comparative = []
+    for row in decision_table[:100]:
+        comparative.append(
+            {
+                'espn_id': int(row['espn_id']),
+                'name': str(row.get('name', '')),
+                'position': str(row.get('position', '')),
+                'model_rank': _required_number(row.get('model_rank'), 'model_rank'),
+                'market_rank': _required_number(row.get('market_rank'), 'market_rank'),
+                'rank_gap': _required_number(row.get('market_rank'), 'market_rank')
+                - _required_number(row.get('model_rank'), 'model_rank'),
+                'contextual_score': _required_number(
+                    row.get('decision_score'), 'decision_score'
+                ),
+                'baseline_score': _required_number(row.get('vor'), 'vor'),
+                'explanation': (
+                    'Model values this player earlier than market.'
+                    if _required_number(row.get('model_rank'), 'model_rank')
+                    < _required_number(row.get('market_rank'), 'market_rank')
+                    else 'Market values this player earlier than model.'
+                ),
+            }
+        )
+
+    cliffs: list[dict[str, Any]] = []
+    for position in sorted({str(row.get('position', '')) for row in decision_table}):
+        rows = [row for row in available if row.get('position') == position]
+        rows.sort(
+            key=lambda row: _required_number(row.get('projected_points'), 'projected_points'),
+            reverse=True,
+        )
+        gaps = [
+            _required_number(rows[index].get('projected_points'), 'projected_points')
+            - _required_number(rows[index + 1].get('projected_points'), 'projected_points')
+            for index in range(len(rows) - 1)
+        ]
+        strongest = max(gaps) if gaps else 0.0
+        edge = gaps.index(strongest) + 1 if gaps else None
+        projected_series = [
+            {
+                'board_rank': int(row.get('board_rank', 0)),
+                'espn_id': int(row['espn_id']),
+                'name': str(row.get('name', '')),
+                'projected_points': _required_number(
+                    row.get('projected_points'), 'projected_points'
+                ),
+            }
+            for row in rows
+        ]
+        cliffs.append(
+            {
+                'position': position,
+                'players_available': len(rows),
+                'replacement_level': _required_number(
+                    (replacement.get('levels') or {}).get(position),
+                    f'replacement_level[{position}]',
+                ),
+                'demand': (replacement.get('demand') or {}).get(position),
+                'starter_demand': (replacement.get('starter_demand') or {}).get(position),
+                'flex_allocation': (replacement.get('flex_allocation') or {}).get(position, 0),
+                'bench_allocation': (replacement.get('bench_allocation') or {}).get(position, 0),
+                'strongest_cliff': strongest,
+                'cliff_after_rank': edge,
+                'projected_series': projected_series,
+            }
+        )
+
+    timing_frontier = [evidence(row) for row in available[:20]]
+    roster_ids = {int(value) for value in runtime_state.get('your_ids', [])}
+    queue_ids = {int(value) for value in runtime_state.get('queue_ids', [])}
+    by_id = {int(row['espn_id']): row for row in decision_table}
+    roster_rows = [
+        evidence(by_id[player_id]) for player_id in sorted(roster_ids) if player_id in by_id
+    ]
+    return {
+        'recommendation': recommendation,
+        'comparative': comparative,
+        'positional_cliffs': cliffs,
+        'timing_frontier': timing_frontier,
+        'roster': roster_rows,
+        'roster_position_counts': {
+            position: sum(row['position'] == position for row in roster_rows)
+            for position in sorted({row['position'] for row in roster_rows})
+        },
+        'queue': [evidence(by_id[player_id]) for player_id in sorted(queue_ids) if player_id in by_id],
+        'comparative_explanation': (
+            None
+            if primary is None
+            else {
+                'primary': primary['name'],
+                'alternatives': [
+                    {
+                        'name': row['name'],
+                        'reason': next(
+                            item['explanation']
+                            for item in comparative
+                            if item['espn_id'] == row['espn_id']
+                        ),
+                    }
+                    for row in available[1:5]
+                ],
+            }
+        ),
+        'freshness': {
+            'generated_at': generated_at,
+            'source_manifests': [dict(manifest) for manifest in source_manifests],
+            'coverage_status': 'passed',
+        },
+    }
+
+
 def build_dashboard_payload(
     board: pd.DataFrame,
     profile: LeagueProfile,
@@ -104,11 +295,16 @@ def build_dashboard_payload(
         'espn_id',
         'name',
         'position',
+        'team',
         'projected_points',
         'replacement_level',
         'vor',
         'scarcity',
         'adp',
+        'model_rank',
+        'market_rank',
+        'board_priority',
+        'decision_score',
         'availability_next_pick',
         'recommendation',
         'roster_status',
@@ -132,12 +328,20 @@ def build_dashboard_payload(
     for key in ('taken_ids', 'your_ids', 'queue_ids'):
         runtime_state[key] = sorted({int(value) for value in runtime_state.get(key, [])})
     generated_at = datetime.now(timezone.utc).isoformat()
+    source_manifests = [dict(source_manifest), dict(roster_manifest)]
+    analytics = _build_analytics(
+        decision_table,
+        runtime_state,
+        board.attrs['replacement'],
+        source_manifests,
+        generated_at,
+    )
     payload = {
         'schema_version': SCHEMA_VERSION,
         'season': profile.season,
         'generated_at': generated_at,
         'league_profile': profile_value,
-        'current_pick': board.attrs.get('current_pick'),
+        'current_pick': runtime_state.get('current_pick'),
         'next_pick': board.attrs.get('next_pick'),
         'runtime_state': runtime_state,
         'replacement': board.attrs['replacement'],
@@ -148,8 +352,10 @@ def build_dashboard_payload(
             'profile_sha256': _sha256_json(profile_value),
             'state_sha256': _sha256_json(runtime_state),
             'board_sha256': _sha256_json(decision_table),
-            'source_manifests': [dict(source_manifest), dict(roster_manifest)],
+            'source_manifests': source_manifests,
+            'analytics_sha256': _sha256_json(analytics),
         },
+        'analytics': analytics,
     }
     validate_output_provenance(payload)
     return payload
@@ -191,11 +397,87 @@ def validate_output_provenance(payload: Mapping[str, Any]) -> None:
         raise OutputProvenanceError('Decision table is empty')
     if provenance.get('board_sha256') != _sha256_json(table):
         raise OutputProvenanceError('Decision table digest is inconsistent')
+    analytics = payload.get('analytics')
+    if not isinstance(analytics, Mapping):
+        raise OutputProvenanceError('Analytics payload is missing')
+    if provenance.get('analytics_sha256') != _sha256_json(analytics):
+        raise OutputProvenanceError('Analytics digest is inconsistent')
     runtime_state = payload.get('runtime_state')
     if not isinstance(runtime_state, Mapping):
         raise OutputProvenanceError('Runtime state is missing')
     if provenance.get('state_sha256') != _sha256_json(runtime_state):
         raise OutputProvenanceError('Runtime state digest is inconsistent')
+    current_pick = runtime_state.get('current_pick')
+    if (
+        isinstance(current_pick, bool)
+        or not isinstance(current_pick, int)
+        or current_pick < 1
+    ):
+        raise OutputProvenanceError('Runtime state current_pick is invalid')
+    if payload.get('current_pick') != current_pick:
+        raise OutputProvenanceError('Top-level current_pick disagrees with runtime state')
+    taken_ids = runtime_state.get('taken_ids', [])
+    your_ids = runtime_state.get('your_ids', [])
+    queue_ids = runtime_state.get('queue_ids', [])
+    if not all(isinstance(values, list) for values in (taken_ids, your_ids, queue_ids)):
+        raise OutputProvenanceError('Runtime state player lists are invalid')
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 1
+        for values in (taken_ids, your_ids, queue_ids)
+        for value in values
+    ):
+        raise OutputProvenanceError('Runtime state player lists are invalid')
+    if set(taken_ids).intersection(your_ids):
+        raise OutputProvenanceError('Runtime state overlaps taken and yours')
+    actions = runtime_state.get('actions', [])
+    if not isinstance(actions, list):
+        raise OutputProvenanceError('Runtime state action history is invalid')
+    action_ids: set[int] = set()
+    for action in actions:
+        if not isinstance(action, Mapping):
+            raise OutputProvenanceError('Runtime state action is invalid')
+        player_id = action.get('player_id')
+        pick = action.get('pick')
+        if (
+            isinstance(pick, bool)
+            or not isinstance(pick, int)
+            or pick < 1
+            or
+            isinstance(player_id, bool)
+            or not isinstance(player_id, int)
+            or player_id < 1
+            or player_id in action_ids
+            or action.get('disposition') not in ('mine', 'taken')
+        ):
+            raise OutputProvenanceError('Runtime state action is invalid')
+        action_ids.add(player_id)
+    if actions:
+        action_taken = {
+            int(action['player_id'])
+            for action in actions
+            if action['disposition'] == 'taken'
+        }
+        action_mine = {
+            int(action['player_id'])
+            for action in actions
+            if action['disposition'] == 'mine'
+        }
+        if action_taken != set(taken_ids) or action_mine != set(your_ids):
+            raise OutputProvenanceError('Runtime state actions disagree with derived IDs')
+    for row in table:
+        if not isinstance(row, Mapping):
+            raise OutputProvenanceError('Decision table row is invalid')
+        player_id = row.get('espn_id')
+        status = row.get('roster_status', 'available')
+        expected_status = (
+            'taken'
+            if player_id in set(taken_ids)
+            else 'mine'
+            if player_id in set(your_ids)
+            else 'available'
+        )
+        if status != expected_status:
+            raise OutputProvenanceError('Decision table status disagrees with runtime state')
     if any(row.get('espn_id') is None for row in table if isinstance(row, Mapping)):
         raise OutputProvenanceError('Decision table contains a missing espn_id')
 
@@ -224,6 +506,24 @@ def render_dashboard_html(payload: Mapping[str, Any]) -> str:
             f'<td>{html.escape(str(player["recommendation"]))}</td>'
             '</tr>'
         )
+    primary = (payload['analytics'].get('recommendation') or {}).get('primary')
+    primary_text = (
+        'No available player'
+        if primary is None
+        else (
+            f"{html.escape(str(primary['name']))} ({html.escape(str(primary['position']))}) · "
+            f"VOR {float(primary['vor']):.1f} · "
+            f"{html.escape(str(primary.get('rationale', '')))}"
+        )
+    )
+    cliff_rows = ''.join(
+        '<li>'
+        f"{html.escape(str(cliff['position']))}: "
+        f"{float(cliff['strongest_cliff']):.1f} point drop after "
+        f"{html.escape(str(cliff.get('cliff_after_rank', '—')))}"
+        '</li>'
+        for cliff in payload['analytics'].get('positional_cliffs', [])
+    )
     embedded = (
         _canonical_json(payload)
         .replace('&', '\\u0026')
@@ -236,6 +536,8 @@ def render_dashboard_html(payload: Mapping[str, Any]) -> str:
 <style>body{{font-family:system-ui;margin:2rem;background:#07111f;color:#f8fafc}}table{{border-collapse:collapse;width:100%}}th,td{{padding:.55rem;border-bottom:1px solid #334155;text-align:left}}th{{position:sticky;top:0;background:#0f172a}}.meta{{color:#94a3b8}}</style></head>
 <body><h1>{title} — 2026 Draft Board</h1>
 <p class="meta">Generated {html.escape(str(payload['generated_at']))}; next pick {payload['next_pick'] if payload['next_pick'] is not None else 'slot required'}; validated current inputs only.</p>
+<section id="recommendation-panel"><h2>Recommendation and evidence</h2><p>{primary_text}</p></section>
+<section id="positional-cliffs"><h2>Positional cliffs</h2><ul>{cliff_rows}</ul></section>
 <table id="draft-board"><thead><tr><th>Rank</th><th>Player</th><th>Pos</th><th>Proj</th><th>VOR</th><th>ADP</th><th>Next-pick availability</th><th>Action</th></tr></thead>
 <tbody>{''.join(rows)}</tbody></table>
 <script id="draft-2026-payload" type="application/json">{embedded}</script></body></html>"""

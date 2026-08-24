@@ -10,6 +10,7 @@ from ffbayes.draft_2026.league import LeagueProfile
 from ffbayes.draft_2026.pipeline import (
     FreshInputs,
     OutputProvenanceError,
+    _sha256_json,
     build_dashboard_payload,
     render_dashboard_html,
     validate_output_provenance,
@@ -57,10 +58,17 @@ def test_dashboard_payload_binds_sources_profile_code_and_board() -> None:
             'name': ['Player One'],
             'position': ['WR'],
             'projected_points': [250.0],
+            'replacement_level': [150.0],
             'vor': [100.0],
+            'scarcity': [5.0],
             'adp': [5.0],
+            'model_rank': [1.0],
+            'market_rank': [2.0],
+            'decision_score': [-1.0],
             'availability_next_pick': [0.1],
             'recommendation': ['draft_now'],
+            'roster_status': ['available'],
+            'is_available': [True],
         }
     )
     board.attrs['replacement'] = {'levels': {'WR': 150.0}, 'demand': {'WR': 30}}
@@ -89,6 +97,9 @@ def test_dashboard_payload_binds_sources_profile_code_and_board() -> None:
     assert payload['league_profile']['profile_id'] == 'league-a'
     assert payload['provenance']['code_revision'] == 'deadbeef'
     assert payload['decision_table'][0]['name'] == 'Player One'
+    assert payload['analytics']['recommendation']['primary']['name'] == 'Player One'
+    assert payload['analytics']['positional_cliffs'][0]['position'] == 'WR'
+    assert payload['provenance']['analytics_sha256']
 
 
 def test_dashboard_payload_rejects_mismatched_or_stale_provenance() -> None:
@@ -124,8 +135,13 @@ def test_dashboard_renderer_embeds_parseable_validated_payload() -> None:
             'vor': [100.0],
             'scarcity': [5.0],
             'adp': [5.0],
+            'model_rank': [1.0],
+            'market_rank': [2.0],
+            'decision_score': [-1.0],
             'availability_next_pick': [0.1],
             'recommendation': ['draft_now'],
+            'roster_status': ['available'],
+            'is_available': [True],
         }
     )
     board.attrs['replacement'] = {'levels': {'WR': 150.0}, 'demand': {'WR': 30}}
@@ -190,6 +206,9 @@ def _payload_board() -> pd.DataFrame:
             'recommendation': ['draft_now'],
             'roster_status': ['available'],
             'is_available': [True],
+            'model_rank': [1.0],
+            'market_rank': [2.0],
+            'decision_score': [-1.0],
         }
     )
     board.attrs.update(
@@ -203,6 +222,10 @@ def _payload_board() -> pd.DataFrame:
                 'taken_ids': [202],
                 'your_ids': [303],
                 'queue_ids': [101],
+                'actions': [
+                    {'pick': 1, 'player_id': 202, 'disposition': 'taken'},
+                    {'pick': 2, 'player_id': 303, 'disposition': 'mine'},
+                ],
             },
         }
     )
@@ -240,6 +263,78 @@ def test_output_provenance_rejects_tampered_runtime_state() -> None:
 
     with pytest.raises(OutputProvenanceError, match='state digest'):
         validate_output_provenance(payload)
+
+
+def test_output_provenance_rejects_tampered_analytics() -> None:
+    manifest = {'season': 2026, 'sha256': 'abc', 'fetched_at': '2026-08-22T12:00:00Z'}
+    payload = build_dashboard_payload(
+        _payload_board(),
+        _profile(),
+        source_manifest=manifest,
+        roster_manifest={**manifest, 'sha256': 'def'},
+        coverage_report={'status': 'passed'},
+        code_revision='deadbeef',
+    )
+    payload['analytics']['recommendation']['primary']['name'] = 'tampered'
+
+    with pytest.raises(OutputProvenanceError, match='Analytics digest'):
+        validate_output_provenance(payload)
+
+
+def test_output_provenance_rejects_cross_field_state_mutations() -> None:
+    manifest = {'season': 2026, 'sha256': 'abc', 'fetched_at': '2026-08-22T12:00:00Z'}
+    payload = build_dashboard_payload(
+        _payload_board(),
+        _profile(),
+        source_manifest=manifest,
+        roster_manifest={**manifest, 'sha256': 'def'},
+        coverage_report={'status': 'passed'},
+        code_revision='deadbeef',
+    )
+    payload['current_pick'] = 9
+    with pytest.raises(OutputProvenanceError, match='Top-level current_pick'):
+        validate_output_provenance(payload)
+
+    payload = build_dashboard_payload(
+        _payload_board(),
+        _profile(),
+        source_manifest=manifest,
+        roster_manifest={**manifest, 'sha256': 'def'},
+        coverage_report={'status': 'passed'},
+        code_revision='deadbeef',
+    )
+    payload['runtime_state']['your_ids'] = []
+    payload['provenance']['state_sha256'] = _sha256_json(payload['runtime_state'])
+    with pytest.raises(OutputProvenanceError, match='actions disagree'):
+        validate_output_provenance(payload)
+
+    payload = build_dashboard_payload(
+        _payload_board(),
+        _profile(),
+        source_manifest=manifest,
+        roster_manifest={**manifest, 'sha256': 'def'},
+        coverage_report={'status': 'passed'},
+        code_revision='deadbeef',
+    )
+    payload['decision_table'][0]['roster_status'] = 'mine'
+    payload['provenance']['board_sha256'] = _sha256_json(payload['decision_table'])
+    with pytest.raises(OutputProvenanceError, match='status disagrees'):
+        validate_output_provenance(payload)
+
+
+def test_analytics_rejects_missing_comparative_metrics() -> None:
+    board = _payload_board().drop(columns=['model_rank'])
+    manifest = {'season': 2026, 'sha256': 'abc', 'fetched_at': '2026-08-22T12:00:00Z'}
+
+    with pytest.raises(OutputProvenanceError, match='model_rank'):
+        build_dashboard_payload(
+            board,
+            _profile(),
+            source_manifest=manifest,
+            roster_manifest={**manifest, 'sha256': 'def'},
+            coverage_report={'status': 'passed'},
+            code_revision='deadbeef',
+        )
 
 
 def test_slot_neutral_static_renderer_shows_explicit_requirement() -> None:

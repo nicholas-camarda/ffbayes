@@ -32,13 +32,20 @@ are not part of the public repository.
 ## Draft-day workflow
 
 1. Select the profile and confirm its read-only roster/scoring summary.
-2. Enter your draft slot (1 through the configured team count) and current
-   overall pick. The board cannot estimate snake timing until the slot is set.
-3. After each pick, update the current overall pick and mark players as
-   **Taken** or **Mine**. Add candidates to **Queue** when useful.
-4. Use the recommendation, availability, VOR, scarcity, and ADP columns as
-   decision aids. Export a snapshot when you want a durable record of the
-   validated state.
+2. Enter your draft slot (1 through the configured team count). A new board
+   starts at overall pick 1; set Current overall pick only when joining late or
+   correcting synchronization, then choose **Sync clock**.
+3. After each real selection, click **Taken** or **Mine**. The server records
+   the selection at the current pick, advances exactly once, and recalculates
+   the board and analytical panels. **Queue** adds/removes a target without
+   changing the clock.
+4. Use **Undo last pick** to remove the latest recorded selection and restore
+   its pick, availability, and roster state. Reclassifying an existing player
+   between Taken and Mine is a correction and does not consume another pick.
+5. Use the recommendation, evidence, timing frontier, positional cliffs,
+   comparative, roster, queue, freshness, and provenance panels as decision
+   aids. Export a snapshot when you want a durable record of the validated
+   state.
 
 Each profile has independent draft state. Changing the selected league does not
 carry over slot, pick, taken IDs, roster IDs, or queue IDs.
