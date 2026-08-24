@@ -104,6 +104,9 @@ and ignored by Git.
 
 ## Development checks
 
+The browser smoke sidecar uses Node.js 22, matching CI. Install that runtime
+before running the commands below.
+
 ```bash
 PYTHONPATH=src pytest -q
 PYTHONPATH=src mypy src/ffbayes
@@ -119,8 +122,8 @@ smoke against the Python fixture service. Set `PYTHON` to the executable from
 the environment where the project dependencies are installed when `python` is
 not the desired interpreter.
 
-The public operator surface is the single `ffbayes dashboard` command. Lower-
-level modules remain available for development and testing.
+The public operator surface is the single `ffbayes dashboard` command. Run
+`ffbayes dashboard --help` for its complete option list.
 
 ## Documentation
 

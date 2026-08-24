@@ -354,10 +354,9 @@ def build_parser() -> argparse.ArgumentParser:
         description='Build fail-closed, league-specific 2026 draft boards.'
     )
     parser.add_argument('--profile', action='append', type=Path)
-    from ffbayes.utils.path_constants import RUNTIME_DIR
 
     parser.add_argument(
-        '--output-root', type=Path, default=RUNTIME_DIR / 'runs' / 'draft_2026'
+        '--output-root', type=Path, default=PROJECT_ROOT / 'runtime' / 'runs' / 'draft_2026'
     )
     return parser
 

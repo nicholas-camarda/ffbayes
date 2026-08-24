@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ffbayes"
 version = "0.1.0"
-description = "Unified Fantasy Football Analytics Pipeline"
+description = "Reproducible fantasy-football draft board"
 requires-python = ">=3.10"
 authors = [{ name = "Nicholas Camarda" }]
 readme = "README.md"
@@ -62,25 +62,7 @@ ignore_missing_imports = true
 no_implicit_optional = false
 check_untyped_defs = false
 warn_unused_ignores = true
-disable_error_code = [
-  "import-untyped",
-]
-[[tool.mypy.overrides]]
-module = [
-  "ffbayes.run_pipeline_split",
-  "ffbayes.visualization.validation_plots.*",
-  "ffbayes.utils.name_resolver",
-  "ffbayes.utils.enhanced_pipeline_orchestrator",
-  "ffbayes.draft_strategy.traditional_vor_draft",
-  "ffbayes.utils.error_handling",
-  "ffbayes.utils.validation_metrics",
-  "ffbayes.data_pipeline.create_unified_dataset",
-  "ffbayes.analysis.bayesian_vor_comparison",
-  "ffbayes.utils.model_validation",
-  "ffbayes.utils.script_interface",
-  "ffbayes.analysis.montecarlo_historical_ff",
-]
-ignore_errors = true
+disable_error_code = ["import-untyped"]
 
 [tool.setuptools]
 package-dir = { "" = "src" }
