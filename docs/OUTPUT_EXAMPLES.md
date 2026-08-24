@@ -30,7 +30,11 @@ only.
     "current_pick": 4,
     "taken_ids": [12345],
     "your_ids": [23456],
-    "queue_ids": [34567]
+    "queue_ids": [34567],
+    "actions": [
+      {"pick": 1, "player_id": 12345, "disposition": "taken"},
+      {"pick": 2, "player_id": 23456, "disposition": "mine"}
+    ]
   },
   "replacement": {
     "levels": {"QB": 165.2, "RB": 128.4, "WR": 135.7, "TE": 94.1, "DST": 70.0, "K": 82.0},
@@ -54,11 +58,23 @@ only.
       "is_available": true
     }
   ],
+  "analytics": {
+    "recommendation": {"primary": {"name": "Example Player", "vor": 109.4}, "fallbacks": [], "can_wait": []},
+    "comparative": [],
+    "comparative_explanation": {"primary": "Example Player", "alternatives": []},
+    "positional_cliffs": [],
+    "timing_frontier": [],
+    "roster": [],
+    "roster_position_counts": {},
+    "queue": [],
+    "freshness": {"generated_at": "2026-08-23T15:00:00+00:00", "coverage_status": "passed", "source_manifests": []}
+  },
   "provenance": {
     "code_revision": "<git revision>",
     "profile_sha256": "<digest>",
     "state_sha256": "<digest>",
     "board_sha256": "<digest>",
+    "analytics_sha256": "<digest>",
     "source_manifests": ["<ESPN manifest>", "<nflverse manifest>"]
   }
 }
@@ -67,10 +83,11 @@ only.
 ## What to inspect
 
 Confirm the season, profile settings, current and next pick, stable `espn_id`
-values, coverage status, source timestamps, and provenance digests. If no draft
-slot has been entered, availability is `null` and recommendations are
+values, action history, coverage status, source timestamps, analytics sections,
+and provenance digests. A new state starts at overall pick 1. If no draft slot
+has been entered, availability is `null` and recommendations are
 `slot_required`; the payload must not contain a guessed neutral probability.
 
 The payload is a validated decision aid generated from the current input
-snapshot. Missing metrics are rejected by the service and are not converted to
-zeros.
+snapshot. Missing canonical comparative metrics, projections, scarcity, or
+timing inputs are rejected by the service and are not converted to zeros.

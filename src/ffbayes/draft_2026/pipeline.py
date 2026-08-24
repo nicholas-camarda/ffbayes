@@ -97,6 +97,17 @@ def _finite_number(value: Any, default: float = 0.0) -> float:
     return number if math.isfinite(number) else default
 
 
+def _required_number(value: Any, field: str) -> float:
+    """Require a finite canonical metric; never invent a neutral value."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise OutputProvenanceError(f'Analytics field {field} is missing or invalid') from exc
+    if not math.isfinite(number):
+        raise OutputProvenanceError(f'Analytics field {field} is missing or invalid')
+    return number
+
+
 def _build_analytics(
     decision_table: list[dict[str, Any]],
     runtime_state: Mapping[str, Any],
@@ -105,15 +116,19 @@ def _build_analytics(
     generated_at: str,
 ) -> dict[str, Any]:
     """Build the rich visual contract from canonical board values only."""
-    available = [row for row in decision_table if row.get('is_available', True)]
+    if any('is_available' not in row for row in decision_table):
+        raise OutputProvenanceError('Decision table is missing is_available')
+    available = [row for row in decision_table if row['is_available']]
     available.sort(key=lambda row: int(row.get('board_rank', 10**9)))
     primary = available[0] if available else None
 
     def evidence(row: Mapping[str, Any]) -> dict[str, Any]:
-        projected = _finite_number(row.get('projected_points'))
-        replacement_level = _finite_number(row.get('replacement_level'))
-        vor = _finite_number(row.get('vor'))
-        adp = row.get('adp')
+        projected = _required_number(row.get('projected_points'), 'projected_points')
+        replacement_level = _required_number(
+            row.get('replacement_level'), 'replacement_level'
+        )
+        vor = _required_number(row.get('vor'), 'vor')
+        adp = _required_number(row.get('adp'), 'adp')
         probability = row.get('availability_next_pick')
         return {
             'espn_id': int(row['espn_id']),
@@ -123,14 +138,17 @@ def _build_analytics(
             'projected_points': projected,
             'replacement_level': replacement_level,
             'vor': vor,
-            'adp': None if adp is None else _finite_number(adp),
+            'adp': adp,
             'availability_next_pick': (
                 None if probability is None else _finite_number(probability)
             ),
             'expected_regret': max(0.0, _finite_number(primary.get('projected_points')) - projected)
             if primary is not None
             else 0.0,
-            'position_run_risk': min(1.0, max(0.0, _finite_number(row.get('scarcity')) / 25.0)),
+            'position_run_risk': min(
+                1.0,
+                max(0.0, _required_number(row.get('scarcity'), 'scarcity') / 25.0),
+            ),
             'recommendation': row.get('recommendation'),
             'lane': (
                 'pick_now'
@@ -163,12 +181,20 @@ def _build_analytics(
                 'espn_id': int(row['espn_id']),
                 'name': str(row.get('name', '')),
                 'position': str(row.get('position', '')),
-                'model_rank': _finite_number(row.get('model_rank'), 0.0),
-                'market_rank': _finite_number(row.get('market_rank'), 0.0),
-                'rank_gap': _finite_number(row.get('market_rank'), 0.0)
-                - _finite_number(row.get('model_rank'), 0.0),
-                'contextual_score': _finite_number(row.get('decision_score')),
-                'baseline_score': _finite_number(row.get('vor')),
+                'model_rank': _required_number(row.get('model_rank'), 'model_rank'),
+                'market_rank': _required_number(row.get('market_rank'), 'market_rank'),
+                'rank_gap': _required_number(row.get('market_rank'), 'market_rank')
+                - _required_number(row.get('model_rank'), 'model_rank'),
+                'contextual_score': _required_number(
+                    row.get('decision_score'), 'decision_score'
+                ),
+                'baseline_score': _required_number(row.get('vor'), 'vor'),
+                'explanation': (
+                    'Model values this player earlier than market.'
+                    if _required_number(row.get('model_rank'), 'model_rank')
+                    < _required_number(row.get('market_rank'), 'market_rank')
+                    else 'Market values this player earlier than model.'
+                ),
             }
         )
 
@@ -183,15 +209,32 @@ def _build_analytics(
         ]
         strongest = max(gaps) if gaps else 0.0
         edge = gaps.index(strongest) + 1 if gaps else None
+        projected_series = [
+            {
+                'board_rank': int(row.get('board_rank', 0)),
+                'espn_id': int(row['espn_id']),
+                'name': str(row.get('name', '')),
+                'projected_points': _required_number(
+                    row.get('projected_points'), 'projected_points'
+                ),
+            }
+            for row in rows
+        ]
         cliffs.append(
             {
                 'position': position,
                 'players_available': len(rows),
-                'replacement_level': _finite_number(
-                    (replacement.get('levels') or {}).get(position)
+                'replacement_level': _required_number(
+                    (replacement.get('levels') or {}).get(position),
+                    f'replacement_level[{position}]',
                 ),
+                'demand': (replacement.get('demand') or {}).get(position),
+                'starter_demand': (replacement.get('starter_demand') or {}).get(position),
+                'flex_allocation': (replacement.get('flex_allocation') or {}).get(position, 0),
+                'bench_allocation': (replacement.get('bench_allocation') or {}).get(position, 0),
                 'strongest_cliff': strongest,
                 'cliff_after_rank': edge,
+                'projected_series': projected_series,
             }
         )
 
@@ -199,13 +242,38 @@ def _build_analytics(
     roster_ids = {int(value) for value in runtime_state.get('your_ids', [])}
     queue_ids = {int(value) for value in runtime_state.get('queue_ids', [])}
     by_id = {int(row['espn_id']): row for row in decision_table}
+    roster_rows = [
+        evidence(by_id[player_id]) for player_id in sorted(roster_ids) if player_id in by_id
+    ]
     return {
         'recommendation': recommendation,
         'comparative': comparative,
         'positional_cliffs': cliffs,
         'timing_frontier': timing_frontier,
-        'roster': [evidence(by_id[player_id]) for player_id in sorted(roster_ids) if player_id in by_id],
+        'roster': roster_rows,
+        'roster_position_counts': {
+            position: sum(row['position'] == position for row in roster_rows)
+            for position in sorted({row['position'] for row in roster_rows})
+        },
         'queue': [evidence(by_id[player_id]) for player_id in sorted(queue_ids) if player_id in by_id],
+        'comparative_explanation': (
+            None
+            if primary is None
+            else {
+                'primary': primary['name'],
+                'alternatives': [
+                    {
+                        'name': row['name'],
+                        'reason': next(
+                            item['explanation']
+                            for item in comparative
+                            if item['espn_id'] == row['espn_id']
+                        ),
+                    }
+                    for row in available[1:5]
+                ],
+            }
+        ),
         'freshness': {
             'generated_at': generated_at,
             'source_manifests': [dict(manifest) for manifest in source_manifests],
@@ -276,7 +344,7 @@ def build_dashboard_payload(
         'season': profile.season,
         'generated_at': generated_at,
         'league_profile': profile_value,
-        'current_pick': board.attrs.get('current_pick'),
+        'current_pick': runtime_state.get('current_pick'),
         'next_pick': board.attrs.get('next_pick'),
         'runtime_state': runtime_state,
         'replacement': board.attrs['replacement'],
@@ -349,6 +417,8 @@ def validate_output_provenance(payload: Mapping[str, Any]) -> None:
         or current_pick < 1
     ):
         raise OutputProvenanceError('Runtime state current_pick is invalid')
+    if payload.get('current_pick') != current_pick:
+        raise OutputProvenanceError('Top-level current_pick disagrees with runtime state')
     taken_ids = runtime_state.get('taken_ids', [])
     your_ids = runtime_state.get('your_ids', [])
     queue_ids = runtime_state.get('queue_ids', [])
@@ -384,6 +454,33 @@ def validate_output_provenance(payload: Mapping[str, Any]) -> None:
         ):
             raise OutputProvenanceError('Runtime state action is invalid')
         action_ids.add(player_id)
+    if actions:
+        action_taken = {
+            int(action['player_id'])
+            for action in actions
+            if action['disposition'] == 'taken'
+        }
+        action_mine = {
+            int(action['player_id'])
+            for action in actions
+            if action['disposition'] == 'mine'
+        }
+        if action_taken != set(taken_ids) or action_mine != set(your_ids):
+            raise OutputProvenanceError('Runtime state actions disagree with derived IDs')
+    for row in table:
+        if not isinstance(row, Mapping):
+            raise OutputProvenanceError('Decision table row is invalid')
+        player_id = row.get('espn_id')
+        status = row.get('roster_status', 'available')
+        expected_status = (
+            'taken'
+            if player_id in set(taken_ids)
+            else 'mine'
+            if player_id in set(your_ids)
+            else 'available'
+        )
+        if status != expected_status:
+            raise OutputProvenanceError('Decision table status disagrees with runtime state')
     if any(row.get('espn_id') is None for row in table if isinstance(row, Mapping)):
         raise OutputProvenanceError('Decision table contains a missing espn_id')
 

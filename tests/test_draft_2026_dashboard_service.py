@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 
 import pandas as pd
@@ -152,6 +153,25 @@ def test_live_actions_advance_once_queue_is_inert_and_undo_recomputes(service) -
     assert undone['current_pick'] == 1
     assert first_id not in undone['runtime_state']['your_ids']
     assert second_id in undone['runtime_state']['queue_ids']
+
+
+def test_concurrent_records_are_serialized_without_losing_a_pick(service) -> None:
+    initial = service.handle_board({'profile_id': 'bill', 'draft_slot': 2})
+    ids = [int(row['espn_id']) for row in initial['decision_table'][:2]]
+    requests = [
+        {
+            'profile_id': 'bill',
+            'action': {'type': 'record', 'player_id': player_id, 'disposition': 'taken'},
+        }
+        for player_id in ids
+    ]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(service.handle_action, requests))
+
+    final = service.handle_board({'profile_id': 'bill'})
+    assert final['current_pick'] == 3
+    assert set(final['runtime_state']['taken_ids']) == set(ids)
+    assert [action['pick'] for action in final['runtime_state']['actions']] == [1, 2]
 
 
 def test_service_recalculates_board_and_isolates_league_state(service) -> None:

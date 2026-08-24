@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
 import webbrowser
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -89,6 +90,7 @@ class DashboardService:
         self.code_revision = code_revision
         self.blocked_error = blocked_error
         self.blocked_details = dict(blocked_details or {})
+        self._state_lock = threading.RLock()
         self._state: dict[str, DraftState] = {
             profile.profile_id: DraftState(draft_slot=profile.draft_slot)
             for profile in profiles
@@ -230,36 +232,38 @@ class DashboardService:
         return payload
 
     def handle_board(self, request: Mapping[str, Any]) -> dict[str, Any]:
-        profile, state = self._request_profile(request)
-        if 'current_pick' in request:
-            state = state.sync_clock(self._validate_pick(profile, request['current_pick']))
-        payload = self._render(profile, state)
-        self._state[profile.profile_id] = state
-        return payload
+        with self._state_lock:
+            profile, state = self._request_profile(request)
+            if 'current_pick' in request:
+                state = state.sync_clock(self._validate_pick(profile, request['current_pick']))
+            payload = self._render(profile, state)
+            self._state[profile.profile_id] = state
+            return payload
 
     def handle_action(self, request: Mapping[str, Any]) -> dict[str, Any]:
-        profile, state = self._request_profile(request)
-        action = request.get('action')
-        if not isinstance(action, Mapping):
-            raise DashboardRequestError('action must be an object')
-        action_type = action.get('type')
-        if action_type == 'record':
-            player_id = self._validate_player_id(action.get('player_id'))
-            disposition = action.get('disposition')
-            if disposition not in ('taken', 'mine'):
-                raise DashboardRequestError("disposition must be 'taken' or 'mine'")
-            state = state.record(player_id, disposition)
-        elif action_type == 'queue':
-            state = state.toggle_queue(self._validate_player_id(action.get('player_id')))
-        elif action_type == 'undo':
-            state = state.undo()
-        elif action_type == 'sync':
-            state = state.sync_clock(self._validate_pick(profile, action.get('current_pick')))
-        else:
-            raise DashboardRequestError('Unsupported action type')
-        payload = self._render(profile, state)
-        self._state[profile.profile_id] = state
-        return payload
+        with self._state_lock:
+            profile, state = self._request_profile(request)
+            action = request.get('action')
+            if not isinstance(action, Mapping):
+                raise DashboardRequestError('action must be an object')
+            action_type = action.get('type')
+            if action_type == 'record':
+                player_id = self._validate_player_id(action.get('player_id'))
+                disposition = action.get('disposition')
+                if disposition not in ('taken', 'mine'):
+                    raise DashboardRequestError("disposition must be 'taken' or 'mine'")
+                state = state.record(player_id, disposition)
+            elif action_type == 'queue':
+                state = state.toggle_queue(self._validate_player_id(action.get('player_id')))
+            elif action_type == 'undo':
+                state = state.undo()
+            elif action_type == 'sync':
+                state = state.sync_clock(self._validate_pick(profile, action.get('current_pick')))
+            else:
+                raise DashboardRequestError('Unsupported action type')
+            payload = self._render(profile, state)
+            self._state[profile.profile_id] = state
+            return payload
 
     def write_snapshot(self, request: Mapping[str, Any]) -> Path:
         payload = self.handle_board(request)
@@ -292,7 +296,7 @@ def _dashboard_html() -> str:
 <body><main><h1>FFBayes 2026 Draft War Room</h1><p class="muted">One canonical Python board, live server-confirmed actions, fresh public 2026 inputs, loopback only.</p>
 <section id="blocked" class="blocked hidden" role="alert"></section><section id="ready" class="hidden">
 <div class="panel"><div class="controls"><label class="control">League<select id="league"></select></label><label class="control">Draft slot<input id="draft-slot" type="number" min="1"></label><label class="control">Current overall pick<input id="current-pick" type="number" min="1"></label><button id="sync-clock">Sync clock</button><button id="recalculate">Recalculate board</button><button id="undo">Undo last pick</button><button id="snapshot">Export snapshot</button></div><p id="league-settings" class="muted"></p><p id="status"></p></div>
-<div class="grid"><section class="panel" id="recommendation-panel"><h2>Recommendation</h2><div id="recommendation"></div></section><section class="panel" id="roster-panel"><h2>My roster</h2><div id="roster" class="list"></div></section><section class="panel" id="queue-panel"><h2>Queue</h2><div id="queue" class="list"></div></section><section class="panel wide" id="timing-frontier"><h2>Timing frontier</h2><p class="muted small">Pick-now value, next-pick survival, and regret are calculated by Python.</p><div id="frontier" class="frontier"></div></section><section class="panel" id="positional-cliffs"><h2>Positional cliffs</h2><div id="cliffs"></div></section><section class="panel" id="comparative-explainer"><h2>Comparative explainer</h2><div id="comparative" class="list"></div></section><section class="panel wide" id="freshness-panel"><h2>Freshness and provenance</h2><pre id="freshness" class="muted small"></pre></section></div>
+<div class="grid"><section class="panel" id="recommendation-panel"><h2>Recommendation</h2><div id="recommendation"></div></section><section class="panel" id="roster-panel"><h2>My roster</h2><div id="roster" class="list"></div><p id="roster-counts" class="muted small"></p></section><section class="panel" id="queue-panel"><h2>Queue</h2><div id="queue" class="list"></div></section><section class="panel wide" id="timing-frontier"><h2>Timing frontier</h2><p class="muted small">Pick-now value, next-pick survival, and regret are calculated by Python.</p><div id="frontier" class="frontier"></div></section><section class="panel" id="positional-cliffs"><h2>Positional cliffs</h2><div id="cliffs"></div></section><section class="panel" id="comparative-explainer"><h2>Comparative explainer</h2><div id="comparative" class="list"></div></section><section class="panel wide" id="freshness-panel"><h2>Freshness and provenance</h2><pre id="freshness" class="muted small"></pre><pre id="provenance" class="muted small"></pre></section></div>
 <section class="panel"><h2>Draft board</h2><p class="muted small">Taken and Mine advance the server clock once. Queue never advances it. Repeating or correcting a player is idempotent and Undo restores the consumed pick.</p><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Player</th><th>Pos</th><th>Proj</th><th>VOR</th><th>ADP</th><th>Survival</th><th>Action</th><th>State</th></tr></thead><tbody id="board"></tbody></table></div></section></section></main>
 <script>
 let leagues=[];let currentPayload=null;const $=id=>document.getElementById(id);const fmt=(v,d=1)=>v==null?'—':Number(v).toFixed(d);const esc=v=>String(v==null?'—':v);
@@ -302,9 +306,9 @@ function setSettings(){const league=selectedLeague();if(!league)return;$('draft-
 function requestClock(){return{profile_id:$('league').value,draft_slot:$('draft-slot').value===''?null:Number($('draft-slot').value),current_pick:Number($('current-pick').value||1)};}
 async function post(path,body){const response=await fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw new Error(data.error||'Request failed');return data;}
 function cell(value){const node=document.createElement('td');node.textContent=esc(value);return node;}
-function item(row,extra){const node=document.createElement('div');node.className='list-item';node.textContent=row.name+' · '+row.position+' · VOR '+fmt(row.vor)+' · '+(extra||row.recommendation);return node;}
-function renderAnalytics(){const a=currentPayload.analytics||{};const rec=$('recommendation');rec.replaceChildren();const primary=a.recommendation&&a.recommendation.primary;if(primary){const title=document.createElement('div');title.className='metric';title.textContent=primary.name;rec.appendChild(title);const why=document.createElement('p');const survival=primary.availability_next_pick==null?'slot required':fmt(primary.availability_next_pick*100,0)+'%';why.textContent=primary.rationale+' VOR '+fmt(primary.vor)+' · survival '+survival;rec.appendChild(why);}else rec.textContent='No available players.';const fallback=document.createElement('div');for(const row of (a.recommendation?.fallbacks||[]))fallback.appendChild(item(row,'fallback · regret '+fmt(row.expected_regret)));rec.appendChild(fallback);$('roster').replaceChildren(...(a.roster||[]).map(row=>item(row,'mine')));$('queue').replaceChildren(...(a.queue||[]).map(row=>item(row,'queued')));$('frontier').replaceChildren(...(a.timing_frontier||[]).slice(0,12).map(row=>item(row,'lane '+row.lane+' · regret '+fmt(row.expected_regret))));const cliffs=$('cliffs');cliffs.replaceChildren();for(const row of (a.positional_cliffs||[])){const wrap=document.createElement('div');wrap.className='cliff';const label=document.createElement('strong');label.textContent=row.position;const bar=document.createElement('div');bar.className='bar';const fill=document.createElement('i');fill.style.width=Math.min(100,Number(row.strongest_cliff||0))+'%';bar.appendChild(fill);const text=document.createElement('span');text.className='small';text.textContent='cliff '+fmt(row.strongest_cliff)+' after '+esc(row.cliff_after_rank);wrap.append(label,bar,text);cliffs.appendChild(wrap);}const comparative=$('comparative');comparative.replaceChildren();for(const row of (a.comparative||[]).filter(x=>Math.abs(Number(x.rank_gap))>=3).slice(0,8)){comparative.appendChild(item(row,'model '+fmt(row.model_rank,0)+' vs market '+fmt(row.market_rank,0)+' (gap '+fmt(row.rank_gap,0)+')'));}}
-function renderBoard(){const body=$('board');body.replaceChildren();if(!currentPayload)return;const queued=new Set(currentPayload.runtime_state.queue_ids||[]);for(const row of currentPayload.decision_table.slice(0,100)){const tr=document.createElement('tr');tr.dataset.playerId=String(row.espn_id);const status=row.roster_status||'available';tr.append(cell(row.board_rank),cell(row.name),cell(row.position),cell(fmt(row.projected_points)),cell(fmt(row.vor)),cell(fmt(row.adp)),cell(row.availability_next_pick==null?'slot required':fmt(Number(row.availability_next_pick)*100,0)+'%'));const actions=document.createElement('td');for(const [type,label] of [['taken','Taken'],['mine','Mine'],['queue',queued.has(row.espn_id)?'Unqueue':'Queue']]){const button=document.createElement('button');button.type='button';button.dataset.type=type;button.dataset.action=type;button.dataset.id=String(row.espn_id);button.textContent=label;actions.appendChild(button);if(type!=='queue')actions.appendChild(document.createTextNode(' '));}tr.appendChild(actions);const state=cell((queued.has(row.espn_id)?'queued · ':'')+status+' · '+row.recommendation);state.className=status==='mine'?'status-mine':status==='taken'?'status-taken':'';tr.appendChild(state);body.appendChild(tr);}$('status').textContent='Current pick '+esc(currentPayload.current_pick)+' · next pick '+esc(currentPayload.next_pick)+' · '+currentPayload.decision_table.length+' validated players';$('freshness').textContent=JSON.stringify({generated_at:currentPayload.generated_at,coverage:currentPayload.coverage_report,provenance:currentPayload.provenance},null,2);renderAnalytics();}
+function item(row,extra){const node=document.createElement('div');node.className='list-item';node.textContent=row.name+' · '+row.position+' · score '+fmt(row.vor??row.contextual_score)+' · '+(extra||row.recommendation);return node;}
+function renderAnalytics(){const a=currentPayload.analytics||{};const rec=$('recommendation');rec.replaceChildren();const primary=a.recommendation&&a.recommendation.primary;if(primary){const title=document.createElement('div');title.className='metric';title.textContent=primary.name;rec.appendChild(title);const why=document.createElement('p');const survival=primary.availability_next_pick==null?'slot required':fmt(primary.availability_next_pick*100,0)+'%';why.textContent=primary.rationale+' VOR '+fmt(primary.vor)+' · survival '+survival;rec.appendChild(why);}else rec.textContent='No available players.';const fallback=document.createElement('div');for(const row of (a.recommendation?.fallbacks||[]))fallback.appendChild(item(row,'fallback · regret '+fmt(row.expected_regret)));rec.appendChild(fallback);$('roster').replaceChildren(...(a.roster||[]).map(row=>item(row,'mine')));$('roster-counts').textContent=Object.entries(a.roster_position_counts||{}).map(([position,count])=>position+' '+count).join(' · ')||'No players recorded';$('queue').replaceChildren(...(a.queue||[]).map(row=>item(row,'queued')));$('frontier').replaceChildren(...(a.timing_frontier||[]).slice(0,12).map(row=>item(row,'lane '+row.lane+' · regret '+fmt(row.expected_regret))));const cliffs=$('cliffs');cliffs.replaceChildren();for(const row of (a.positional_cliffs||[])){const wrap=document.createElement('div');wrap.className='cliff';const label=document.createElement('strong');label.textContent=row.position;const bar=document.createElement('div');bar.className='bar';const fill=document.createElement('i');fill.style.width=Math.min(100,Number(row.strongest_cliff||0))+'%';bar.appendChild(fill);const text=document.createElement('span');text.className='small';text.textContent='cliff '+fmt(row.strongest_cliff)+' after '+esc(row.cliff_after_rank)+' · '+row.players_available+' available';wrap.append(label,bar,text);cliffs.appendChild(wrap);}const comparative=$('comparative');comparative.replaceChildren();for(const row of (a.comparative||[]).filter(x=>Math.abs(Number(x.rank_gap))>=3).slice(0,8)){comparative.appendChild(item(row,'model '+fmt(row.model_rank,0)+' vs market '+fmt(row.market_rank,0)+' (gap '+fmt(row.rank_gap,0)+') · '+row.explanation));}for(const alternative of (a.comparative_explanation?.alternatives||[])){const note=document.createElement('p');note.className='muted small';note.textContent=alternative.name+': '+alternative.reason;comparative.appendChild(note);}}
+function renderBoard(){const body=$('board');body.replaceChildren();if(!currentPayload)return;const queued=new Set(currentPayload.runtime_state.queue_ids||[]);for(const row of currentPayload.decision_table.slice(0,100)){const tr=document.createElement('tr');tr.dataset.playerId=String(row.espn_id);const status=row.roster_status||'available';tr.append(cell(row.board_rank),cell(row.name),cell(row.position),cell(fmt(row.projected_points)),cell(fmt(row.vor)),cell(fmt(row.adp)),cell(row.availability_next_pick==null?'slot required':fmt(Number(row.availability_next_pick)*100,0)+'%'));const actions=document.createElement('td');for(const [type,label] of [['taken','Taken'],['mine','Mine'],['queue',queued.has(row.espn_id)?'Unqueue':'Queue']]){const button=document.createElement('button');button.type='button';button.dataset.type=type;button.dataset.action=type;button.dataset.id=String(row.espn_id);button.textContent=label;actions.appendChild(button);if(type!=='queue')actions.appendChild(document.createTextNode(' '));}tr.appendChild(actions);const state=cell((queued.has(row.espn_id)?'queued · ':'')+status+' · '+row.recommendation);state.className=status==='mine'?'status-mine':status==='taken'?'status-taken':'';tr.appendChild(state);body.appendChild(tr);}$('status').textContent='Current pick '+esc(currentPayload.current_pick)+' · next pick '+esc(currentPayload.next_pick)+' · '+currentPayload.decision_table.length+' validated players';$('freshness').textContent=JSON.stringify({generated_at:currentPayload.generated_at,coverage:currentPayload.coverage_report},null,2);$('provenance').textContent=JSON.stringify(currentPayload.provenance,null,2);renderAnalytics();}
 async function refresh(body=requestClock()){try{currentPayload=await post('/api/board',body);setSettings();renderBoard();$('status').className='';}catch(error){$('status').textContent=error.message;$('status').className='notice';}}
 $('league').addEventListener('change',()=>{currentPayload=null;refresh({profile_id:$('league').value});});$('sync-clock').addEventListener('click',()=>refresh());$('recalculate').addEventListener('click',()=>refresh());$('undo').addEventListener('click',async()=>{try{currentPayload=await post('/api/action',{profile_id:$('league').value,action:{type:'undo'}});setSettings();renderBoard();}catch(error){$('status').textContent=error.message;$('status').className='notice';}});$('snapshot').addEventListener('click',async()=>{try{const result=await post('/api/snapshot',requestClock());$('status').textContent='Snapshot written to '+result.path;}catch(error){$('status').textContent=error.message;$('status').className='notice';}});$('board').addEventListener('click',async event=>{const button=event.target.closest('button[data-type]');if(!button)return;const type=button.dataset.type;try{currentPayload=await post('/api/action',{profile_id:$('league').value,action:{type:type==='queue'?'queue':'record',player_id:Number(button.dataset.id),disposition:type==='mine'?'mine':'taken'}});setSettings();renderBoard();}catch(error){$('status').textContent=error.message;$('status').className='notice';}});
 (async()=>{try{const status=await(await fetch('/api/status')).json();if(status.status!=='ready'){showBlocked(status.error||'source validation failed');return;}leagues=(await(await fetch('/api/leagues')).json()).leagues||[];if(!leagues.length){showBlocked('no league profiles are available');return;}for(const league of leagues){const option=document.createElement('option');option.value=league.profile_id;option.textContent=league.league_name;$('league').appendChild(option);} $('ready').classList.remove('hidden');await refresh();}catch(error){showBlocked(error instanceof Error?error.message:String(error));}})();
