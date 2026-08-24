@@ -97,7 +97,7 @@ def test_current_roster_reconciliation_excludes_retired_without_blacklist() -> N
             'players': [
                 _entry(101, 'Active Quarterback', 1),
                 _entry(102, 'Retired Quarterback', 1),
-                _entry(103, 'Rookie Quarterback', 1),
+                _entry(103, 'Rookie Quarterback', 1, pro_team_id=13),
                 _entry(200, 'Bills D/ST', 16),
             ]
         },
@@ -126,6 +126,34 @@ def test_current_roster_reconciliation_excludes_retired_without_blacklist() -> N
         'Bills D/ST',
     }
     assert not current['name'].str.contains('Retired').any()
+
+
+def test_reconciliation_rejects_name_match_with_conflicting_position_or_team() -> None:
+    espn = parse_espn_player_payload(
+        {
+            'players': [
+                _entry(301, 'Cross Position', 2, pro_team_id=1),
+                _entry(302, 'Cross Team', 1, pro_team_id=1),
+                _entry(303, 'Stable ID Match', 3, pro_team_id=2),
+                _entry(304, 'Bills D/ST', 16, pro_team_id=2),
+            ]
+        },
+        season=2026,
+    )
+    roster = pd.DataFrame(
+        {
+            'espn_id': [None, None, 303],
+            'full_name': ['Cross Position', 'Cross Team', 'Stable ID Match'],
+            'position': ['WR', 'QB', 'WR'],
+            'team': ['ATL', 'BUF', 'BUF'],
+            'status': ['ACT', 'ACT', 'ACT'],
+            'season': [2026, 2026, 2026],
+        }
+    )
+
+    current = reconcile_current_players(espn, roster, season=2026)
+
+    assert set(current['name']) == {'Stable ID Match', 'Bills D/ST'}
 
 
 def test_projection_coverage_fails_closed_for_truncated_pool() -> None:

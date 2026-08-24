@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import asdict, dataclass
 from typing import Any, Mapping
 
@@ -11,6 +12,18 @@ class LeagueProfileError(ValueError):
 
 
 REQUIRED_ROSTER_SLOTS = ('QB', 'RB', 'WR', 'TE', 'FLEX', 'DST', 'K')
+
+
+def _nonnegative_integer(value: Any, field: str) -> int:
+    if isinstance(value, bool):
+        raise LeagueProfileError(f'{field} must be a non-negative integer')
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise LeagueProfileError(f'{field} must be a non-negative integer') from exc
+    if not math.isfinite(numeric) or numeric != math.floor(numeric) or numeric < 0:
+        raise LeagueProfileError(f'{field} must be a non-negative integer')
+    return int(numeric)
 
 
 @dataclass(frozen=True)
@@ -135,6 +148,9 @@ class LeagueProfile:
         if roster['FLEX'] > 0 and not flex_eligible:
             raise LeagueProfileError('flex_eligible is required when FLEX slots exist')
 
+        bench_slots = _nonnegative_integer(value['bench_slots'], 'bench_slots')
+        ir_slots = _nonnegative_integer(value['ir_slots'], 'ir_slots')
+
         return cls(
             profile_id=str(value['profile_id']),
             league_name=str(value['league_name']),
@@ -147,8 +163,8 @@ class LeagueProfile:
             scoring_overrides=scoring_overrides,
             bonuses=tuple(bonuses),
             roster_slots=roster,
-            bench_slots=int(value['bench_slots']),
-            ir_slots=int(value['ir_slots']),
+            bench_slots=bench_slots,
+            ir_slots=ir_slots,
             flex_eligible=flex_eligible,
             waiver_type=str(value['waiver_type']),
             waiver_constraints=tuple(value.get('waiver_constraints') or ()),

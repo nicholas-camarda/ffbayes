@@ -224,7 +224,12 @@ def render_dashboard_html(payload: Mapping[str, Any]) -> str:
             f'<td>{html.escape(str(player["recommendation"]))}</td>'
             '</tr>'
         )
-    embedded = _canonical_json(payload).replace('</script', '<\\/script')
+    embedded = (
+        _canonical_json(payload)
+        .replace('&', '\\u0026')
+        .replace('<', '\\u003c')
+        .replace('>', '\\u003e')
+    )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>{title} 2026 Draft Board</title>

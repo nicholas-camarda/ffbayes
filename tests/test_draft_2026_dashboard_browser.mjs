@@ -36,6 +36,9 @@ try {
   await page.locator(`#board tr[data-player-id="${firstId}"] button[data-action="taken"]`).click();
   await page.waitForFunction((id) => document.querySelector(`#board tr[data-player-id="${id}"]`)?.textContent?.includes('taken'), firstId);
 
+  await page.locator(`#board tr[data-player-id="${firstId}"] button[data-action="queue"]`).click();
+  await page.waitForFunction((id) => document.querySelector(`#board tr[data-player-id="${id}"]`)?.textContent?.includes('queued'), firstId);
+
   await page.locator('#league').selectOption('family');
   await page.waitForTimeout(100);
   await page.waitForFunction((id) => !document.querySelector(`#board tr[data-player-id="${id}"]`)?.textContent?.includes('taken'), firstId);

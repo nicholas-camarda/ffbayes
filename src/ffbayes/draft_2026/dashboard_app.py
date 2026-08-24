@@ -74,6 +74,14 @@ class DashboardService:
         blocked_details: Mapping[str, Any] | None = None,
     ) -> None:
         self.fresh_inputs = fresh_inputs
+        profile_ids = [profile.profile_id for profile in profiles]
+        duplicates = sorted(
+            {profile_id for profile_id in profile_ids if profile_ids.count(profile_id) > 1}
+        )
+        if duplicates:
+            raise LeagueProfileError(
+                f'duplicate profile_id values are not allowed: {duplicates}'
+            )
         self.profiles = {profile.profile_id: profile for profile in profiles}
         self.project_root = project_root
         self.run_root = run_root
@@ -256,7 +264,7 @@ function showBlocked(message){ $('blocked').classList.remove('hidden'); $('ready
 function currentState(){ const id=$('league').value; return stateByLeague.get(id) || {profile_id:id,draft_slot:null,current_pick:null,taken_ids:[],your_ids:[],queue_ids:[]}; }
 function setSettings(){ const league=leagues.find(item=>item.profile_id===$('league').value); if(!league)return; $('draft-slot').max=league.team_count; $('current-pick').max=league.team_count*(Object.values(league.roster_slots).reduce((a,b)=>a+b,0)+league.bench_slots); $('league-settings').textContent=`${league.league_name} · ${league.team_count}-team ${league.draft_format} · ${league.scoring_label} · FLEX ${league.roster_slots.FLEX} · bench ${league.bench_slots} · IR ${league.ir_slots}`; const s=currentState(); $('draft-slot').value=s.draft_slot ?? ''; $('current-pick').value=s.current_pick ?? ''; }
 function requestState(){ const state=currentState(); return {...state,draft_slot:$('draft-slot').value===''?null:Number($('draft-slot').value),current_pick:$('current-pick').value===''?null:Number($('current-pick').value)}; }
-function renderBoard(){ const body=$('board'); body.replaceChildren(); if(!currentPayload)return; const statusClasses={available:'status-available',taken:'status-taken',mine:'status-mine'}; const textCell=(value)=>{ const cell=document.createElement('td'); cell.textContent=String(value); return cell; }; for(const row of currentPayload.decision_table.slice(0,100)){ const tr=document.createElement('tr'); tr.dataset.playerId=String(row.espn_id); const status=row.roster_status||'available'; tr.append(textCell(row.board_rank),textCell(row.name),textCell(row.position),textCell(Number(row.projected_points).toFixed(1)),textCell(Number(row.replacement_level).toFixed(1)),textCell(Number(row.vor).toFixed(1)),textCell(Number(row.scarcity).toFixed(1)),textCell(Number(row.adp).toFixed(1)),textCell(row.availability_next_pick==null?'Draft slot required':(Number(row.availability_next_pick)*100).toFixed(0)+'%')); const actionCell=document.createElement('td'); for(const [action,label] of [['taken','Taken'],['mine','Mine'],['queue','Queue']]){ if(actionCell.childNodes.length)actionCell.appendChild(document.createTextNode(' ')); const button=document.createElement('button'); button.type='button'; button.dataset.action=action; button.dataset.id=String(row.espn_id); button.textContent=label; actionCell.appendChild(button); } tr.appendChild(actionCell); const statusCell=textCell(`${status} · ${row.recommendation}`); if(statusClasses[status])statusCell.classList.add(statusClasses[status]); tr.appendChild(statusCell); body.appendChild(tr); } $('status').textContent=`Current pick ${currentPayload.current_pick ?? '—'} · next pick ${currentPayload.next_pick ?? '—'} · ${currentPayload.decision_table.length} validated players`; $('provenance').textContent=JSON.stringify(currentPayload.provenance,null,2); }
+function renderBoard(){ const body=$('board'); body.replaceChildren(); if(!currentPayload)return; const statusClasses={available:'status-available',taken:'status-taken',mine:'status-mine'}; const textCell=(value)=>{ const cell=document.createElement('td'); cell.textContent=String(value); return cell; }; for(const row of currentPayload.decision_table.slice(0,100)){ const tr=document.createElement('tr'); tr.dataset.playerId=String(row.espn_id); const status=row.roster_status||'available'; const queued=currentPayload.runtime_state.queue_ids.includes(row.espn_id); tr.append(textCell(row.board_rank),textCell(row.name),textCell(row.position),textCell(Number(row.projected_points).toFixed(1)),textCell(Number(row.replacement_level).toFixed(1)),textCell(Number(row.vor).toFixed(1)),textCell(Number(row.scarcity).toFixed(1)),textCell(Number(row.adp).toFixed(1)),textCell(row.availability_next_pick==null?'Draft slot required':(Number(row.availability_next_pick)*100).toFixed(0)+'%')); const actionCell=document.createElement('td'); for(const [action,label] of [['taken','Taken'],['mine','Mine'],['queue','Queue']]){ if(actionCell.childNodes.length)actionCell.appendChild(document.createTextNode(' ')); const button=document.createElement('button'); button.type='button'; button.dataset.action=action; button.dataset.id=String(row.espn_id); button.textContent=label; actionCell.appendChild(button); } tr.appendChild(actionCell); const statusCell=textCell(`${queued?'queued · ':''}${status} · ${row.recommendation}`); if(statusClasses[status])statusCell.classList.add(statusClasses[status]); tr.appendChild(statusCell); body.appendChild(tr); } $('status').textContent=`Current pick ${currentPayload.current_pick ?? '—'} · next pick ${currentPayload.next_pick ?? '—'} · ${currentPayload.decision_table.length} validated players`; $('provenance').textContent=JSON.stringify(currentPayload.provenance,null,2); }
 async function recalculate(){ const response=await fetch('/api/board',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(requestState())}); const data=await response.json(); if(!response.ok){$('status').textContent=data.error||'Board recalculation failed';$('status').className='notice';return;} currentPayload=data; const state=requestState(); stateByLeague.set(state.profile_id,state); renderBoard(); }
 $('league').addEventListener('change',()=>{setSettings(); currentPayload=null; recalculate();}); $('recalculate').addEventListener('click',recalculate); $('snapshot').addEventListener('click',async()=>{const response=await fetch('/api/snapshot',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(requestState())}); const data=await response.json(); $('status').textContent=response.ok?'Snapshot written to '+data.path:(data.error||'Snapshot failed');}); $('board').addEventListener('click',(event)=>{const button=event.target.closest('button[data-action]');if(!button)return;const state=currentState();const id=Number(button.dataset.id);const action=button.dataset.action;for(const key of ['taken_ids','your_ids'])state[key]=state[key].filter(value=>value!==id);if(action==='taken')state.taken_ids.push(id);if(action==='mine')state.your_ids.push(id);if(action==='queue'){state.queue_ids=state.queue_ids.includes(id)?state.queue_ids.filter(value=>value!==id):[...state.queue_ids,id];}stateByLeague.set(state.profile_id,state);recalculate();});
 (async()=>{try{const status=await (await fetch('/api/status')).json();if(status.status!=='ready'){showBlocked(status.error||'source validation failed');return;}leagues=(await (await fetch('/api/leagues')).json()).leagues||[];if(!leagues.length){showBlocked('no league profiles are available');return;}for(const league of leagues){stateByLeague.set(league.profile_id,{profile_id:league.profile_id,draft_slot:null,current_pick:null,taken_ids:[],your_ids:[],queue_ids:[]});const option=document.createElement('option');option.value=league.profile_id;option.textContent=league.league_name;$('league').appendChild(option);} $('ready').classList.remove('hidden');setSettings();await recalculate();}catch(error){showBlocked(error instanceof Error?error.message:String(error));}})();
@@ -339,6 +347,12 @@ def _load_profiles(paths: Sequence[Path]) -> tuple[list[LeagueProfile], str | No
             profiles.append(LeagueProfile.from_mapping(json.loads(path.read_text(encoding='utf-8'))))
         except (OSError, json.JSONDecodeError, LeagueProfileError) as exc:
             return profiles, f'Profile {path} is blocked: {exc}'
+    profile_ids = [profile.profile_id for profile in profiles]
+    duplicates = sorted(
+        {profile_id for profile_id in profile_ids if profile_ids.count(profile_id) > 1}
+    )
+    if duplicates:
+        return profiles, f'duplicate profile_id values are not allowed: {duplicates}'
     return profiles, None
 
 
@@ -424,31 +438,52 @@ def main(argv: Sequence[str] | None = None) -> int:
     blocked_details: dict[str, Any] = {}
     fresh_inputs: FreshInputs | None = None
     if blocked_error is None:
-        try:
-            fresh_inputs = load_fresh_inputs(args.year)
-        except Exception as exc:
-            blocked_error = f'{type(exc).__name__}: {exc}'
-            blocked_details = _source_failure_details(exc)
+        mismatched_profiles = [
+            profile
+            for profile in profiles
+            if profile.season != args.year
+        ]
+        if mismatched_profiles:
+            blocked_error = (
+                f'Profile season does not match requested year {args.year}: '
+                + ', '.join(
+                    f'{profile.profile_id} has season {profile.season}'
+                    for profile in mismatched_profiles
+                )
+            )
+            blocked_details = {
+                'source': 'local league profile configuration',
+                'failure_mode': blocked_error,
+                'external_dependency': False,
+                'pipeline_dependencies': ['dashboard readiness', 'board requests'],
+                'resolution': 'use a profile whose season matches the requested year',
+            }
         else:
             try:
-                for profile in profiles:
-                    build_draft_board(fresh_inputs.players, profile)
-            except SemanticInputError as exc:
+                fresh_inputs = load_fresh_inputs(args.year)
+            except Exception as exc:
                 blocked_error = f'{type(exc).__name__}: {exc}'
-                blocked_details = {
-                    'source': 'local league profile scoring configuration',
-                    'failure_mode': str(exc),
-                    'external_dependency': False,
-                    'pipeline_dependencies': [
-                        'replacement levels',
-                        'recommendations',
-                        'dashboard payload',
-                    ],
-                    'resolution': (
-                        'supply scoring rules compatible with the current '
-                        'public projection statistic IDs'
-                    ),
-                }
+                blocked_details = _source_failure_details(exc)
+            else:
+                try:
+                    for profile in profiles:
+                        build_draft_board(fresh_inputs.players, profile)
+                except SemanticInputError as exc:
+                    blocked_error = f'{type(exc).__name__}: {exc}'
+                    blocked_details = {
+                        'source': 'local league profile scoring configuration',
+                        'failure_mode': str(exc),
+                        'external_dependency': False,
+                        'pipeline_dependencies': [
+                            'replacement levels',
+                            'recommendations',
+                            'dashboard payload',
+                        ],
+                        'resolution': (
+                            'supply scoring rules compatible with the current '
+                            'public projection statistic IDs'
+                        ),
+                    }
     timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     output_root = args.output_root or PROJECT_ROOT / 'runtime' / 'runs' / 'dashboard_2026'
     run_root = output_root / timestamp

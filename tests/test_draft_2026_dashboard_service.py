@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pandas as pd
 import pytest
@@ -10,7 +11,7 @@ from ffbayes.draft_2026.dashboard_app import (
     DashboardRequestError,
     DashboardService,
 )
-from ffbayes.draft_2026.league import LeagueProfile
+from ffbayes.draft_2026.league import LeagueProfile, LeagueProfileError
 from ffbayes.draft_2026.pipeline import FreshInputs, validate_output_provenance
 
 
@@ -258,3 +259,52 @@ def test_main_classifies_incompatible_profile_scoring_as_local_configuration(
     assert 'Projection scoring has no usable signal for DST' in status['error']
     assert status['source'] == 'local league profile scoring configuration'
     assert status['external_dependency'] is False
+
+
+def test_main_blocks_profile_for_a_different_requested_season_before_fetch(
+    monkeypatch, tmp_path
+) -> None:
+    captured: dict[str, object] = {}
+    mismatched = replace(_profile('bill', 2), season=2025)
+
+    monkeypatch.setattr(dashboard_app, 'default_profile_paths', lambda: ())
+    monkeypatch.setattr(
+        dashboard_app, '_load_profiles', lambda _: ([mismatched], None)
+    )
+
+    def fail_fetch(_: int) -> FreshInputs:
+        raise AssertionError('source fetch must not run for a mismatched profile')
+
+    monkeypatch.setattr(dashboard_app, 'load_fresh_inputs', fail_fetch)
+    monkeypatch.setattr(
+        dashboard_app,
+        'serve_dashboard',
+        lambda service, **_: captured.setdefault('status', service.status_payload())
+        and 0,
+    )
+
+    assert dashboard_app.main(['--year', '2026', '--no-browser']) == 0
+    status = captured['status']
+    assert isinstance(status, dict)
+    assert status['status'] == 'blocked'
+    assert 'season' in status['error'].lower()
+    assert '2025' in status['error']
+
+
+@pytest.mark.parametrize('field', ['bench_slots', 'ir_slots'])
+@pytest.mark.parametrize('value', [-1, 1.5])
+def test_profile_rejects_invalid_bench_and_ir_slot_values(field, value) -> None:
+    with pytest.raises(LeagueProfileError, match=field):
+        LeagueProfile.from_mapping({**_profile('invalid', 2).to_dict(), field: value})
+
+
+def test_dashboard_service_rejects_duplicate_profile_ids(tmp_path) -> None:
+    profile = _profile('duplicate', 2)
+    with pytest.raises(LeagueProfileError, match='duplicate profile_id'):
+        DashboardService(
+            None,
+            [profile, profile],
+            project_root=tmp_path,
+            run_root=tmp_path / 'run',
+            code_revision='fixture-revision',
+        )
