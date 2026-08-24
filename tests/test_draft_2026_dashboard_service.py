@@ -213,12 +213,12 @@ def test_blocked_status_preserves_external_source_failure_details(tmp_path) -> N
     assert status['fallback'] is False
 
 
-def test_main_blocks_dashboard_when_fresh_inputs_cannot_build_a_profile(
+def test_main_classifies_incompatible_profile_scoring_as_local_configuration(
     monkeypatch, tmp_path
 ) -> None:
     players = _players()
     players.loc[players['position'].eq('DST'), 'projection_stats'] = [
-        {'80': 0.0}
+        {'89': 10.0}
     ] * int(players['position'].eq('DST').sum())
     inputs = FreshInputs(
         payload={'players': []},
@@ -256,3 +256,5 @@ def test_main_blocks_dashboard_when_fresh_inputs_cannot_build_a_profile(
     assert status['status'] == 'blocked'
     assert status['fallback'] is False
     assert 'Projection scoring has no usable signal for DST' in status['error']
+    assert status['source'] == 'local league profile scoring configuration'
+    assert status['external_dependency'] is False

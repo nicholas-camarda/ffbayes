@@ -426,11 +426,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     if blocked_error is None:
         try:
             fresh_inputs = load_fresh_inputs(args.year)
-            for profile in profiles:
-                build_draft_board(fresh_inputs.players, profile)
         except Exception as exc:
             blocked_error = f'{type(exc).__name__}: {exc}'
             blocked_details = _source_failure_details(exc)
+        else:
+            try:
+                for profile in profiles:
+                    build_draft_board(fresh_inputs.players, profile)
+            except SemanticInputError as exc:
+                blocked_error = f'{type(exc).__name__}: {exc}'
+                blocked_details = {
+                    'source': 'local league profile scoring configuration',
+                    'failure_mode': str(exc),
+                    'external_dependency': False,
+                    'pipeline_dependencies': [
+                        'replacement levels',
+                        'recommendations',
+                        'dashboard payload',
+                    ],
+                    'resolution': (
+                        'supply scoring rules compatible with the current '
+                        'public projection statistic IDs'
+                    ),
+                }
     timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     output_root = args.output_root or PROJECT_ROOT / 'runtime' / 'runs' / 'dashboard_2026'
     run_root = output_root / timestamp
