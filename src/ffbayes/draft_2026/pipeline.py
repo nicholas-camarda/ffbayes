@@ -224,7 +224,12 @@ def render_dashboard_html(payload: Mapping[str, Any]) -> str:
             f'<td>{html.escape(str(player["recommendation"]))}</td>'
             '</tr>'
         )
-    embedded = _canonical_json(payload).replace('</script', '<\\/script')
+    embedded = (
+        _canonical_json(payload)
+        .replace('&', '\\u0026')
+        .replace('<', '\\u003c')
+        .replace('>', '\\u003e')
+    )
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>{title} 2026 Draft Board</title>
@@ -354,10 +359,9 @@ def build_parser() -> argparse.ArgumentParser:
         description='Build fail-closed, league-specific 2026 draft boards.'
     )
     parser.add_argument('--profile', action='append', type=Path)
-    from ffbayes.utils.path_constants import RUNTIME_DIR
 
     parser.add_argument(
-        '--output-root', type=Path, default=RUNTIME_DIR / 'runs' / 'draft_2026'
+        '--output-root', type=Path, default=PROJECT_ROOT / 'runtime' / 'runs' / 'draft_2026'
     )
     return parser
 

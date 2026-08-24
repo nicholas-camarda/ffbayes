@@ -18,7 +18,6 @@ ffbayes dashboard --year 2026
 - [Output examples](OUTPUT_EXAMPLES.md) — validated payload and snapshot shape.
 - [Technical deep dive](TECHNICAL_DEEP_DIVE.md) — implemented model flow.
 - [Dashboard architecture](DASHBOARD_FRONTEND_ARCHITECTURE.md) — service and browser responsibilities.
-- [Frontend maintenance](DASHBOARD_FRONTEND_CUTOVER.md) — the optional React template workflow.
 - [Layperson guide](LAYPERSON_GUIDE.md) — plain-language explanation.
 
 ## How to read a result

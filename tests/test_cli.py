@@ -1,10 +1,12 @@
 import sys
 from types import SimpleNamespace
 
+import pytest
+
 import ffbayes.cli as cli
 
 
-def test_collect_command_forwards_extra_arguments(monkeypatch):
+def test_dashboard_command_forwards_extra_arguments(monkeypatch):
     captured = {}
 
     def fake_import(module_name):
@@ -18,305 +20,25 @@ def test_collect_command_forwards_extra_arguments(monkeypatch):
 
     monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
 
-    exit_code = cli.main(['collect', '--years', '2022,2023'])
+    exit_code = cli.main(['dashboard', '--year', '2026', '--no-browser'])
 
     assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.data_pipeline.collect_data'
+    assert captured['module_name'] == 'ffbayes.draft_2026.dashboard_app'
     assert captured['argv'] == [
-        'ffbayes.data_pipeline.collect_data',
-        '--years',
-        '2022,2023',
-    ]
-
-
-def test_pipeline_command_forwards_same_as_pre_draft(monkeypatch):
-    captured = {}
-
-    def fake_import(module_name):
-        captured['module_name'] = module_name
-
-        def fake_main():
-            captured['argv'] = sys.argv[:]
-            return 0
-
-        return SimpleNamespace(main=fake_main)
-
-    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
-
-    exit_code = cli.main(['pipeline', '--year', '2025'])
-
-    assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.run_pipeline_split'
-    assert captured['argv'] == [
-        'ffbayes.run_pipeline_split',
-        '--year',
-        '2025',
-    ]
-
-
-def test_split_command_forwards_without_phase_argument(monkeypatch):
-    captured = {}
-
-    def fake_import(module_name):
-        captured['module_name'] = module_name
-
-        def fake_main():
-            captured['argv'] = sys.argv[:]
-            return 0
-
-        return SimpleNamespace(main=fake_main)
-
-    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
-
-    exit_code = cli.main(['split', '--year', '2025'])
-
-    assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.run_pipeline_split'
-    assert captured['argv'] == [
-        'ffbayes.run_pipeline_split',
-        '--year',
-        '2025',
-    ]
-
-
-def test_pre_draft_command_forwards_stage_pages_flag(monkeypatch):
-    captured = {}
-
-    def fake_import(module_name):
-        captured['module_name'] = module_name
-
-        def fake_main():
-            captured['argv'] = sys.argv[:]
-            return 0
-
-        return SimpleNamespace(main=fake_main)
-
-    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
-
-    exit_code = cli.main(['pre-draft', '--year', '2026', '--stage-pages'])
-
-    assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.run_pipeline_split'
-    assert captured['argv'] == [
-        'ffbayes.run_pipeline_split',
+        'ffbayes.draft_2026.dashboard_app',
         '--year',
         '2026',
-        '--stage-pages',
+        '--no-browser',
     ]
 
 
-def test_publish_command_forwards_extra_arguments(monkeypatch):
-    captured = {}
-
-    def fake_import(module_name):
-        captured['module_name'] = module_name
-
-        def fake_main():
-            captured['argv'] = sys.argv[:]
-            return 0
-
-        return SimpleNamespace(main=fake_main)
-
-    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
-
-    exit_code = cli.main(['publish', '--year', '2026'])
-
-    assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.publish_artifacts'
-    assert captured['argv'] == [
-        'ffbayes.publish_artifacts',
-        '--year',
-        '2026',
-    ]
-
-
-def test_stage_dashboard_command_forwards_extra_arguments(monkeypatch):
-    captured = {}
-
-    def fake_import(module_name):
-        captured['module_name'] = module_name
-
-        def fake_main():
-            captured['argv'] = sys.argv[:]
-            return 0
-
-        return SimpleNamespace(main=fake_main)
-
-    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
-
-    exit_code = cli.main(['stage-dashboard', '--year', '2026'])
-
-    assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.stage_dashboard'
-    assert captured['argv'] == [
-        'ffbayes.stage_dashboard',
-        '--year',
-        '2026',
-    ]
-
-
-def test_refresh_dashboard_command_forwards_extra_arguments(monkeypatch):
-    captured = {}
-
-    def fake_import(module_name):
-        captured['module_name'] = module_name
-
-        def fake_main():
-            captured['argv'] = sys.argv[:]
-            return 0
-
-        return SimpleNamespace(main=fake_main)
-
-    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
-
-    exit_code = cli.main(['refresh-dashboard', '--year', '2026', '--stage-pages'])
-
-    assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.refresh_dashboard'
-    assert captured['argv'] == [
-        'ffbayes.refresh_dashboard',
-        '--year',
-        '2026',
-        '--stage-pages',
-    ]
-
-
-def test_refresh_dashboard_check_command_forwards_extra_arguments(monkeypatch):
-    captured = {}
-
-    def fake_import(module_name):
-        captured['module_name'] = module_name
-
-        def fake_main():
-            captured['argv'] = sys.argv[:]
-            return 0
-
-        return SimpleNamespace(main=fake_main)
-
-    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
-
-    exit_code = cli.main(
-        ['refresh-dashboard', '--year', '2026', '--check', '--json']
+def test_unknown_commands_are_rejected_without_importing_modules(monkeypatch):
+    monkeypatch.setattr(
+        cli.importlib,
+        'import_module',
+        lambda _: (_ for _ in ()).throw(AssertionError('unexpected import')),
     )
 
-    assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.refresh_dashboard'
-    assert captured['argv'] == [
-        'ffbayes.refresh_dashboard',
-        '--year',
-        '2026',
-        '--check',
-        '--json',
-    ]
-
-
-def test_draft_retrospective_command_forwards_extra_arguments(monkeypatch):
-    captured = {}
-
-    def fake_import(module_name):
-        captured['module_name'] = module_name
-
-        def fake_main():
-            captured['argv'] = sys.argv[:]
-            return 0
-
-        return SimpleNamespace(main=fake_main)
-
-    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
-
-    exit_code = cli.main(
-        [
-            'draft-retrospective',
-            '--finalized-json',
-            'draft.json',
-            '--outcomes-path',
-            'outcomes.csv',
-        ]
-    )
-
-    assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.analysis.draft_retrospective'
-    assert captured['argv'] == [
-        'ffbayes.analysis.draft_retrospective',
-        '--finalized-json',
-        'draft.json',
-        '--outcomes-path',
-        'outcomes.csv',
-    ]
-
-
-def test_draft_retrospective_import_command_forwards_extra_arguments(monkeypatch):
-    captured = {}
-
-    def fake_import(module_name):
-        captured['module_name'] = module_name
-
-        def fake_main():
-            captured['argv'] = sys.argv[:]
-            return 0
-
-        return SimpleNamespace(main=fake_main)
-
-    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
-
-    exit_code = cli.main(
-        [
-            'draft-retrospective',
-            '--import-finalized',
-            'draft.json',
-            'draft.html',
-            '--ingest-only',
-            '--year',
-            '2026',
-        ]
-    )
-
-    assert exit_code == 0
-    assert captured['module_name'] == 'ffbayes.analysis.draft_retrospective'
-    assert captured['argv'] == [
-        'ffbayes.analysis.draft_retrospective',
-        '--import-finalized',
-        'draft.json',
-        'draft.html',
-        '--ingest-only',
-        '--year',
-        '2026',
-    ]
-
-
-def test_draft_retrospective_help_is_side_effect_free(monkeypatch, capsys):
-    captured = {}
-
-    def fake_import(module_name):
-        raise AssertionError('help must not import a work-producing module')
-
-    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
-
-    exit_code = cli.main(['draft-retrospective', '--help'])
-
-    assert exit_code == 0
-    assert 'side-effect free' in capsys.readouterr().out
-
-
-def test_refresh_dashboard_help_is_side_effect_free(monkeypatch, capsys):
-    def fake_import(module_name):
-        raise AssertionError('help must not import a work-producing module')
-
-    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
-
-    exit_code = cli.main(['refresh-dashboard', '--help'])
-
-    assert exit_code == 0
-    assert 'side-effect free' in capsys.readouterr().out
-
-
-def test_stage_dashboard_help_is_side_effect_free(monkeypatch, capsys):
-    def fake_import(module_name):
-        raise AssertionError('help must not import a work-producing module')
-
-    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
-
-    exit_code = cli.main(['stage-dashboard', '--help'])
-
-    assert exit_code == 0
-    assert 'side-effect free' in capsys.readouterr().out
+    with pytest.raises(SystemExit) as exc:
+        cli.main(['pre-draft', '--year', '2026'])
+    assert exc.value.code == 2

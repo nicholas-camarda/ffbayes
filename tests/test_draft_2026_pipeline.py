@@ -151,6 +151,29 @@ def test_dashboard_renderer_embeds_parseable_validated_payload() -> None:
     assert '&quot;schema_version&quot;' not in embedded
 
 
+def test_dashboard_renderer_escapes_case_insensitive_script_breakout_in_json() -> None:
+    board = _payload_board()
+    board['name'] = ['</ScRiPt><script>window.__escaped = true</script>']
+    manifest = {'season': 2026, 'sha256': 'abc', 'fetched_at': '2026-08-22T12:00:00Z'}
+    payload = build_dashboard_payload(
+        board,
+        _profile(),
+        source_manifest=manifest,
+        roster_manifest={**manifest, 'sha256': 'def'},
+        coverage_report={'status': 'passed'},
+        code_revision='deadbeef',
+    )
+
+    rendered = render_dashboard_html(payload)
+    embedded = rendered.split(
+        '<script id="draft-2026-payload" type="application/json">', 1
+    )[1].split('</script>', 1)[0]
+
+    assert '</ScRiPt' not in embedded
+    assert '<script' not in embedded
+    assert json.loads(embedded)['decision_table'][0]['name'] == board['name'].iloc[0]
+
+
 def _payload_board() -> pd.DataFrame:
     board = pd.DataFrame(
         {

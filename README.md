@@ -104,20 +104,26 @@ and ignored by Git.
 
 ## Development checks
 
+The browser smoke sidecar uses Node.js 22, matching CI. Install that runtime
+before running the commands below.
+
 ```bash
 PYTHONPATH=src pytest -q
 PYTHONPATH=src mypy src/ffbayes
 PYTHONPATH=src ruff check src tests
 npm ci
-npm --prefix dashboard_frontend ci
-npm --prefix dashboard_frontend test
-npm --prefix dashboard_frontend run typecheck
-npm --prefix dashboard_frontend run build
+npx playwright install chromium
 PYTHON=/path/to/ffbayes/bin/python node tests/test_draft_2026_dashboard_browser.mjs
+PYTHON=/path/to/ffbayes/bin/python npm test
 ```
 
-The public operator surface is the single `ffbayes dashboard` command. Lower-
-level modules remain available for development and testing.
+The root `npm test` and `npm run smoke` commands run the deterministic browser
+smoke against the Python fixture service. Set `PYTHON` to the executable from
+the environment where the project dependencies are installed when `python` is
+not the desired interpreter.
+
+The public operator surface is the single `ffbayes dashboard` command. Run
+`ffbayes dashboard --help` for its complete option list.
 
 ## Documentation
 
@@ -130,8 +136,6 @@ level modules remain available for development and testing.
 - [`docs/TECHNICAL_DEEP_DIVE.md`](docs/TECHNICAL_DEEP_DIVE.md): implemented
   pipeline and mathematical details.
 - [`docs/OUTPUT_EXAMPLES.md`](docs/OUTPUT_EXAMPLES.md): generic payload shape.
-- [`dashboard_frontend/README.md`](dashboard_frontend/README.md): frontend
-  development workflow.
 
 ## License
 

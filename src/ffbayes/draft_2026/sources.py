@@ -13,6 +13,40 @@ import pandas as pd
 import requests
 
 ESPN_POSITION_IDS = {1: 'QB', 2: 'RB', 3: 'WR', 4: 'TE', 5: 'K', 16: 'DST'}
+ESPN_TEAM_ABBRS = {
+    1: {'ATL'},
+    2: {'BUF'},
+    3: {'CHI'},
+    4: {'CIN'},
+    5: {'CLE'},
+    6: {'DAL'},
+    7: {'DEN'},
+    8: {'DET'},
+    9: {'GB'},
+    10: {'TEN'},
+    11: {'IND'},
+    12: {'KC'},
+    13: {'LV'},
+    14: {'LA', 'LAR'},
+    15: {'MIA'},
+    16: {'MIN'},
+    17: {'NE'},
+    18: {'NO'},
+    19: {'NYG'},
+    20: {'NYJ'},
+    21: {'PHI'},
+    22: {'ARI', 'AZ'},
+    23: {'PIT'},
+    24: {'LAC'},
+    25: {'SF'},
+    26: {'SEA'},
+    27: {'TB'},
+    28: {'WAS'},
+    29: {'CAR'},
+    30: {'JAX'},
+    33: {'BAL'},
+    34: {'HOU'},
+}
 CURRENT_ROSTER_STATUSES = frozenset({'ACT', 'RES', 'E14'})
 ESPN_PLAYER_URL = (
     'https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/'
@@ -65,6 +99,31 @@ def _normalize_name(value: object) -> str:
         if name.endswith(suffix):
             return name[: -len(suffix)].strip()
     return name
+
+
+def _espn_team_abbreviations(value: object) -> set[str]:
+    team_id = pd.to_numeric(value, errors='coerce')
+    if pd.isna(team_id):
+        return set()
+    return ESPN_TEAM_ABBRS.get(int(team_id), set())
+
+
+def _roster_match_agrees(
+    player: pd.Series, candidate: pd.Series, *, require_team: bool
+) -> bool:
+    candidate_position = str(candidate.get('position') or '').strip().upper()
+    if candidate_position and candidate_position != str(player['position']).upper():
+        return False
+    raw_team = candidate.get('team')
+    if pd.isna(raw_team) or not str(raw_team).strip():
+        raw_team = candidate.get('team_abbr')
+    candidate_team = str(raw_team or '').strip().upper()
+    player_teams = _espn_team_abbreviations(player.get('pro_team_id'))
+    if require_team and (not candidate_team or not player_teams):
+        return False
+    if candidate_team and player_teams and candidate_team not in player_teams:
+        return False
+    return not require_team or candidate_team in player_teams
 
 
 def _season_projection(
@@ -190,16 +249,40 @@ def reconcile_current_players(
         roster['season'].eq(season) & roster['status'].isin(CURRENT_ROSTER_STATUSES)
     ].copy()
     roster['normalized_name'] = roster.get('full_name', '').map(_normalize_name)
-    roster_ids = set(
-        pd.to_numeric(roster.get('espn_id'), errors='coerce').dropna().astype(int)
-    )
-    roster_names = set(roster['normalized_name'].dropna())
+    roster['normalized_espn_id'] = pd.to_numeric(roster.get('espn_id'), errors='coerce')
 
     frame = espn_players.copy()
     normalized = frame.get('normalized_name', frame['name'].map(_normalize_name))
-    id_match = pd.to_numeric(frame['espn_id'], errors='coerce').isin(roster_ids)
-    name_match = normalized.isin(roster_names)
-    current = frame['position'].eq('DST') | id_match | name_match
+    current_rows: list[bool] = []
+    for index, player in frame.iterrows():
+        if str(player['position']).upper() == 'DST':
+            current_rows.append(True)
+            continue
+
+        player_id = pd.to_numeric(player['espn_id'], errors='coerce')
+        id_candidates = roster.loc[
+            roster['normalized_espn_id'].eq(player_id) if not pd.isna(player_id)
+            else pd.Series(False, index=roster.index)
+        ]
+        if len(id_candidates) == 1:
+            current_rows.append(True)
+            continue
+        if len(id_candidates) > 1:
+            current_rows.append(False)
+            continue
+
+        name_candidates = roster.loc[roster['normalized_name'].eq(normalized.loc[index])]
+        if len(name_candidates) != 1:
+            current_rows.append(False)
+            continue
+        candidate = name_candidates.iloc[0]
+        candidate_id = candidate.get('normalized_espn_id')
+        if not pd.isna(candidate_id) and not pd.isna(player_id) and candidate_id != player_id:
+            current_rows.append(False)
+            continue
+        current_rows.append(_roster_match_agrees(player, candidate, require_team=True))
+
+    current = frame.index.to_series().map(dict(zip(frame.index, current_rows))).fillna(False)
     frame = frame[current].copy()
     frame['eligibility_status'] = 'current'
     if frame.empty:

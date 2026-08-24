@@ -47,17 +47,23 @@ def test_dashboard_unknown_option_is_rejected_by_its_parser(monkeypatch, capsys)
     assert 'unrecognized arguments' in capsys.readouterr().err
 
 
-def test_legacy_help_does_not_import_or_run_work(monkeypatch, capsys) -> None:
-    imported = []
+def test_dashboard_help_is_forwarded_to_the_canonical_parser(monkeypatch) -> None:
+    captured = {}
 
-    def fail_import(module_name):
-        imported.append(module_name)
-        raise AssertionError('legacy help imported a work-producing module')
+    def fake_import(module_name):
+        def fake_main():
+            captured['module_name'] = module_name
+            captured['argv'] = sys.argv[:]
+            return 0
 
-    monkeypatch.setattr(cli.importlib, 'import_module', fail_import)
-    assert cli.main(['draft-backtest', '--help']) == 0
-    assert imported == []
-    assert 'developer/maintenance' in capsys.readouterr().out
+        return SimpleNamespace(main=fake_main)
+
+    monkeypatch.setattr(cli.importlib, 'import_module', fake_import)
+    assert cli.main(['dashboard', '--help']) == 0
+    assert captured == {
+        'module_name': 'ffbayes.draft_2026.dashboard_app',
+        'argv': ['ffbayes.draft_2026.dashboard_app', '--help'],
+    }
 
 
 def test_only_ffbayes_console_script_is_declared() -> None:

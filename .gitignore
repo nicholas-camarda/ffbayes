@@ -1,56 +1,39 @@
-# OS / Editor
-.agent-os
-.cursor
-.vscode
+# Operating-system and editor files
 .DS_Store
-.*
+.agent-os/
+.cursor/
 .history/
 .idea/
+.vscode/
 
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.egg-info/
-.venv/
+# Python environments, caches, and build output
 .env
-.pytest_cache/
+.venv/
+__pycache__/
+*.egg-info/
+*.py[cod]
+.ipynb_checkpoints/
 .mypy_cache/
+.pytest_cache/
 .ruff_cache/
 
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
-
-# Data & Artifacts
-datasets/
-combined_datasets/
-misc-datasets
-old*
-old *
-snake_draft_datasets/
-docs/images/
-
-# Workspace roots / local-only placeholders
-logs
-plots
-results
-/dashboard/
-.ffbayes_runtime/
-.ffbayes_cloud/
-my_ff_teams
-AGENTS.md
-
-# Playwright
+# Node and browser-test dependencies
 node_modules/
 .playwright-mcp/
+.superpowers/
 
-# Outputs
-*.tsv
+# Local data and generated runtime artifacts
+datasets/
+combined_datasets/
+misc-datasets/
+snake_draft_datasets/
+docs/images/
+logs/
+plots/
+results/
+my_ff_teams/
 runtime/
+*.tsv
+
+# User-specific league profiles
 config/leagues/*.local.json
-
-# Track Agent OS product docs
-!.agent-os/product/
-
-.specs/

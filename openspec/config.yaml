@@ -1,28 +1,28 @@
 schema: spec-driven
 
 context: |
-  Stack: Python 3.10 package under `src/ffbayes` with pandas/polars data work, PyMC analysis, and a small Node + Playwright smoke-test sidecar from `package.json`.
-  Runtime: use the `ffbayes` conda env from `environment.yml`; Python tooling and pipeline commands are expected to run there.
-  Interfaces: extend the unified `ffbayes` CLI and existing `project.scripts` entrypoints before adding new standalone scripts.
-  Testing: Python coverage is pytest in `tests/`; dashboard publication also has smoke coverage via `node tests/dashboard_smoke.mjs` and `tests/test_publish_pages.py`.
+  Stack: Python 3.10 package under `src/ffbayes` with a Node 22 + Playwright smoke-test sidecar from `package.json`.
+  Runtime: use the `ffbayes` conda env from `environment.yml`; Python tooling runs against the package in `src/`.
+  Interfaces: the public interface is the single `ffbayes dashboard` command and the `config/leagues/*.json` profile surface.
+  Testing: Python coverage is pytest in `tests/`; the deterministic dashboard browser smoke runs via `node tests/dashboard_smoke.mjs`.
   Lint/type style: Ruff formatting and lint rules live in `pyproject.toml` (single quotes, space indentation); `mypy src` is the repo type-check entrypoint.
-  Paths: keep path policy in `src/ffbayes/utils/path_constants.py`; the repository lives at `~/Workspaces/ffbayes/source`, default runtime writes go to `~/Workspaces/ffbayes/runtime`, and cloud mirrors go to `~/Library/CloudStorage/OneDrive-Personal/Project Vault/Personal Projects/ffbayes` unless explicit env overrides are used.
-  Artifact flow: canonical outputs are year-scoped under `runs/<year>/pre_draft/...`; `publish-pages` stages repo-tracked `site/` files from runtime dashboard HTML and payload.
-  Domain constraint: only the `pre_draft` phase is supported, so preserve existing `pre_draft`, `draft_strategy`, and dashboard artifact naming unless a migration is explicit.
+  Paths: dashboard runtime outputs live under the repository-local `runtime/` tree and are ignored by Git; local league overrides live in `config/leagues/*.local.json`.
+  Artifact flow: the dashboard validates fresh public ESPN and nflverse inputs, then writes timestamped payload, board, and snapshot artifacts under `runtime/runs/dashboard_2026/`.
+  Domain constraint: only the current `draft_2026` dashboard pipeline is supported; missing or invalid inputs block the service without fallback data.
 
 rules:
   proposal:
-    - Name the affected CLI commands/modules and whether the change affects runtime artifacts, cloud mirroring, or `site/` Pages staging.
-    - Call out path, environment-variable, and phase migration risk explicitly when behavior touches outputs or publishing.
+    - Name the affected CLI command/modules and whether the change affects ignored runtime artifacts or league profiles.
+    - Call out path and environment-variable risk explicitly when behavior touches outputs.
 
   specs:
-    - Use current terms such as `ffbayes`, `pre_draft`, `draft_strategy`, `publish-pages`, and `dashboard_payload.json` instead of inventing new names.
-    - Separate behavior for repo files, runtime outputs, and published/site copies whenever a change crosses those storage boundaries.
+    - Use current terms such as `ffbayes dashboard`, `draft_2026_v1`, and `dashboard_payload.json` instead of inventing new names.
+    - Separate behavior for repository files, ignored runtime outputs, and local league profiles.
 
   design:
-    - Reuse `path_constants.py`, existing CLI dispatch in `src/ffbayes/cli.py`, and current JSON config files before proposing new abstractions or hardcoded paths.
-    - Describe data and artifact flow from pipeline step to runtime output to cloud or Pages staging, including failure modes for missing dashboard files or env overrides.
+    - Reuse the canonical `draft_2026` modules and existing CLI dispatch in `src/ffbayes/cli.py` before proposing new abstractions or hardcoded paths.
+    - Describe data flow from public sources to validated runtime output, including failure modes for missing inputs or profiles.
 
   tasks:
-    - Break work along existing modules under `src/ffbayes/...` and include tests for any touched CLI, path, or artifact-staging behavior.
-    - Add README or config doc updates when command surface, output locations, or dashboard publication behavior changes.
+    - Break work along existing modules under `src/ffbayes/draft_2026` and include tests for any touched CLI or profile behavior.
+    - Add README or config doc updates when command surface, output locations, or profile behavior changes.

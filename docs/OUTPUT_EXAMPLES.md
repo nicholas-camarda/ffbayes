@@ -71,6 +71,6 @@ values, coverage status, source timestamps, and provenance digests. If no draft
 slot has been entered, availability is `null` and recommendations are
 `slot_required`; the payload must not contain a guessed neutral probability.
 
-The payload is a validated decision aid. Older staged HTML, previous runtime
-outputs, and missing metrics are not current inputs and are not converted to
+The payload is a validated decision aid generated from the current input
+snapshot. Missing metrics are rejected by the service and are not converted to
 zeros.
