@@ -34,6 +34,14 @@ try {
   if (await page.locator('#provenance-details').getAttribute('open') !== null) throw new Error('Technical provenance should be collapsed by default');
   if (await page.locator('#provenance').isVisible()) throw new Error('Raw provenance JSON should not be prominent by default');
   if ((await page.locator('#freshness').textContent()).includes('{')) throw new Error('Data health should be human-readable, not raw JSON');
+  if (await page.locator('#frontier .frontier-row').count() < 1) throw new Error('Timing frontier visual rows are missing');
+  if (await page.locator('#frontier .metric-track').count() < 3) throw new Error('Timing frontier metric bars are missing');
+  if (await page.locator('#cliffs .cliff-card').count() < 1) throw new Error('Positional cliff visual cards are missing');
+  if (await page.locator('#comparative .comparative-row').count() < 1) throw new Error('Market/model comparison visual rows are missing');
+  if (await page.locator('#comparative .rank-marker').count() < 2) throw new Error('Market/model rank markers are missing');
+  const comparativeBox = await page.locator('#comparative-explainer').boundingBox();
+  const healthBox = await page.locator('#freshness-panel').boundingBox();
+  if (!comparativeBox || !healthBox || healthBox.y <= comparativeBox.y) throw new Error('Data health should follow market/model comparison');
 
   await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Current pick 1'));
   await page.locator('#draft-slot').fill('2');
