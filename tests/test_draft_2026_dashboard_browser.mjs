@@ -42,6 +42,9 @@ try {
   const comparativeBox = await page.locator('#comparative-explainer').boundingBox();
   const healthBox = await page.locator('#freshness-panel').boundingBox();
   if (!comparativeBox || !healthBox || healthBox.y <= comparativeBox.y) throw new Error('Data health should follow market/model comparison');
+  const marketGuide = await page.locator('.market-guide').textContent();
+  if (!marketGuide.includes('League-aware math') || !marketGuide.includes('ADP is the average draft position')) throw new Error('Novice market/model explanation is missing');
+  if (!(await page.locator('.explain-callout').textContent()).includes('investigate')) throw new Error('Market/model action guidance is missing');
 
   await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Current pick 1'));
   await page.locator('#draft-slot').fill('2');
