@@ -29,6 +29,27 @@ recommendation.
 - **Recommendation**: `draft_now`, `can_wait`, `slot_required`, `taken`, or
   `mine`.
 
+## If you do not follow football closely
+
+Use the dashboard in this order:
+
+1. Start with **Recommendation**. It is the board's default answer for this
+   league and this pick.
+2. Use **Timing frontier** to decide whether to act now. `Draft now` means the
+   player is unlikely to survive to your next pick; `Can wait` means the model
+   expects the player to be there later.
+3. Use **Positional cliffs** to choose between positions. A long bar means the
+   next player at that position represents a larger drop in value.
+4. Treat **Market vs model** as a question, not a command. The model is this
+   league's scoring and roster math. The market is where public drafters are
+   currently taking players (ADP, or average draft position). Close markers
+   mean the two signals agree. A wide gap means check the recommendation,
+   timing, and any real-world news you know about; do not blindly follow one
+   side.
+
+If the panel says `Validated`, the required inputs passed the data checks. You
+do not need to read the technical provenance during a draft.
+
 ## Keep the right expectations
 
 The board is a structured way to make a pick under uncertainty, not a promise
