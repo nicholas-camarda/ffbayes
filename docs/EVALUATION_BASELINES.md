@@ -57,7 +57,7 @@ PYTHONPATH=src python -m ffbayes.evaluation.baselines \
 ```
 
 The harness rejects duplicate, fractional, boolean, or missing player IDs,
-invalid projections or ADP, future-dated feature rows, mismatched source
+zero IDs, invalid projections or ADP, future-dated feature rows, mismatched source
 seasons, and source manifests without explicit timestamps and hashes. When raw
 stats are supplied, their profile-scored points must match `projected_points`.
 As-of mode requires a cutoff, source manifests, and per-row `projection_as_of`
@@ -91,3 +91,7 @@ The current raw historical files do not establish valid preseason projection
 and market snapshots. This batch supplies temporal contracts and a reproducible
 policy harness; player-week outcome assembly, rolling model fitting, and real
 outcome evaluation still need those data and are not implemented here.
+
+ESPN IDs are nonzero signed integers. Negative defense IDs are preserved through
+valuation, evaluation, selections, queues, snapshots, and checkpoint recovery.
+Draft slots and overall pick numbers remain positive integers.

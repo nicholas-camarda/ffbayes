@@ -439,7 +439,7 @@ def validate_output_provenance(payload: Mapping[str, Any]) -> None:
     if not all(isinstance(values, list) for values in (taken_ids, your_ids, queue_ids)):
         raise OutputProvenanceError('Runtime state player lists are invalid')
     if any(
-        isinstance(value, bool) or not isinstance(value, int) or value < 1
+        isinstance(value, bool) or not isinstance(value, int) or value == 0
         for values in (taken_ids, your_ids, queue_ids)
         for value in values
     ):
@@ -462,7 +462,7 @@ def validate_output_provenance(payload: Mapping[str, Any]) -> None:
             or
             isinstance(player_id, bool)
             or not isinstance(player_id, int)
-            or player_id < 1
+            or player_id == 0
             or player_id in action_ids
             or action.get('disposition') not in ('mine', 'taken')
         ):

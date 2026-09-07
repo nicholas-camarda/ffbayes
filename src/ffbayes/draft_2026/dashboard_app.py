@@ -72,7 +72,7 @@ def _checkpoint_integer_ids(value: object, field: str) -> list[int]:
         raise DashboardPersistenceError(f'Checkpoint {field} must be a list of integers')
     result: list[int] = []
     for raw in value:
-        if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+        if isinstance(raw, bool) or not isinstance(raw, int) or raw == 0:
             raise DashboardPersistenceError(f'Checkpoint {field} contains an invalid player ID')
         result.append(raw)
     if len(result) != len(set(result)):
@@ -512,8 +512,8 @@ class DashboardService:
         return value
 
     def _validate_player_id(self, value: object) -> int:
-        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-            raise DashboardRequestError('player_id must be a positive integer')
+        if isinstance(value, bool) or not isinstance(value, int) or value == 0:
+            raise DashboardRequestError('player_id must be a nonzero integer')
         if value not in self._known_ids():
             raise DashboardRequestError(f'unknown player espn_id value: {value}')
         return value

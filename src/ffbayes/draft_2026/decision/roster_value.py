@@ -45,11 +45,11 @@ def calculate_marginal_roster_value(
     if (
         players['espn_id'].map(lambda x: isinstance(x, (bool, np.bool_))).any()
         or not np.isfinite(ids).all()
-        or (ids <= 0).any()
+        or (ids == 0).any()
         or (ids != ids.round()).any()
         or ids.duplicated().any()
     ):
-        raise ValueError('player IDs must be unique positive integers')
+        raise ValueError('player IDs must be unique nonzero integers')
     if not np.isfinite(points).all() or (points < 0).any():
         raise ValueError('projected points must be finite and non-negative')
 

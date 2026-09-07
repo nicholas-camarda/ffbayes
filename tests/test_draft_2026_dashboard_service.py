@@ -79,7 +79,8 @@ def _players() -> pd.DataFrame:
             factor = 1.0 - index / (count * 1.5)
             rows.append(
                 {
-                    'espn_id': espn_id,
+                    # Match ESPN's signed team-defense identity convention.
+                    'espn_id': -(16001 + index) if position == 'DST' else espn_id,
                     'name': f'{position} {index + 1}',
                     'position': position,
                     'projection_stats': {
@@ -138,12 +139,18 @@ def test_live_actions_advance_once_queue_is_inert_and_undo_recomputes(service) -
     second_id = int(initial['decision_table'][1]['espn_id'])
 
     taken = service.handle_action(
-        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'}}
+        {
+            'profile_id': 'bill',
+            'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'},
+        }
     )
     assert taken['current_pick'] == 2
     assert first_id in taken['runtime_state']['taken_ids']
     corrected = service.handle_action(
-        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'mine'}}
+        {
+            'profile_id': 'bill',
+            'action': {'type': 'record', 'player_id': first_id, 'disposition': 'mine'},
+        }
     )
     assert corrected['current_pick'] == 2
     assert first_id in corrected['runtime_state']['your_ids']
@@ -164,7 +171,11 @@ def test_concurrent_records_are_serialized_without_losing_a_pick(service) -> Non
     requests = [
         {
             'profile_id': 'bill',
-            'action': {'type': 'record', 'player_id': player_id, 'disposition': 'taken'},
+            'action': {
+                'type': 'record',
+                'player_id': player_id,
+                'disposition': 'taken',
+            },
         }
         for player_id in ids
     ]
@@ -179,27 +190,25 @@ def test_concurrent_records_are_serialized_without_losing_a_pick(service) -> Non
 
 def test_service_recalculates_board_and_isolates_league_state(service) -> None:
     bill = service.handle_board(
-        {
-            'profile_id': 'bill',
-            'draft_slot': 2,
-            'current_pick': 2,
-        }
+        {'profile_id': 'bill', 'draft_slot': 2, 'current_pick': 2}
     )
     bill = service.handle_action(
-        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': 1000, 'disposition': 'taken'}}
+        {
+            'profile_id': 'bill',
+            'action': {'type': 'record', 'player_id': 1000, 'disposition': 'taken'},
+        }
     )
     bill = service.handle_action(
         {'profile_id': 'bill', 'action': {'type': 'queue', 'player_id': 1001}}
     )
     family = service.handle_board(
-        {
-            'profile_id': 'family',
-            'draft_slot': 9,
-            'current_pick': 9,
-        }
+        {'profile_id': 'family', 'draft_slot': 9, 'current_pick': 9}
     )
     family = service.handle_action(
-        {'profile_id': 'family', 'action': {'type': 'record', 'player_id': 1000, 'disposition': 'mine'}}
+        {
+            'profile_id': 'family',
+            'action': {'type': 'record', 'player_id': 1000, 'disposition': 'mine'},
+        }
     )
 
     assert bill['league_profile']['profile_id'] == 'bill'
@@ -215,7 +224,14 @@ def test_service_rejects_invalid_slots_and_unknown_players(service) -> None:
         service.handle_board({'profile_id': 'bill', 'draft_slot': 0, 'current_pick': 1})
     with pytest.raises(DashboardRequestError, match='unknown player'):
         service.handle_action(
-            {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': 999999, 'disposition': 'taken'}}
+            {
+                'profile_id': 'bill',
+                'action': {
+                    'type': 'record',
+                    'player_id': 999999,
+                    'disposition': 'taken',
+                },
+            }
         )
     with pytest.raises(DashboardRequestError, match='Client-owned'):
         service.handle_board({'profile_id': 'bill', 'taken_ids': [1000]})
@@ -226,11 +242,7 @@ def test_service_snapshot_is_provenance_bound_and_atomic(service, tmp_path) -> N
         {'profile_id': 'bill', 'action': {'type': 'queue', 'player_id': 1000}}
     )
     snapshot = service.write_snapshot(
-        {
-            'profile_id': 'bill',
-            'draft_slot': 1,
-            'current_pick': 1,
-        }
+        {'profile_id': 'bill', 'draft_slot': 1, 'current_pick': 1}
     )
 
     assert snapshot.parent == tmp_path / 'run' / 'snapshots'
@@ -240,14 +252,19 @@ def test_service_snapshot_is_provenance_bound_and_atomic(service, tmp_path) -> N
     assert not list(snapshot.parent.glob('*.tmp'))
 
 
-def test_checkpoint_persists_slot_clock_actions_and_queue_across_restart(service) -> None:
+def test_checkpoint_persists_slot_clock_actions_and_queue_across_restart(
+    service,
+) -> None:
     initial = service.handle_board(
         {'profile_id': 'bill', 'draft_slot': 4, 'current_pick': 7}
     )
     first_id = int(initial['decision_table'][0]['espn_id'])
     second_id = int(initial['decision_table'][1]['espn_id'])
     service.handle_action(
-        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'mine'}}
+        {
+            'profile_id': 'bill',
+            'action': {'type': 'record', 'player_id': first_id, 'disposition': 'mine'},
+        }
     )
     service.handle_action(
         {'profile_id': 'bill', 'action': {'type': 'queue', 'player_id': second_id}}
@@ -301,7 +318,10 @@ def test_checkpoint_rejects_profile_mismatch_and_unresolved_player(service) -> N
     initial = service.handle_board({'profile_id': 'bill', 'draft_slot': 2})
     first_id = int(initial['decision_table'][0]['espn_id'])
     service.handle_action(
-        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'}}
+        {
+            'profile_id': 'bill',
+            'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'},
+        }
     )
     checkpoint = service.checkpoint_root / '2026-bill.json'
     value = json.loads(checkpoint.read_text(encoding='utf-8'))
@@ -322,7 +342,10 @@ def test_checkpoint_rejects_changed_profile_settings(service) -> None:
     initial = service.handle_board({'profile_id': 'bill', 'draft_slot': 2})
     first_id = int(initial['decision_table'][0]['espn_id'])
     service.handle_action(
-        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'}}
+        {
+            'profile_id': 'bill',
+            'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'},
+        }
     )
     changed = replace(service.profiles['bill'], bench_slots=5)
     restarted = DashboardService(
@@ -347,11 +370,21 @@ def test_checkpoint_detects_another_live_session_before_overwrite(service) -> No
         code_revision=service.code_revision,
     )
     service.handle_action(
-        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'}}
+        {
+            'profile_id': 'bill',
+            'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'},
+        }
     )
     with pytest.raises(DashboardPersistenceError, match='another dashboard session'):
         second.handle_action(
-            {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'}}
+            {
+                'profile_id': 'bill',
+                'action': {
+                    'type': 'record',
+                    'player_id': first_id,
+                    'disposition': 'taken',
+                },
+            }
         )
     assert second.handle_board({'profile_id': 'bill'})['current_pick'] == 1
 
@@ -366,7 +399,14 @@ def test_failed_checkpoint_save_does_not_commit_state(service, monkeypatch) -> N
     monkeypatch.setattr(service, '_write_checkpoint', fail_save)
     with pytest.raises(DashboardPersistenceError, match='simulated'):
         service.handle_action(
-            {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'}}
+            {
+                'profile_id': 'bill',
+                'action': {
+                    'type': 'record',
+                    'player_id': first_id,
+                    'disposition': 'taken',
+                },
+            }
         )
     unchanged = service.handle_board({'profile_id': 'bill'})
     assert unchanged['current_pick'] == 1
@@ -377,7 +417,10 @@ def test_start_new_draft_requires_confirmation_and_archives_checkpoint(service) 
     initial = service.handle_board({'profile_id': 'bill', 'draft_slot': 3})
     first_id = int(initial['decision_table'][0]['espn_id'])
     service.handle_action(
-        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'mine'}}
+        {
+            'profile_id': 'bill',
+            'action': {'type': 'record', 'player_id': first_id, 'disposition': 'mine'},
+        }
     )
     with pytest.raises(DashboardRequestError, match='confirm=true'):
         service.handle_action({'profile_id': 'bill', 'action': {'type': 'reset'}})
@@ -447,8 +490,9 @@ def test_main_classifies_incompatible_profile_scoring_as_local_configuration(
     monkeypatch.setattr(
         dashboard_app,
         'serve_dashboard',
-        lambda service, **_: captured.setdefault('status', service.status_payload())
-        and 0,
+        lambda service, **_: (
+            captured.setdefault('status', service.status_payload()) and 0
+        ),
     )
 
     assert dashboard_app.main(['--year', '2026', '--no-browser']) == 0
@@ -468,9 +512,7 @@ def test_main_blocks_profile_for_a_different_requested_season_before_fetch(
     mismatched = replace(_profile('bill', 2), season=2025)
 
     monkeypatch.setattr(dashboard_app, 'default_profile_paths', lambda: ())
-    monkeypatch.setattr(
-        dashboard_app, '_load_profiles', lambda _: ([mismatched], None)
-    )
+    monkeypatch.setattr(dashboard_app, '_load_profiles', lambda _: ([mismatched], None))
 
     def fail_fetch(_: int) -> FreshInputs:
         raise AssertionError('source fetch must not run for a mismatched profile')
@@ -479,8 +521,9 @@ def test_main_blocks_profile_for_a_different_requested_season_before_fetch(
     monkeypatch.setattr(
         dashboard_app,
         'serve_dashboard',
-        lambda service, **_: captured.setdefault('status', service.status_payload())
-        and 0,
+        lambda service, **_: (
+            captured.setdefault('status', service.status_payload()) and 0
+        ),
     )
 
     assert dashboard_app.main(['--year', '2026', '--no-browser']) == 0
@@ -525,8 +568,9 @@ def test_main_serves_blocked_status_when_profile_loading_reports_duplicates(
     monkeypatch.setattr(
         dashboard_app,
         'serve_dashboard',
-        lambda service, **_: captured.setdefault('status', service.status_payload())
-        and 0,
+        lambda service, **_: (
+            captured.setdefault('status', service.status_payload()) and 0
+        ),
     )
 
     assert dashboard_app.main(['--year', '2026', '--no-browser']) == 0
@@ -534,3 +578,38 @@ def test_main_serves_blocked_status_when_profile_loading_reports_duplicates(
     assert isinstance(status, dict)
     assert status['status'] == 'blocked'
     assert 'duplicate profile_id' in status['error']
+
+
+def test_signed_defense_id_survives_actions_restart_and_snapshot(service):
+    defense_id = int(
+        service.fresh_inputs.players.loc[
+            service.fresh_inputs.players.position.eq('DST'), 'espn_id'
+        ].iloc[0]
+    )
+    assert defense_id < 0
+    profile_id = 'bill'
+    for action in [
+        {'type': 'queue', 'player_id': defense_id},
+        {'type': 'record', 'player_id': defense_id, 'disposition': 'taken'},
+        {'type': 'record', 'player_id': defense_id, 'disposition': 'mine'},
+    ]:
+        payload = service.handle_action({'profile_id': profile_id, 'action': action})
+    assert payload['runtime_state']['your_ids'] == [defense_id]
+    assert payload['runtime_state']['queue_ids'] == [defense_id]
+    restarted = DashboardService(
+        service.fresh_inputs,
+        list(service.profiles.values()),
+        project_root=service.project_root,
+        run_root=service.run_root / 'signed-id-restart',
+        checkpoint_root=service.checkpoint_root,
+        code_revision=service.code_revision,
+    )
+    restored = restarted.handle_board({'profile_id': profile_id})
+    assert restored['runtime_state']['your_ids'] == [defense_id]
+    assert restored['runtime_state']['queue_ids'] == [defense_id]
+    snapshot = restarted.write_snapshot({'profile_id': profile_id})
+    assert json.loads(snapshot.read_text())['runtime_state']['your_ids'] == [defense_id]
+    undone = restarted.handle_action(
+        {'profile_id': profile_id, 'action': {'type': 'undo'}}
+    )
+    assert undone['runtime_state']['your_ids'] == []

@@ -444,3 +444,16 @@ def test_unallocated_flex_position_uses_shared_replacement_boundary():
     assert (wr.replacement_level > 0).all()
     assert not wr.is_draftable.empty
     assert board[board.is_draftable].iloc[0].position == 'QB'
+
+
+def test_signed_espn_defenses_pass_model_and_baseline():
+    frame = players()
+    dst = frame.position.eq('DST')
+    frame.loc[dst, 'espn_id'] = [-16001 - i for i in range(int(dst.sum()))]
+    p = profile(roster_slots=dict(QB=1, RB=1, WR=1, TE=0, FLEX=0, K=0, DST=1))
+    board = build_draft_board(frame, p, your_ids=[-16001])
+    assert board.loc[board.espn_id.eq(-16001), 'roster_status'].iloc[0] == 'mine'
+    result = evaluate_baselines(frame, p, synthetic=True)
+    assert result.simulations
+    for simulation in result.simulations:
+        assert any(pick.player_id < 0 for pick in simulation.picks)

@@ -102,11 +102,11 @@ def _validate_players(players: pd.DataFrame) -> pd.DataFrame:
         or ids.isna().any()
         or (~np.isfinite(ids)).any()
         or ids.duplicated().any()
-        or (ids < 1).any()
+        or (ids == 0).any()
         or (ids != ids.round()).any()
     ):
         raise EvaluationInputError(
-            'evaluation players require unique positive integer espn_id values'
+            'evaluation players require unique nonzero integer espn_id values'
         )
     points = pd.to_numeric(frame['projected_points'], errors='coerce')
     adp = pd.to_numeric(frame['adp'], errors='coerce')

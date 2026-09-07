@@ -21,6 +21,13 @@ def _positive_integer(value: object, field: str) -> int:
     return value
 
 
+def _player_identifier(value: object, field: str) -> int:
+    """ESPN player keys are signed: team defenses use negative IDs."""
+    if isinstance(value, bool) or not isinstance(value, int) or value == 0:
+        raise ValueError(f'{field} must be a nonzero integer')
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class DraftAction:
     """One recorded selection in the ordered draft history."""
@@ -31,7 +38,7 @@ class DraftAction:
 
     def __post_init__(self) -> None:
         _positive_integer(self.pick, 'pick')
-        _positive_integer(self.player_id, 'player_id')
+        _player_identifier(self.player_id, 'player_id')
         if self.disposition not in ('mine', 'taken'):
             raise ValueError("disposition must be 'mine' or 'taken'")
 
@@ -70,7 +77,7 @@ class DraftState:
             raise ValueError('queue_ids must be an immutable tuple')
         queue_ids: list[int] = []
         for player_id in self.queue_ids:
-            _positive_integer(player_id, 'queue player_id')
+            _player_identifier(player_id, 'queue player_id')
             if player_id in queue_ids:
                 raise ValueError('queue_ids cannot contain duplicates')
             queue_ids.append(player_id)
@@ -79,18 +86,14 @@ class DraftState:
     def taken_ids(self) -> tuple[int, ...]:
         """Stable IDs of selections recorded as unavailable to the user."""
         return tuple(
-            action.player_id
-            for action in self.actions
-            if action.disposition == 'taken'
+            action.player_id for action in self.actions if action.disposition == 'taken'
         )
 
     @property
     def your_ids(self) -> tuple[int, ...]:
         """Stable IDs of the user's recorded roster selections."""
         return tuple(
-            action.player_id
-            for action in self.actions
-            if action.disposition == 'mine'
+            action.player_id for action in self.actions if action.disposition == 'mine'
         )
 
     def record(self, player_id: int, disposition: Disposition) -> 'DraftState':
@@ -100,7 +103,7 @@ class DraftState:
         the history is a disposition correction and therefore leaves the
         clock unchanged.  Repeating the same disposition is idempotent.
         """
-        _positive_integer(player_id, 'player_id')
+        _player_identifier(player_id, 'player_id')
         if disposition not in ('mine', 'taken'):
             raise ValueError("disposition must be 'mine' or 'taken'")
 
@@ -115,14 +118,12 @@ class DraftState:
 
         action = DraftAction(self.current_pick, player_id, disposition)
         return replace(
-            self,
-            current_pick=self.current_pick + 1,
-            actions=self.actions + (action,),
+            self, current_pick=self.current_pick + 1, actions=self.actions + (action,)
         )
 
     def toggle_queue(self, player_id: int) -> 'DraftState':
         """Add/remove a player from the queue without changing draft state."""
-        _positive_integer(player_id, 'player_id')
+        _player_identifier(player_id, 'player_id')
         if player_id in self.queue_ids:
             queue_ids = tuple(value for value in self.queue_ids if value != player_id)
         else:
@@ -134,11 +135,7 @@ class DraftState:
         if not self.actions:
             return self
         latest = self.actions[-1]
-        return replace(
-            self,
-            current_pick=latest.pick,
-            actions=self.actions[:-1],
-        )
+        return replace(self, current_pick=latest.pick, actions=self.actions[:-1])
 
     def sync_clock(self, current_pick: int) -> 'DraftState':
         """Manually set the clock while preserving all recorded actions."""

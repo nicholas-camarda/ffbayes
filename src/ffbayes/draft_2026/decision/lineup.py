@@ -63,10 +63,10 @@ def optimize_lineup(
             or not isinstance(raw_id, (int, float))
             or not math.isfinite(float(raw_id))
             or float(raw_id) != float(player_id)
-            or player_id < 1
+            or player_id == 0
             or player_id in seen
         ):
-            raise ValueError('lineup player IDs must be positive and unique')
+            raise ValueError('lineup player IDs must be nonzero integers and unique')
         if not position or not math.isfinite(points):
             raise ValueError('lineup player rows contain invalid values')
         seen.add(player_id)

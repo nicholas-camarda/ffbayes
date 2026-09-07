@@ -89,3 +89,17 @@ def test_manual_clock_sync_does_not_change_action_history() -> None:
     assert synced.current_pick == 19
     assert synced.actions == state.actions
     assert synced.your_ids == state.your_ids
+
+
+def test_espn_defense_keys_are_signed_but_pick_numbers_remain_positive():
+    import pytest
+
+    state = DraftState(draft_slot=1).toggle_queue(-16025).record(-16025, 'mine')
+    assert state.your_ids == (-16025,)
+    assert state.queue_ids == (-16025,)
+    assert state.current_pick == 2
+    for invalid in [0, True, 1.5]:
+        with pytest.raises(ValueError):
+            DraftState(draft_slot=1).record(invalid, 'taken')
+    with pytest.raises(ValueError):
+        DraftAction(-1, -16025, 'mine')
