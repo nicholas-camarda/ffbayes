@@ -8,6 +8,7 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 
+from ffbayes.draft_2026.decision.roster_value import calculate_marginal_roster_value
 from ffbayes.draft_2026.league import LeagueProfile
 from ffbayes.draft_2026.sources import SemanticInputError
 
@@ -70,8 +71,13 @@ def score_projections(players: pd.DataFrame, profile: LeagueProfile) -> pd.DataF
 def _flex_allocation(
     scored: pd.DataFrame, base_demand: dict[str, int], profile: LeagueProfile
 ) -> dict[str, int]:
-    allocation = {position: 0 for position in profile.flex_eligible}
-    flex_total = profile.roster_slots['FLEX'] * profile.team_count
+    # Preserve the historic return shape for FLEX while honoring a generic
+    # slot eligibility map.  Overlapping SUPERFLEX groups are handled by the
+    # roster assignment used for live marginal value; this replacement helper
+    # still provides an interpretable league-wide scarcity baseline.
+    eligible = profile.eligible_positions('FLEX') or profile.flex_eligible
+    allocation = {position: 0 for position in eligible}
+    flex_total = profile.roster_slots.get('FLEX', 0) * profile.team_count
     position_values = {
         position: scored.loc[scored['position'].eq(position), 'projected_points']
         .sort_values(ascending=False)
@@ -97,7 +103,13 @@ def _market_bench_allocation(
     scored: pd.DataFrame, occupied: dict[str, int], total_bench_slots: int
 ) -> dict[str, int]:
     """Allocate skill-position bench demand in current ESPN ADP order."""
-    bench_positions = ('QB', 'RB', 'WR', 'TE')
+    bench_positions = tuple(
+        position
+        for position in ('QB', 'RB', 'WR', 'TE')
+        if position in set(scored['position'])
+    )
+    if not bench_positions:
+        bench_positions = tuple(sorted(set(scored['position'])))
     allocation = {position: 0 for position in bench_positions}
     market = {
         position: scored.loc[scored['position'].eq(position), 'adp']
@@ -128,21 +140,77 @@ def calculate_replacement_levels(
         raise SemanticInputError(
             'Cannot calculate replacement levels from an empty pool'
         )
+    configured_positions = tuple(
+        sorted(
+            {
+                position
+                for _, _, eligible in profile.slot_groups()
+                for position in eligible
+            }
+            | set(str(value).upper() for value in scored['position'].dropna().unique())
+        )
+    )
+    # Fixed-position starter demand is separated from overlapping groups; FLEX
+    # allocation is added below.  Zero-demand positions are retained in the
+    # diagnostics but never require a replacement level.
     base_demand = {
-        position: profile.roster_slots.get(position, 0) * profile.team_count
-        for position in VALUED_POSITIONS
+        position: 0 for position in configured_positions if position != 'FLEX'
     }
+    for slot_name, count, eligible in profile.slot_groups():
+        if slot_name == 'FLEX' or len(eligible) != 1:
+            continue
+        position = eligible[0]
+        base_demand[position] = (
+            base_demand.get(position, 0) + count * profile.team_count
+        )
     flex = _flex_allocation(scored, base_demand, profile)
+    # If an explicit SUPERFLEX exists, allocate it with the same deterministic
+    # market-free point order used by FLEX.  ``flex_allocation`` remains the
+    # legacy FLEX-only field; aggregate starter demand includes every group.
+    for slot_name, count, eligible in profile.slot_groups():
+        if slot_name == 'FLEX' or len(eligible) <= 1:
+            continue
+        allocation = {position: 0 for position in eligible}
+        values = {
+            position: scored.loc[scored['position'].eq(position), 'projected_points']
+            .sort_values(ascending=False)
+            .reset_index(drop=True)
+            for position in eligible
+        }
+        for _ in range(count * profile.team_count):
+            candidates = []
+            for position, series in values.items():
+                index = (
+                    base_demand.get(position, 0)
+                    + flex.get(position, 0)
+                    + allocation[position]
+                )
+                if index < len(series):
+                    candidates.append((float(series.iloc[index]), position))
+            if not candidates:
+                raise SemanticInputError(
+                    f'Projection depth cannot fill configured {slot_name} demand'
+                )
+            _, selected = max(candidates)
+            allocation[selected] += 1
+        for position, amount in allocation.items():
+            base_demand[position] = base_demand.get(position, 0) + amount
     occupied = {
         position: base_demand.get(position, 0) + flex.get(position, 0)
-        for position in VALUED_POSITIONS
+        for position in configured_positions
     }
     bench = _market_bench_allocation(
-        scored, occupied, profile.bench_slots * profile.team_count
+        scored.loc[
+            scored['position'].isin(
+                {pos for _, _, group in profile.slot_groups() for pos in group}
+            )
+        ],
+        occupied,
+        profile.bench_slots * profile.team_count,
     )
     demand = {
         position: occupied.get(position, 0) + bench.get(position, 0)
-        for position in VALUED_POSITIONS
+        for position in configured_positions
     }
 
     levels: dict[str, float] = {}
@@ -152,7 +220,9 @@ def calculate_replacement_levels(
             .sort_values(ascending=False)
             .reset_index(drop=True)
         )
-        if required_count <= 0 or len(values) <= required_count:
+        if required_count <= 0:
+            continue
+        if len(values) <= required_count:
             raise SemanticInputError(
                 f'Invalid replacement demand for {position}: need depth beyond '
                 f'{required_count}, found {len(values)}'
@@ -165,6 +235,15 @@ def calculate_replacement_levels(
         if not math.isfinite(level):
             raise SemanticInputError(f'Replacement level for {position} is not finite')
         levels[position] = level
+
+    # A position eligible only through FLEX can receive no allocated demand.
+    # Its alternative is the shared group boundary, not a zero-point player.
+    for _, _, eligible in profile.slot_groups():
+        boundary = [levels[pos] for pos in eligible if pos in levels]
+        if boundary:
+            for position in eligible:
+                if position not in levels:
+                    levels[position] = min(boundary)
 
     return {
         'levels': levels,
@@ -216,6 +295,8 @@ def _availability_probability(adp: pd.Series, target_pick: int) -> pd.Series:
 def _position_scarcity(frame: pd.DataFrame, replacement: dict[str, Any]) -> pd.Series:
     scarcity = pd.Series(0.0, index=frame.index)
     for position, demand in replacement['demand'].items():
+        if int(demand) <= 0:
+            continue
         indices = frame.index[frame['position'].eq(position)]
         values = frame.loc[indices, 'projected_points'].sort_values(ascending=False)
         if values.empty:
@@ -252,9 +333,12 @@ def build_draft_board(
     scored = score_projections(players, profile)
     replacement = calculate_replacement_levels(scored, profile)
     frame = scored.copy()
-    frame['replacement_level'] = frame['position'].map(replacement['levels'])
-    if frame['replacement_level'].isna().any():
-        raise SemanticInputError('A position has no valid replacement level')
+    # Positions with no configured roster demand are retained for diagnostics,
+    # but have a zero replacement baseline instead of making no-K/no-DST
+    # formats fail closed.
+    frame['replacement_level'] = (
+        frame['position'].map(replacement['levels']).fillna(0.0)
+    )
     frame['vor'] = frame['projected_points'] - frame['replacement_level']
     frame['scarcity'] = _position_scarcity(frame, replacement)
 
@@ -290,16 +374,6 @@ def build_draft_board(
     )
     frame['model_rank'] = frame['value_signal'].rank(ascending=False, method='average')
     frame['market_rank'] = frame['adp'].rank(ascending=True, method='average')
-    frame['board_priority'] = 0.6 * frame['model_rank'] + 0.4 * frame['market_rank']
-    frame['decision_score'] = -frame['board_priority']
-    frame = frame.sort_values(['board_priority', 'vor', 'adp']).reset_index(drop=True)
-    frame['board_rank'] = np.arange(1, len(frame) + 1)
-    frame['recommendation'] = np.where(
-        frame['availability_next_pick'].isna(),
-        'slot_required',
-        np.where(frame['availability_next_pick'] < 0.35, 'draft_now', 'can_wait'),
-    )
-
     if 'espn_id' in frame:
         espn_ids = pd.to_numeric(frame['espn_id'], errors='coerce')
     else:
@@ -310,11 +384,15 @@ def build_draft_board(
         raise SemanticInputError('A player cannot be both taken and yours')
     if taken or yours:
         if espn_ids.isna().any():
-            raise SemanticInputError('Stable espn_id values are required for draft state')
+            raise SemanticInputError(
+                'Stable espn_id values are required for draft state'
+            )
         known_ids = {int(value) for value in espn_ids}
         unknown = (taken | yours).difference(known_ids)
         if unknown:
-            raise SemanticInputError(f'unknown player espn_id values: {sorted(unknown)}')
+            raise SemanticInputError(
+                f'unknown player espn_id values: {sorted(unknown)}'
+            )
     frame['espn_id'] = espn_ids.astype('Int64')
     frame['roster_status'] = 'available'
     if taken:
@@ -322,8 +400,76 @@ def build_draft_board(
     if yours:
         frame.loc[espn_ids.isin(yours), 'roster_status'] = 'mine'
     frame['is_available'] = frame['roster_status'].eq('available')
+    # Preserve the static baseline as an explicit, reproducible comparison,
+    # then layer roster utility into the live board when a team has a roster.
+    frame['baseline_board_priority'] = (
+        0.6 * frame['model_rank'] + 0.4 * frame['market_rank']
+    )
+    frame['baseline_decision_score'] = -frame['baseline_board_priority']
+    if frame['espn_id'].isna().any():
+        # Source-only analytical fixtures may not carry stable IDs.  Preserve
+        # the historical board in that case; live state requests are already
+        # required to provide IDs and take the roster-aware path below.
+        frame['marginal_usable_points'] = 0.0
+        frame['starter_slot_gain'] = 0.0
+        frame['bench_insurance_value'] = 0.0
+        frame['roster_feasible'] = True
+        frame['roster_value_version'] = 'unavailable_without_stable_ids'
+    else:
+        try:
+            roster_values = calculate_marginal_roster_value(
+                frame,
+                profile,
+                your_ids=yours,
+                taken_ids=taken,
+                replacement_levels=replacement['levels'],
+            )
+        except ValueError as exc:
+            raise SemanticInputError(str(exc)) from exc
+        frame = frame.join(roster_values, on='espn_id')
+    eligible_positions = {
+        position for _, _, positions in profile.slot_groups() for position in positions
+    }
+    frame['is_draftable'] = frame['roster_feasible'].astype(bool) & frame[
+        'position'
+    ].isin(eligible_positions)
+    roster_scale = max(float(frame['marginal_usable_points'].std(ddof=0)), 1.0)
+    frame['roster_value_signal'] = frame['marginal_usable_points'] / roster_scale
+    frame['roster_rank'] = frame['marginal_usable_points'].rank(
+        ascending=False, method='average'
+    )
+    # Preserve the original first-pick rank. Once a roster exists, compare
+    # marginal utility directly; the static market blend only breaks ties.
+    frame['board_priority'] = frame['baseline_board_priority']
+    if yours:
+        frame = frame.sort_values(
+            [
+                'is_draftable',
+                'marginal_usable_points',
+                'baseline_board_priority',
+                'espn_id',
+            ],
+            ascending=[False, False, True, True],
+        ).reset_index(drop=True)
+        frame['board_priority'] = np.arange(1, len(frame) + 1, dtype=float)
+    else:
+        frame.loc[~frame['is_draftable'], 'board_priority'] += len(frame) + 1
+        frame = frame.sort_values(
+            ['board_priority', 'vor', 'adp', 'espn_id']
+        ).reset_index(drop=True)
+    frame['decision_score'] = -frame['board_priority']
+    frame['board_rank'] = np.arange(1, len(frame) + 1)
+    frame['recommendation'] = np.where(
+        frame['availability_next_pick'].isna(),
+        'slot_required',
+        np.where(frame['availability_next_pick'] < 0.35, 'draft_now', 'can_wait'),
+    )
     frame.loc[frame['roster_status'].eq('taken'), 'recommendation'] = 'taken'
     frame.loc[frame['roster_status'].eq('mine'), 'recommendation'] = 'mine'
+    frame.loc[
+        frame['roster_status'].eq('available') & ~frame['is_draftable'],
+        'recommendation',
+    ] = 'ineligible'
     frame.attrs.update(
         {
             'profile_id': profile.profile_id,

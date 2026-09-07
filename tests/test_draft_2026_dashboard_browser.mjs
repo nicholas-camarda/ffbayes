@@ -58,6 +58,10 @@ try {
   await page.locator(`#board tr[data-player-id="${firstId}"] button[data-action="taken"]`).click();
   await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Current pick 2') && document.querySelector('#status')?.textContent?.includes('next pick 19'));
   await page.waitForFunction((id) => document.querySelector(`#board tr[data-player-id="${id}"]`)?.textContent?.includes('taken'), firstId);
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Current pick 2') && document.querySelector('#status')?.textContent?.includes('next pick 19'));
+  if (await page.locator('#draft-slot').inputValue() !== '2') throw new Error('Draft slot was not recovered after browser reload');
+  if (!(await page.locator(`#board tr[data-player-id="${firstId}"]`).textContent()).includes('taken')) throw new Error('Recorded pick was not recovered after browser reload');
   const recommendationAfter = await page.locator('#recommendation').textContent();
   if (recommendationBefore === recommendationAfter) throw new Error('Recommendation panel did not recompute after a confirmed pick');
   if (frontierBefore === await page.locator('#frontier').textContent()) throw new Error('Timing frontier did not recompute');
@@ -67,6 +71,7 @@ try {
   await page.locator(`#board tr[data-player-id="${secondId}"] button[data-action="mine"]`).click();
   await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Current pick 3'));
   await page.waitForFunction((id) => document.querySelector(`#board tr[data-player-id="${id}"]`)?.textContent?.includes('mine'), secondId);
+  if (!(await page.locator('#recommendation').textContent()).includes('Roster utility')) throw new Error('Roster-aware recommendation evidence is missing');
 
   const thirdId = await page.locator('#board tr').nth(2).getAttribute('data-player-id');
   await page.locator(`#board tr[data-player-id="${thirdId}"] button[data-action="queue"]`).click();
@@ -82,6 +87,9 @@ try {
   await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Current pick 1'));
   if (await page.locator('#draft-slot').inputValue() !== '') throw new Error('League state leaked draft slot across profiles');
   await page.waitForFunction((id) => !document.querySelector(`#board tr[data-player-id="${id}"]`)?.textContent?.includes('taken'), firstId);
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Current pick 1'));
+  if (await page.locator('#league').inputValue() !== 'family') throw new Error('Selected league was not preserved after browser reload');
 
   consoleErrors.length = 0;
   await page.locator('#draft-slot').fill('0');
@@ -98,6 +106,10 @@ try {
   await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Current pick 10'));
   await page.locator('#snapshot').click();
   await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Snapshot written'));
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.locator('#new-draft').click();
+  await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Current pick 1') && document.querySelector('#status')?.textContent?.includes('prior state archived'));
+  if (await page.locator('#draft-slot').inputValue() !== '9') throw new Error('Reset did not preserve the selected draft slot');
 
   if (consoleErrors.length) throw new Error(`Browser console errors: ${consoleErrors.join('; ')}`);
   console.log('2026 interactive dashboard browser smoke passed');

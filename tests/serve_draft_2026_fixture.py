@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -23,6 +24,7 @@ service = DashboardService(
     project_root=Path.cwd(),
     run_root=Path.cwd() / 'runtime' / 'runs' / 'browser-fixture',
     code_revision='browser-fixture',
+    checkpoint_root=Path(tempfile.mkdtemp(prefix='ffbayes-browser-checkpoint-')),
 )
 server = create_http_server(service, 0)
 print(f'PORT={server.server_address[1]}', flush=True)

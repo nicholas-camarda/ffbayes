@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import re
@@ -19,7 +20,7 @@ from typing import Any, Mapping, Sequence
 import pandas as pd
 import requests
 
-from ffbayes.draft_2026.draft_state import DraftState
+from ffbayes.draft_2026.draft_state import DraftAction, DraftState
 from ffbayes.draft_2026.engine import build_draft_board
 from ffbayes.draft_2026.league import LeagueProfile, LeagueProfileError
 from ffbayes.draft_2026.pipeline import (
@@ -27,6 +28,7 @@ from ffbayes.draft_2026.pipeline import (
     FreshInputs,
     OutputProvenanceError,
     _git_revision,
+    _sha256_json,
     build_dashboard_payload,
     default_profile_paths,
     load_fresh_inputs,
@@ -42,6 +44,13 @@ class DashboardBlockedError(RuntimeError):
     """Raised when required source or profile validation has failed."""
 
 
+class DashboardPersistenceError(DashboardRequestError):
+    """Raised when a draft checkpoint cannot be safely saved or restored."""
+
+
+CHECKPOINT_SCHEMA_VERSION = 'draft_2026_checkpoint_v1'
+
+
 def _integer_list(value: object, field: str) -> list[int]:
     if value is None:
         return []
@@ -54,6 +63,20 @@ def _integer_list(value: object, field: str) -> list[int]:
         result.append(raw)
     if len(result) != len(set(result)):
         raise DashboardRequestError(f'{field} contains duplicate IDs')
+    return result
+
+
+def _checkpoint_integer_ids(value: object, field: str) -> list[int]:
+    """Parse checkpoint ID lists without accepting booleans or duplicates."""
+    if not isinstance(value, list):
+        raise DashboardPersistenceError(f'Checkpoint {field} must be a list of integers')
+    result: list[int] = []
+    for raw in value:
+        if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
+            raise DashboardPersistenceError(f'Checkpoint {field} contains an invalid player ID')
+        result.append(raw)
+    if len(result) != len(set(result)):
+        raise DashboardPersistenceError(f'Checkpoint {field} contains duplicate player IDs')
     return result
 
 
@@ -72,6 +95,7 @@ class DashboardService:
         project_root: Path,
         run_root: Path,
         code_revision: str,
+        checkpoint_root: Path | None = None,
         blocked_error: str | None = None,
         blocked_details: Mapping[str, Any] | None = None,
     ) -> None:
@@ -91,10 +115,304 @@ class DashboardService:
         self.blocked_error = blocked_error
         self.blocked_details = dict(blocked_details or {})
         self._state_lock = threading.RLock()
+        self.checkpoint_root = checkpoint_root or (
+            self.project_root / 'runtime' / 'draft_state'
+        )
+        self._checkpoint_errors: dict[str, str] = {}
+        self._checkpoint_baselines: dict[str, str | None] = {}
+        self._persistence_status: dict[str, dict[str, Any]] = {}
         self._state: dict[str, DraftState] = {
             profile.profile_id: DraftState(draft_slot=profile.draft_slot)
             for profile in profiles
         }
+        if not self.blocked_error and self.fresh_inputs is not None:
+            for profile in profiles:
+                try:
+                    restored = self._load_checkpoint(profile)
+                except DashboardPersistenceError as exc:
+                    self._checkpoint_errors[profile.profile_id] = str(exc)
+                    self._persistence_status[profile.profile_id] = {
+                        'status': 'blocked',
+                        'message': str(exc),
+                    }
+                else:
+                    if restored is None:
+                        self._persistence_status[profile.profile_id] = {
+                            'status': 'new',
+                            'message': 'No saved draft state',
+                        }
+                    else:
+                        self._state[profile.profile_id] = restored
+                        self._persistence_status[profile.profile_id] = {
+                            'status': 'recovered',
+                            'message': 'Recovered saved draft state',
+                        }
+
+    def _checkpoint_path(self, profile: LeagueProfile) -> Path:
+        return self.checkpoint_root / (
+            f'{profile.season}-{_safe_filename(profile.profile_id)}.json'
+        )
+
+    def _checkpoint_lock_path(self, profile: LeagueProfile) -> Path:
+        return self.checkpoint_root / (
+            f'{profile.season}-{_safe_filename(profile.profile_id)}.lock'
+        )
+
+    @staticmethod
+    def _state_from_runtime(
+        profile: LeagueProfile,
+        runtime_state: Mapping[str, Any],
+        known_ids: set[int],
+    ) -> DraftState:
+        """Validate checkpoint state before it can affect a live board."""
+        if not isinstance(runtime_state, Mapping):
+            raise DashboardPersistenceError('Checkpoint runtime_state is missing')
+        raw_slot = runtime_state.get('draft_slot')
+        if raw_slot is not None:
+            if isinstance(raw_slot, bool) or not isinstance(raw_slot, int):
+                raise DashboardPersistenceError('Checkpoint draft_slot is invalid')
+            try:
+                profile.validate_runtime_slot(raw_slot)
+            except LeagueProfileError as exc:
+                raise DashboardPersistenceError(
+                    f'Checkpoint draft_slot is invalid: {exc}'
+                ) from exc
+        raw_pick = runtime_state.get('current_pick')
+        if (
+            isinstance(raw_pick, bool)
+            or not isinstance(raw_pick, int)
+            or not 1 <= raw_pick <= profile.total_draft_picks() + 1
+        ):
+            raise DashboardPersistenceError('Checkpoint current_pick is outside the configured draft')
+        raw_actions = runtime_state.get('actions')
+        if not isinstance(raw_actions, list):
+            raise DashboardPersistenceError('Checkpoint actions must be a list')
+        actions: list[DraftAction] = []
+        for raw_action in raw_actions:
+            if not isinstance(raw_action, Mapping):
+                raise DashboardPersistenceError('Checkpoint action is not an object')
+            pick = raw_action.get('pick')
+            player_id = raw_action.get('player_id')
+            disposition = raw_action.get('disposition')
+            if (
+                isinstance(pick, bool)
+                or not isinstance(pick, int)
+                or not 1 <= pick <= profile.total_draft_picks()
+                or isinstance(player_id, bool)
+                or not isinstance(player_id, int)
+                or player_id not in known_ids
+                or disposition not in ('taken', 'mine')
+            ):
+                raise DashboardPersistenceError(
+                    'Checkpoint contains an invalid or unresolved selection'
+                )
+            actions.append(DraftAction(pick, player_id, disposition))
+        raw_queue = runtime_state.get('queue_ids', [])
+        queue_ids = _checkpoint_integer_ids(raw_queue, 'queue_ids')
+        if any(player_id not in known_ids for player_id in queue_ids):
+            raise DashboardPersistenceError(
+                'Checkpoint contains an invalid or unresolved queued player'
+            )
+        state = DraftState(
+            draft_slot=raw_slot,
+            current_pick=raw_pick,
+            actions=tuple(actions),
+            queue_ids=tuple(queue_ids),
+        )
+        expected_taken = [action.player_id for action in actions if action.disposition == 'taken']
+        expected_your = [action.player_id for action in actions if action.disposition == 'mine']
+        for field, expected in (('taken_ids', expected_taken), ('your_ids', expected_your)):
+            actual = _checkpoint_integer_ids(runtime_state.get(field, []), field)
+            if set(actual) != set(expected):
+                raise DashboardPersistenceError(
+                    f'Checkpoint {field} disagrees with ordered actions'
+                )
+        return state
+
+    def _load_checkpoint(self, profile: LeagueProfile) -> DraftState | None:
+        path = self._checkpoint_path(profile)
+        if not path.exists():
+            self._checkpoint_baselines[profile.profile_id] = None
+            return None
+        try:
+            value = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise DashboardPersistenceError(
+                f'Checkpoint {path.name} is unreadable; move it aside and retry: {exc}'
+            ) from exc
+        if not isinstance(value, Mapping):
+            raise DashboardPersistenceError(f'Checkpoint {path.name} must be a JSON object')
+        if value.get('schema_version') != CHECKPOINT_SCHEMA_VERSION:
+            raise DashboardPersistenceError(
+                f'Checkpoint {path.name} has unsupported schema version'
+            )
+        if value.get('season') != profile.season or value.get('profile_id') != profile.profile_id:
+            raise DashboardPersistenceError(
+                f'Checkpoint {path.name} does not match league {profile.profile_id}'
+            )
+        expected_digest = _sha256_json(self.profiles[profile.profile_id].to_dict())
+        if value.get('profile_sha256') != expected_digest:
+            raise DashboardPersistenceError(
+                f'Checkpoint {path.name} was created with different league settings; '
+                'verify the profile or archive the checkpoint'
+            )
+        runtime_state = value.get('runtime_state')
+        if not isinstance(runtime_state, Mapping):
+            raise DashboardPersistenceError(
+                f'Checkpoint {path.name} runtime_state is missing or invalid'
+            )
+        state = self._state_from_runtime(profile, runtime_state, self._known_ids())
+        self._checkpoint_baselines[profile.profile_id] = self._checkpoint_fingerprint(value)
+        return state
+
+    @staticmethod
+    def _checkpoint_fingerprint(value: Mapping[str, Any]) -> str:
+        return _sha256_json(
+            {
+                'schema_version': value.get('schema_version'),
+                'season': value.get('season'),
+                'profile_id': value.get('profile_id'),
+                'profile_sha256': value.get('profile_sha256'),
+                'runtime_state': value.get('runtime_state'),
+            }
+        )
+
+    @classmethod
+    def _read_checkpoint_digest(cls, path: Path) -> str | None:
+        if not path.exists():
+            return None
+        try:
+            value = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise DashboardPersistenceError(
+                f'Checkpoint {path.name} changed or became unreadable while saving: {exc}'
+            ) from exc
+        if not isinstance(value, Mapping) or not isinstance(value.get('runtime_state'), Mapping):
+            raise DashboardPersistenceError(
+                f'Checkpoint {path.name} changed or became invalid while saving'
+            )
+        return cls._checkpoint_fingerprint(value)
+
+    def _persistence_payload(self, profile_id: str) -> dict[str, Any]:
+        status = dict(self._persistence_status.get(profile_id) or {'status': 'new'})
+        status['checkpoint'] = str(self._checkpoint_path(self.profiles[profile_id]))
+        return status
+
+    def _write_checkpoint(self, profile: LeagueProfile, state: DraftState) -> None:
+        """Atomically persist state while serializing writers across processes."""
+        path = self._checkpoint_path(profile)
+        lock_path = self._checkpoint_lock_path(profile)
+        try:
+            self.checkpoint_root.mkdir(parents=True, exist_ok=True)
+            with lock_path.open('a+', encoding='utf-8') as lock_handle:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+                expected_digest = self._checkpoint_baselines.get(profile.profile_id)
+                current_digest = self._read_checkpoint_digest(path)
+                if current_digest != expected_digest:
+                    raise DashboardPersistenceError(
+                        f'Checkpoint for {profile.league_name} changed in another dashboard '
+                        'session; reload before recording a new action'
+                    )
+                payload = {
+                    'schema_version': CHECKPOINT_SCHEMA_VERSION,
+                    'season': profile.season,
+                    'profile_id': profile.profile_id,
+                    'profile_sha256': _sha256_json(self.profiles[profile.profile_id].to_dict()),
+                    'saved_at': datetime.now(timezone.utc).isoformat(),
+                    'runtime_state': self._runtime_state(state),
+                }
+                fd, temporary_name = tempfile.mkstemp(
+                    dir=self.checkpoint_root,
+                    prefix=f'.{path.name}.',
+                    suffix='.tmp',
+                )
+                try:
+                    with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+                        json.dump(payload, handle, indent=2, sort_keys=True)
+                        handle.write('\n')
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                    os.replace(temporary_name, path)
+                finally:
+                    if os.path.exists(temporary_name):
+                        os.unlink(temporary_name)
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        except (OSError, ValueError) as exc:
+            raise DashboardPersistenceError(
+                f'Could not save draft state for {profile.league_name}: {exc}'
+            ) from exc
+        self._persistence_status[profile.profile_id] = {
+            'status': 'saved',
+            'message': 'Draft state saved',
+            'saved_at': payload['saved_at'],
+        }
+        self._checkpoint_baselines[profile.profile_id] = self._checkpoint_fingerprint(payload)
+
+    def _archive_and_reset(self, profile: LeagueProfile) -> DraftState:
+        """Archive the active checkpoint, then safely persist a clean state."""
+        path = self._checkpoint_path(profile)
+        archive_root = self.checkpoint_root / 'archive'
+        lock_path = self._checkpoint_lock_path(profile)
+        archive_path: Path | None = None
+        try:
+            self.checkpoint_root.mkdir(parents=True, exist_ok=True)
+            with lock_path.open('a+', encoding='utf-8') as lock_handle:
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+                if profile.profile_id not in self._checkpoint_errors:
+                    expected_digest = self._checkpoint_baselines.get(profile.profile_id)
+                    current_digest = self._read_checkpoint_digest(path)
+                    if current_digest != expected_digest:
+                        raise DashboardPersistenceError(
+                            f'Checkpoint for {profile.league_name} changed in another '
+                            'dashboard session; reload before starting a new draft'
+                        )
+                if path.exists():
+                    archive_root.mkdir(parents=True, exist_ok=True)
+                    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+                    archive_path = archive_root / f'{stamp}-{path.name}'
+                    os.replace(path, archive_path)
+                fresh = DraftState(draft_slot=profile.draft_slot)
+                try:
+                    payload = {
+                        'schema_version': CHECKPOINT_SCHEMA_VERSION,
+                        'season': profile.season,
+                        'profile_id': profile.profile_id,
+                        'profile_sha256': _sha256_json(self.profiles[profile.profile_id].to_dict()),
+                        'saved_at': datetime.now(timezone.utc).isoformat(),
+                        'runtime_state': self._runtime_state(fresh),
+                    }
+                    fd, temporary_name = tempfile.mkstemp(
+                        dir=self.checkpoint_root,
+                        prefix=f'.{path.name}.',
+                        suffix='.tmp',
+                    )
+                    try:
+                        with os.fdopen(fd, 'w', encoding='utf-8') as handle:
+                            json.dump(payload, handle, indent=2, sort_keys=True)
+                            handle.write('\n')
+                            handle.flush()
+                            os.fsync(handle.fileno())
+                        os.replace(temporary_name, path)
+                    finally:
+                        if os.path.exists(temporary_name):
+                            os.unlink(temporary_name)
+                except Exception:
+                    if archive_path is not None and not path.exists():
+                        os.replace(archive_path, path)
+                    raise
+                fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        except (OSError, ValueError) as exc:
+            raise DashboardPersistenceError(
+                f'Could not start a new draft for {profile.league_name}: {exc}'
+            ) from exc
+        self._persistence_status[profile.profile_id] = {
+            'status': 'saved',
+            'message': 'New draft started; prior state archived',
+            'saved_at': payload['saved_at'],
+        }
+        self._checkpoint_errors.pop(profile.profile_id, None)
+        self._checkpoint_baselines[profile.profile_id] = self._checkpoint_fingerprint(payload)
+        return fresh
 
     def status_payload(self) -> dict[str, Any]:
         if self.blocked_error:
@@ -123,6 +441,10 @@ class DashboardService:
                 self.fresh_inputs.source_manifest,
                 self.fresh_inputs.roster_manifest,
             ],
+            'persistence': {
+                profile_id: self._persistence_payload(profile_id)
+                for profile_id in self.profiles
+            },
             'fallback': False,
         }
 
@@ -141,6 +463,7 @@ class DashboardService:
                     'ir_slots': profile.ir_slots,
                     'flex_eligible': profile.flex_eligible,
                     'waiver_type': profile.waiver_type,
+                    'persistence': self._persistence_payload(profile.profile_id),
                 }
                 for profile in self.profiles.values()
             ]
@@ -152,12 +475,16 @@ class DashboardService:
         values = pd.to_numeric(self.fresh_inputs.players['espn_id'], errors='coerce').dropna()
         return {int(value) for value in values}
 
-    def _request_profile(self, request: Mapping[str, Any]) -> tuple[LeagueProfile, DraftState]:
+    def _request_profile(
+        self, request: Mapping[str, Any], *, allow_checkpoint_error: bool = False
+    ) -> tuple[LeagueProfile, DraftState]:
         if self.blocked_error or self.fresh_inputs is None:
             raise DashboardBlockedError(self.blocked_error or 'Fresh inputs are unavailable')
         profile_id = request.get('profile_id')
         if not isinstance(profile_id, str) or profile_id not in self.profiles:
             raise DashboardRequestError('Unknown profile_id')
+        if profile_id in self._checkpoint_errors and not allow_checkpoint_error:
+            raise DashboardBlockedError(self._checkpoint_errors[profile_id])
         if any(key in request for key in ('taken_ids', 'your_ids', 'queue_ids', 'actions')):
             raise DashboardRequestError(
                 'Client-owned draft arrays are not accepted; use /api/action'
@@ -229,6 +556,7 @@ class DashboardService:
             coverage_report=fresh_inputs.coverage,
             code_revision=self.code_revision,
         )
+        payload['persistence'] = self._persistence_payload(profile.profile_id)
         return payload
 
     def handle_board(self, request: Mapping[str, Any]) -> dict[str, Any]:
@@ -237,16 +565,37 @@ class DashboardService:
             if 'current_pick' in request:
                 state = state.sync_clock(self._validate_pick(profile, request['current_pick']))
             payload = self._render(profile, state)
+            if any(key in request for key in ('draft_slot', 'current_pick')):
+                self._write_checkpoint(profile, state)
+                payload['persistence'] = self._persistence_payload(profile.profile_id)
             self._state[profile.profile_id] = state
             return payload
 
     def handle_action(self, request: Mapping[str, Any]) -> dict[str, Any]:
         with self._state_lock:
-            profile, state = self._request_profile(request)
             action = request.get('action')
+            reset_requested = (
+                isinstance(action, Mapping)
+                and action.get('type') == 'reset'
+                and action.get('confirm') is True
+            )
+            profile, state = self._request_profile(
+                request, allow_checkpoint_error=reset_requested
+            )
             if not isinstance(action, Mapping):
                 raise DashboardRequestError('action must be an object')
             action_type = action.get('type')
+            if action_type == 'reset':
+                if action.get('confirm') is not True:
+                    raise DashboardRequestError(
+                        'Starting a new draft requires confirm=true'
+                    )
+                candidate = DraftState(draft_slot=profile.draft_slot)
+                payload = self._render(profile, candidate)
+                state = self._archive_and_reset(profile)
+                self._state[profile.profile_id] = state
+                payload['persistence'] = self._persistence_payload(profile.profile_id)
+                return payload
             if action_type == 'record':
                 player_id = self._validate_player_id(action.get('player_id'))
                 disposition = action.get('disposition')
@@ -262,6 +611,8 @@ class DashboardService:
             else:
                 raise DashboardRequestError('Unsupported action type')
             payload = self._render(profile, state)
+            self._write_checkpoint(profile, state)
+            payload['persistence'] = self._persistence_payload(profile.profile_id)
             self._state[profile.profile_id] = state
             return payload
 
@@ -297,18 +648,20 @@ def _dashboard_html() -> str:
 <style>.market-guide{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:17px 0 18px}.guide-card{padding:11px 13px;border:1px solid #29445e;border-radius:10px;background:#0b192b}.guide-card strong{display:block;color:#f5fbff;font-size:.84rem}.guide-card p{margin:5px 0 0;color:#a9bfd5;font-size:.75rem;line-height:1.4}.guide-card.model{border-color:#38678c}.guide-card.market{border-color:#397b70}.guide-card.action{border-color:#82633c}.guide-kicker{display:block;margin-bottom:4px;color:#83b8ff;font-size:.66rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase}.guide-card.market .guide-kicker{color:#7de2c2}.guide-card.action .guide-kicker{color:#f3bf78}.explain-callout{display:flex;align-items:flex-start;gap:10px;padding:11px 13px;border:1px solid #31506b;border-radius:10px;background:#10253a;color:#c4d7e9;font-size:.8rem;line-height:1.45}.explain-callout strong{color:#fff;white-space:nowrap}@media(max-width:760px){.market-guide{grid-template-columns:1fr}.explain-callout{display:block}.explain-callout strong{display:block;margin-bottom:4px}}</style>
 <body><main><header class="app-header"><div><p class="eyebrow">Live draft assistant</p><h1>FFBayes 2026 Draft War Room</h1><p class="muted">A live, server-confirmed board for making the next pick with context.</p></div><div class="clock-hero"><p class="eyebrow">On the clock</p><strong id="current-pick-hero">Pick 1</strong><span id="next-pick-hero" class="muted">Next user pick —</span></div></header>
 <section id="blocked" class="blocked hidden" role="alert"></section><section id="ready" class="hidden">
-<div class="panel control-panel"><div class="controls"><label class="control">League<select id="league"></select></label><label class="control">Draft slot<input id="draft-slot" type="number" min="1"></label><label class="control">Current overall pick<input id="current-pick" type="number" min="1"></label><button id="sync-clock">Sync clock</button><button id="recalculate">Recalculate board</button><button id="undo">Undo last pick</button><button id="snapshot">Export snapshot</button></div><div class="status-line"><p id="league-settings" class="muted toolbar-note"></p><p id="status" class="toolbar-note"></p></div></div>
+<div class="panel control-panel"><div class="controls"><label class="control">League<select id="league"></select></label><label class="control">Draft slot<input id="draft-slot" type="number" min="1"></label><label class="control">Current overall pick<input id="current-pick" type="number" min="1"></label><button id="sync-clock">Sync clock</button><button id="recalculate">Recalculate board</button><button id="undo">Undo last pick</button><button id="new-draft">Start new draft</button><button id="snapshot">Export snapshot</button></div><div class="status-line"><p id="league-settings" class="muted toolbar-note"></p><p id="status" class="toolbar-note"></p></div></div>
 <div class="grid primary-grid"><section class="panel feature" id="recommendation-panel"><p class="recommendation-label">Best available now</p><h2>Recommendation</h2><div id="recommendation"></div></section><section class="panel" id="roster-panel"><h2>My roster</h2><div id="roster" class="list"></div><p id="roster-counts" class="muted small"></p></section><section class="panel" id="queue-panel"><h2>Queue</h2><div id="queue" class="list"></div></section></div>
 <section class="panel table-panel" id="board-panel"><div class="table-heading"><div><h2>Draft board</h2><p class="muted small">Use Taken or Mine to advance the server clock. Queue is a watchlist only.</p></div><span class="health-badge">Live board</span></div><div class="table-wrap"><table><thead><tr><th>Rank</th><th>Player</th><th>Pos</th><th>Proj</th><th>VOR</th><th>ADP</th><th>Survival</th><th>Action</th><th>State</th></tr></thead><tbody id="board"></tbody></table></div></section>
-<section class="panel full-panel" id="timing-frontier"><div class="analysis-heading"><div><p class="eyebrow">Decision timing</p><h2>Timing frontier</h2><p class="muted small">The visual tradeoff behind “draft now” versus “can wait.”</p></div><div class="legend"><span><i class="legend-dot vor"></i>VOR</span><span><i class="legend-dot survival"></i>Survival</span><span><i class="legend-dot regret"></i>Regret</span></div></div><div class="frontier-chart"><div class="frontier-header"><span>Player</span><span>Pick-now value</span><span>Next-pick survival</span><span>Expected regret</span></div><div id="frontier"></div></div></section>
+<section class="panel full-panel" id="timing-frontier"><div class="analysis-heading"><div><p class="eyebrow">Decision timing</p><h2>Timing frontier</h2><p class="muted small">The visual tradeoff behind “draft now” versus “can wait.”</p></div><div class="legend"><span><i class="legend-dot vor"></i>VOR</span><span><i class="legend-dot survival"></i>Survival</span><span><i class="legend-dot regret"></i>Regret</span></div></div><div class="frontier-chart"><div class="frontier-header"><span>Player</span><span>Pick-now value</span><span>Next-pick survival</span><span>Projection gap</span></div><div id="frontier"></div></div></section>
 <section class="panel full-panel" id="positional-cliffs"><div class="analysis-heading"><div><p class="eyebrow">Roster construction</p><h2>Positional cliffs</h2><p class="muted small">Where the next player at a position costs the most value.</p></div></div><div id="cliffs" class="cliff-chart"></div></section>
 <section class="panel full-panel" id="comparative-explainer"><div class="analysis-heading"><div><p class="eyebrow">Market signal</p><h2>Market vs model</h2><p class="muted small">This is a confidence check, not a second recommendation.</p></div><div class="legend"><span><i class="legend-dot model"></i>Our model</span><span><i class="legend-dot market"></i>Draft market</span></div></div><div class="explain-callout"><strong>What is the gap?</strong><span>Blue is what this league’s scoring, roster rules, projections, and scarcity suggest. Green is where the public market is drafting the player. Close markers mean agreement; a wide gap means “investigate,” not “automatically override the recommendation.”</span></div><div class="market-guide"><div class="guide-card model"><span class="guide-kicker">Blue · our model</span><strong>League-aware math</strong><p>Converts projections using your scoring and accounts for replacement value, roster demand, and scarcity.</p></div><div class="guide-card market"><span class="guide-kicker">Green · draft market</span><strong>What other drafters do</strong><p>ADP is the average draft position from the current public market. It reflects consensus, news, and human judgment.</p></div><div class="guide-card action"><span class="guide-kicker">How to use it</span><strong>Use the gap as a question</strong><p>If the markers are close, ignore the panel. If they are far apart, keep the main recommendation unless you have a specific reason to change course.</p></div></div><div id="comparative-summary" class="comparative-summary"></div><div class="rank-axis"><span>1</span><span>Earlier</span><span>Later</span><span>50+</span></div><div id="comparative" class="comparative-chart"></div></section>
 <section class="panel full-panel" id="freshness-panel"><div class="panel-heading"><div><p class="eyebrow">Input status</p><h2>Data health</h2><p id="freshness" class="muted small health-summary"></p></div><span id="freshness-status" class="health-badge">Validated</span></div><div id="freshness-metrics" class="health-grid"></div><div id="source-list" class="source-list"></div><details id="provenance-details" class="provenance-details"><summary>View technical provenance</summary><pre id="provenance" class="muted small"></pre></details></section></section></main>
 <script>
-let leagues=[];let currentPayload=null;const $=id=>document.getElementById(id);const fmt=(v,d=1)=>v==null?'—':Number(v).toFixed(d);const esc=v=>String(v==null?'—':v);
+let leagues=[];let currentPayload=null;let refreshGeneration=0;let clockDirty=false;const $=id=>document.getElementById(id);const fmt=(v,d=1)=>v==null?'—':Number(v).toFixed(d);const esc=v=>String(v==null?'—':v);
 function showBlocked(message){$('blocked').classList.remove('hidden');$('ready').classList.add('hidden');$('blocked').textContent='Dashboard blocked: '+message;}
 function selectedLeague(){return leagues.find(x=>x.profile_id===$('league').value);}
-function setSettings(){const league=selectedLeague();if(!league)return;$('draft-slot').max=league.team_count;$('current-pick').max=league.team_count*(Object.values(league.roster_slots).reduce((a,b)=>a+b,0)+league.bench_slots);$('league-settings').textContent=league.league_name+' · '+league.team_count+' teams · '+league.draft_format+' · '+league.scoring_label+' · FLEX '+league.roster_slots.FLEX+' · bench '+league.bench_slots+' · IR '+league.ir_slots;if(currentPayload){$('draft-slot').value=currentPayload.runtime_state.draft_slot??'';$('current-pick').value=currentPayload.current_pick??1;}}
+function rememberedLeague(){try{return localStorage.getItem('ffbayes-profile')}catch(_){return null;}}
+function rememberLeague(profileId){try{localStorage.setItem('ffbayes-profile',profileId)}catch(_){} }
+function setSettings(force=false){const league=selectedLeague();if(!league)return;$('draft-slot').max=league.team_count;$('current-pick').max=league.team_count*(Object.values(league.roster_slots).reduce((a,b)=>a+b,0)+league.bench_slots);$('league-settings').textContent=league.league_name+' · '+league.team_count+' teams · '+league.draft_format+' · '+league.scoring_label+' · FLEX '+league.roster_slots.FLEX+' · bench '+league.bench_slots+' · IR '+league.ir_slots;if(currentPayload&&(force||!clockDirty)){$('draft-slot').value=currentPayload.runtime_state.draft_slot??'';$('current-pick').value=currentPayload.current_pick??1;}}
 function requestClock(){return{profile_id:$('league').value,draft_slot:$('draft-slot').value===''?null:Number($('draft-slot').value),current_pick:Number($('current-pick').value||1)};}
 async function post(path,body){const response=await fetch(path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw new Error(data.error||'Request failed');return data;}
 function cell(value){const node=document.createElement('td');node.textContent=esc(value);return node;}
@@ -317,15 +670,15 @@ function metric(label,value){const node=document.createElement('div');node.class
 function renderHealth(){const report=currentPayload.coverage_report||{};const provenance=currentPayload.provenance||{};const rows=Number(report.rows||currentPayload.decision_table?.length||0);const market=report.market_coverage==null?'—':fmt(Number(report.market_coverage)*100,0)+'%';const projectionCounts=Object.values(report.projection_counts||{}).map(Number);const projectionRows=projectionCounts.length?projectionCounts.reduce((a,b)=>a+b,0):rows;const date=currentPayload.generated_at?new Date(currentPayload.generated_at).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}):'—';$('freshness').textContent='Fresh '+rows+'-player board · generated '+date+' · season '+esc(report.season||'2026');const passed=report.status==='passed';$('freshness-status').textContent=passed?'Validated':'Blocked';$('freshness-status').className='health-badge '+(passed?'':'warn');const metrics=$('freshness-metrics');metrics.replaceChildren(metric('Validated players',rows),metric('Market / ADP coverage',market),metric('Projected player rows',projectionRows),metric('Source season',report.season||'—'));const sources=$('source-list');sources.replaceChildren();const manifests=provenance.source_manifests||[];const defaults=['Player pool','Roster status'];for(const [index,manifest] of manifests.entries()){const chip=document.createElement('span');chip.className='source-chip';const name=String(manifest.source||defaults[index]||'Public input').replaceAll('_',' ');chip.textContent=name+(manifest.cache_mode?' · '+manifest.cache_mode:'');sources.appendChild(chip);}if(!manifests.length){const chip=document.createElement('span');chip.className='source-chip';chip.textContent='Public inputs';sources.appendChild(chip);}$('provenance').textContent=JSON.stringify(provenance,null,2);}
 function laneLabel(lane){return lane==='pick_now'?'Draft now':lane==='wait'?'Can wait':'Slot required';}
 function metricCell(label,value,max,kind,formatter,unavailable=false){const cellNode=document.createElement('div');cellNode.className='metric-cell';const caption=document.createElement('span');caption.className='metric-caption';caption.textContent=label;const line=document.createElement('div');line.className='metric-line';const track=document.createElement('div');track.className='metric-track '+kind;const fill=document.createElement('i');if(unavailable){track.classList.add('unavailable');}else{fill.style.width=Math.max(0,Math.min(100,(Number(value)/max)*100))+'%';track.appendChild(fill);}const valueNode=document.createElement('span');valueNode.className='metric-value';valueNode.textContent=unavailable?'slot required':formatter(Number(value));line.append(track,valueNode);cellNode.append(caption,line);return cellNode;}
-function renderTiming(rows){const frontier=$('frontier');frontier.replaceChildren();const visible=rows.slice(0,12);const maxVor=Math.max(1,...visible.map(row=>Number(row.vor)||0));const maxRegret=Math.max(1,...visible.map(row=>Number(row.expected_regret)||0));for(const row of visible){const wrap=document.createElement('div');wrap.className='frontier-row';const player=document.createElement('div');player.className='frontier-player';const name=document.createElement('span');name.className='frontier-name';name.textContent='#'+esc(row.board_rank)+' · '+row.name;const subline=document.createElement('span');subline.className='frontier-subline';const pos=document.createElement('span');pos.textContent=row.position;const badge=document.createElement('span');badge.className='lane-badge '+String(row.lane||'unavailable').replace('_','-');badge.textContent=laneLabel(row.lane);subline.append(pos,badge);player.append(name,subline);const survivalMissing=row.availability_next_pick==null;wrap.append(player,metricCell('Pick-now value',row.vor,maxVor,'vor',value=>fmt(value),false),metricCell('Next-pick survival',row.availability_next_pick,1,'survival',value=>fmt(value*100,0)+'%',survivalMissing),metricCell('Expected regret',row.expected_regret,maxRegret,'regret',value=>fmt(value)));frontier.appendChild(wrap);}}
+function renderTiming(rows){const frontier=$('frontier');frontier.replaceChildren();const visible=rows.slice(0,12);const maxVor=Math.max(1,...visible.map(row=>Number(row.vor)||0));const maxRegret=Math.max(1,...visible.map(row=>Number(row.expected_regret)||0));for(const row of visible){const wrap=document.createElement('div');wrap.className='frontier-row';const player=document.createElement('div');player.className='frontier-player';const name=document.createElement('span');name.className='frontier-name';name.textContent='#'+esc(row.board_rank)+' · '+row.name;const subline=document.createElement('span');subline.className='frontier-subline';const pos=document.createElement('span');pos.textContent=row.position;const badge=document.createElement('span');badge.className='lane-badge '+String(row.lane||'unavailable').replace('_','-');badge.textContent=laneLabel(row.lane);subline.append(pos,badge);player.append(name,subline);const survivalMissing=row.availability_next_pick==null;wrap.append(player,metricCell('Pick-now value',row.vor,maxVor,'vor',value=>fmt(value),false),metricCell('Next-pick survival',row.availability_next_pick,1,'survival',value=>fmt(value*100,0)+'%',survivalMissing),metricCell('Projection gap',row.expected_regret,maxRegret,'regret',value=>fmt(value)));frontier.appendChild(wrap);}}
 function renderCliffs(rows){const cliffs=$('cliffs');cliffs.replaceChildren();const maxCliff=Math.max(1,...rows.map(row=>Number(row.strongest_cliff)||0));for(const row of rows){const card=document.createElement('article');card.className='cliff-card';const header=document.createElement('header');const position=document.createElement('strong');position.textContent=row.position;const available=document.createElement('span');available.textContent=esc(row.players_available)+' available';header.append(position,available);const bar=document.createElement('div');bar.className='cliff-bar';const fill=document.createElement('i');fill.style.width=Math.max(0,Math.min(100,(Number(row.strongest_cliff||0)/maxCliff)*100))+'%';bar.appendChild(fill);const footer=document.createElement('footer');footer.textContent=fmt(row.strongest_cliff)+' pt drop after '+esc(row.cliff_after_rank);card.append(header,bar,footer);cliffs.appendChild(card);}}
 function summaryChip(label,count,kind){const chip=document.createElement('span');chip.className='summary-chip '+kind;const strong=document.createElement('strong');strong.textContent=count;chip.append(strong,document.createTextNode(' '+label));return chip;}
 function renderComparative(rows){const comparative=$('comparative');comparative.replaceChildren();const outliers=rows.filter(row=>Math.abs(Number(row.rank_gap))>=3).slice(0,8);const modelEarly=outliers.filter(row=>Number(row.rank_gap)>0).length;const marketEarly=outliers.filter(row=>Number(row.rank_gap)<0).length;const summary=$('comparative-summary');summary.replaceChildren(summaryChip('model-early outliers',modelEarly,'model'),summaryChip('market-early outliers',marketEarly,'market'));const maxRank=Math.max(50,...outliers.flatMap(row=>[Number(row.model_rank)||0,Number(row.market_rank)||0]));for(const row of outliers){const wrap=document.createElement('div');wrap.className='comparative-row';const player=document.createElement('div');player.className='comparative-player';const name=document.createElement('strong');name.textContent=row.name;const info=document.createElement('span');info.textContent=row.position;const gap=document.createElement('span');const gapValue=Number(row.rank_gap);gap.className='gap-badge '+(gapValue<0?'market-early':'');gap.textContent=gapValue>0?'Model '+fmt(gapValue,0)+' earlier':'Market '+fmt(Math.abs(gapValue),0)+' earlier';info.append(document.createTextNode(' · '),gap);player.append(name,info);const visual=document.createElement('div');const track=document.createElement('div');track.className='rank-track';const modelMarker=document.createElement('span');modelMarker.className='rank-marker model';modelMarker.style.left=((Number(row.model_rank)-1)/(maxRank-1)*100)+'%';modelMarker.setAttribute('aria-label','Model '+fmt(row.model_rank,0));modelMarker.title='Model rank '+fmt(row.model_rank,0);const marketMarker=document.createElement('span');marketMarker.className='rank-marker market';marketMarker.style.left=((Number(row.market_rank)-1)/(maxRank-1)*100)+'%';marketMarker.setAttribute('aria-label','Market '+fmt(row.market_rank,0));marketMarker.title='Market rank '+fmt(row.market_rank,0);track.append(modelMarker,marketMarker);const values=document.createElement('div');values.className='rank-values';const modelValue=document.createElement('span');modelValue.className='model-value';const modelStrong=document.createElement('b');modelStrong.textContent=fmt(row.model_rank,0);modelValue.append(document.createTextNode('Model '),modelStrong);const marketValue=document.createElement('span');marketValue.className='market-value';const marketStrong=document.createElement('b');marketStrong.textContent=fmt(row.market_rank,0);marketValue.append(document.createTextNode('Market '),marketStrong);values.append(modelValue,marketValue);visual.append(track,values);wrap.append(player,visual);comparative.appendChild(wrap);}}
-function renderAnalytics(){const a=currentPayload.analytics||{};const rec=$('recommendation');rec.replaceChildren();const primary=a.recommendation&&a.recommendation.primary;if(primary){const title=document.createElement('div');title.className='metric';title.textContent=primary.name;rec.appendChild(title);const why=document.createElement('p');const survival=primary.availability_next_pick==null?'slot required':fmt(primary.availability_next_pick*100,0)+'%';why.textContent=primary.rationale+' VOR '+fmt(primary.vor)+' · survival '+survival;rec.appendChild(why);}else rec.textContent='No available players.';const fallback=document.createElement('div');for(const row of (a.recommendation?.fallbacks||[]))fallback.appendChild(item(row,'fallback · regret '+fmt(row.expected_regret)));rec.appendChild(fallback);$('roster').replaceChildren(...(a.roster||[]).map(row=>item(row,'mine')));$('roster-counts').textContent=Object.entries(a.roster_position_counts||{}).map(([position,count])=>position+' '+count).join(' · ')||'No players recorded';$('queue').replaceChildren(...(a.queue||[]).map(row=>item(row,'queued')));renderTiming(a.timing_frontier||[]);renderCliffs(a.positional_cliffs||[]);renderComparative(a.comparative||[]);}
-function renderBoard(){const body=$('board');body.replaceChildren();if(!currentPayload)return;const queued=new Set(currentPayload.runtime_state.queue_ids||[]);for(const row of currentPayload.decision_table.slice(0,100)){const tr=document.createElement('tr');tr.dataset.playerId=String(row.espn_id);const status=row.roster_status||'available';tr.append(cell(row.board_rank),cell(row.name),cell(row.position),cell(fmt(row.projected_points)),cell(fmt(row.vor)),cell(fmt(row.adp)),cell(row.availability_next_pick==null?'slot required':fmt(Number(row.availability_next_pick)*100,0)+'%'));const actions=document.createElement('td');for(const [type,label] of [['taken','Taken'],['mine','Mine'],['queue',queued.has(row.espn_id)?'Unqueue':'Queue']]){const button=document.createElement('button');button.type='button';button.dataset.type=type;button.dataset.action=type;button.dataset.id=String(row.espn_id);button.textContent=label;actions.appendChild(button);if(type!=='queue')actions.appendChild(document.createTextNode(' '));}tr.appendChild(actions);const state=cell((queued.has(row.espn_id)?'queued · ':'')+status+' · '+row.recommendation);state.className=status==='mine'?'status-mine':status==='taken'?'status-taken':'';tr.appendChild(state);body.appendChild(tr);}$('status').textContent='Current pick '+esc(currentPayload.current_pick)+' · next pick '+esc(currentPayload.next_pick)+' · '+currentPayload.decision_table.length+' validated players';$('current-pick-hero').textContent='Pick '+esc(currentPayload.current_pick);$('next-pick-hero').textContent=currentPayload.next_pick==null?'No later user pick':'Next user pick '+esc(currentPayload.next_pick);renderHealth();renderAnalytics();}
-async function refresh(body=requestClock()){try{currentPayload=await post('/api/board',body);setSettings();renderBoard();$('status').className='';}catch(error){$('status').textContent=error.message;$('status').className='notice';}}
-$('league').addEventListener('change',()=>{currentPayload=null;refresh({profile_id:$('league').value});});$('sync-clock').addEventListener('click',()=>refresh());$('recalculate').addEventListener('click',()=>refresh());$('undo').addEventListener('click',async()=>{try{currentPayload=await post('/api/action',{profile_id:$('league').value,action:{type:'undo'}});setSettings();renderBoard();}catch(error){$('status').textContent=error.message;$('status').className='notice';}});$('snapshot').addEventListener('click',async()=>{try{const result=await post('/api/snapshot',requestClock());$('status').textContent='Snapshot written to '+result.path;}catch(error){$('status').textContent=error.message;$('status').className='notice';}});$('board').addEventListener('click',async event=>{const button=event.target.closest('button[data-type]');if(!button)return;const type=button.dataset.type;try{currentPayload=await post('/api/action',{profile_id:$('league').value,action:{type:type==='queue'?'queue':'record',player_id:Number(button.dataset.id),disposition:type==='mine'?'mine':'taken'}});setSettings();renderBoard();}catch(error){$('status').textContent=error.message;$('status').className='notice';}});
-(async()=>{try{const status=await(await fetch('/api/status')).json();if(status.status!=='ready'){showBlocked(status.error||'source validation failed');return;}leagues=(await(await fetch('/api/leagues')).json()).leagues||[];if(!leagues.length){showBlocked('no league profiles are available');return;}for(const league of leagues){const option=document.createElement('option');option.value=league.profile_id;option.textContent=league.league_name;$('league').appendChild(option);} $('ready').classList.remove('hidden');await refresh();}catch(error){showBlocked(error instanceof Error?error.message:String(error));}})();
+function renderAnalytics(){const a=currentPayload.analytics||{};const rec=$('recommendation');rec.replaceChildren();const primary=a.recommendation&&a.recommendation.primary;if(primary){const title=document.createElement('div');title.className='metric';title.textContent=primary.name;rec.appendChild(title);const why=document.createElement('p');const survival=primary.availability_next_pick==null?'slot required':fmt(primary.availability_next_pick*100,0)+'%';why.textContent=primary.rationale+((currentPayload.runtime_state.your_ids||[]).length?' Roster utility '+fmt(primary.marginal_usable_points)+' ·':'')+' VOR '+fmt(primary.vor)+' · survival '+survival;rec.appendChild(why);}else rec.textContent='No available players.';const fallback=document.createElement('div');for(const row of (a.recommendation?.fallbacks||[]))fallback.appendChild(item(row,'fallback · projection gap '+fmt(row.expected_regret)));rec.appendChild(fallback);$('roster').replaceChildren(...(a.roster||[]).map(row=>item(row,'mine')));$('roster-counts').textContent=Object.entries(a.roster_position_counts||{}).map(([position,count])=>position+' '+count).join(' · ')||'No players recorded';$('queue').replaceChildren(...(a.queue||[]).map(row=>item(row,'queued')));renderTiming(a.timing_frontier||[]);renderCliffs(a.positional_cliffs||[]);renderComparative(a.comparative||[]);}
+function renderBoard(){const body=$('board');body.replaceChildren();if(!currentPayload)return;const queued=new Set(currentPayload.runtime_state.queue_ids||[]);const topIds=new Set(currentPayload.decision_table.slice(0,100).map(row=>row.espn_id));const visible=currentPayload.decision_table.filter(row=>topIds.has(row.espn_id)||row.roster_status==='mine'||row.roster_status==='taken'||queued.has(row.espn_id));for(const row of visible){const tr=document.createElement('tr');tr.dataset.playerId=String(row.espn_id);const status=row.roster_status||'available';tr.append(cell(row.board_rank),cell(row.name),cell(row.position),cell(fmt(row.projected_points)),cell(fmt(row.vor)),cell(fmt(row.adp)),cell(row.availability_next_pick==null?'slot required':fmt(Number(row.availability_next_pick)*100,0)+'%'));const actions=document.createElement('td');for(const [type,label] of [['taken','Taken'],['mine','Mine'],['queue',queued.has(row.espn_id)?'Unqueue':'Queue']]){const button=document.createElement('button');button.type='button';button.dataset.type=type;button.dataset.action=type;button.dataset.id=String(row.espn_id);button.textContent=label;actions.appendChild(button);if(type!=='queue')actions.appendChild(document.createTextNode(' '));}tr.appendChild(actions);const state=cell((queued.has(row.espn_id)?'queued · ':'')+status+' · '+row.recommendation);state.className=status==='mine'?'status-mine':status==='taken'?'status-taken':'';tr.appendChild(state);body.appendChild(tr);}const saved=currentPayload.persistence||{};const saveMessage=saved.message?' · '+saved.message:'';$('status').textContent='Current pick '+esc(currentPayload.current_pick)+' · next pick '+esc(currentPayload.next_pick)+' · '+currentPayload.decision_table.length+' validated players'+saveMessage;$('current-pick-hero').textContent='Pick '+esc(currentPayload.current_pick);$('next-pick-hero').textContent=currentPayload.next_pick==null?'No later user pick':'Next user pick '+esc(currentPayload.next_pick);renderHealth();renderAnalytics();}
+async function refresh(body=requestClock()){const generation=++refreshGeneration;const submittedClock=Object.prototype.hasOwnProperty.call(body,'draft_slot')||Object.prototype.hasOwnProperty.call(body,'current_pick');try{const payload=await post('/api/board',body);if(generation!==refreshGeneration)return;currentPayload=payload;setSettings(submittedClock);clockDirty=false;renderBoard();$('status').className='';}catch(error){if(generation!==refreshGeneration)return;$('status').textContent=error.message;$('status').className='notice';}}
+$('draft-slot').addEventListener('input',()=>{clockDirty=true;});$('current-pick').addEventListener('input',()=>{clockDirty=true;});$('league').addEventListener('change',()=>{rememberLeague($('league').value);clockDirty=false;currentPayload=null;refresh({profile_id:$('league').value});});$('sync-clock').addEventListener('click',()=>refresh());$('recalculate').addEventListener('click',()=>refresh());$('undo').addEventListener('click',async()=>{try{currentPayload=await post('/api/action',{profile_id:$('league').value,action:{type:'undo'}});clockDirty=false;setSettings(true);renderBoard();}catch(error){$('status').textContent=error.message;$('status').className='notice';}});$('new-draft').addEventListener('click',async()=>{if(!window.confirm('Start a new draft? The current saved state will be archived.'))return;try{currentPayload=await post('/api/action',{profile_id:$('league').value,action:{type:'reset',confirm:true}});clockDirty=false;setSettings(true);renderBoard();}catch(error){$('status').textContent=error.message;$('status').className='notice';}});$('snapshot').addEventListener('click',async()=>{try{const result=await post('/api/snapshot',requestClock());$('status').textContent='Snapshot written to '+result.path;}catch(error){$('status').textContent=error.message;$('status').className='notice';}});$('board').addEventListener('click',async event=>{const button=event.target.closest('button[data-type]');if(!button)return;const type=button.dataset.type;try{currentPayload=await post('/api/action',{profile_id:$('league').value,action:{type:type==='queue'?'queue':'record',player_id:Number(button.dataset.id),disposition:type==='mine'?'mine':'taken'}});clockDirty=false;setSettings(true);renderBoard();}catch(error){$('status').textContent=error.message;$('status').className='notice';}});
+(async()=>{try{const status=await(await fetch('/api/status')).json();if(status.status!=='ready'){showBlocked(status.error||'source validation failed');return;}leagues=(await(await fetch('/api/leagues')).json()).leagues||[];if(!leagues.length){showBlocked('no league profiles are available');return;}const preferred=rememberedLeague();for(const league of leagues){const option=document.createElement('option');option.value=league.profile_id;option.textContent=league.league_name;option.selected=preferred===league.profile_id;$('league').appendChild(option);}if(!preferred||!leagues.some(league=>league.profile_id===preferred))$('league').value=leagues[0].profile_id;rememberLeague($('league').value);$('ready').classList.remove('hidden');await refresh({profile_id:$('league').value});}catch(error){showBlocked(error instanceof Error?error.message:String(error));}})();
 </script></body></html>"""
 
 

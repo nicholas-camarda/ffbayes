@@ -10,6 +10,13 @@ keeps their own league rules in an ignored local profile.
 ffbayes dashboard --year 2026
 ```
 
+For the Camarda-Klein draft, start only that profile explicitly:
+
+```bash
+ffbayes dashboard --year 2026 \
+  --profile config/leagues/league_2_2026.local.json
+```
+
 The command fetches the public 2026 inputs, validates the player universe,
 projections, ADP, replacement depth, and league profiles, then opens a local
 dashboard. It does not require a fantasy-platform account, password, or
@@ -47,6 +54,22 @@ are not part of the public repository.
    aids. Export a snapshot when you want a durable record of the validated
    state.
 
+The board autosaves each clock change, queue update, selection, correction, and
+undo to a season/profile checkpoint outside the timestamped run directory. A
+browser refresh or Python restart recovers that checkpoint after the fresh
+inputs validate. The page shows the recovery/save status. **Start new draft**
+requires confirmation and archives the previous checkpoint before creating a
+clean one.
+
+Before relying on the board, compare the selected profile with the fantasy
+platform's settings: scoring weights and turnover penalties, team count and
+snake order, starter/FLEX slots, bench, IR, and waiver rules. Update the local
+profile only from those confirmed settings. The checked-in Camarda-Klein
+profile currently has no offensive turnover penalties, so that item needs an
+explicit platform check. Review current injury and news reports separately;
+the public player feed used by this board does not provide an injury status
+signal.
+
 Each profile has independent draft state. Changing the selected league does not
 carry over slot, pick, taken IDs, roster IDs, or queue IDs.
 
@@ -70,6 +93,10 @@ Run-scoped material is written under
 `runtime/runs/dashboard_2026/<timestamp>/`. Exported snapshots are under that
 run's `snapshots/` directory and contain the profile, runtime state, board,
 coverage report, source manifests, timestamps, and SHA-256 digests.
+
+The active draft checkpoint is stored separately under
+`runtime/draft_state/<season>-<profile_id>.json`; prior checkpoints archived by
+**Start new draft** are kept in `runtime/draft_state/archive/`.
 
 ## Related documentation
 

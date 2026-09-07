@@ -84,8 +84,10 @@ $$
 \mathrm{VOR}_i = P_i - R_{p(i)}
 $$
 
-The board combines standardized VOR and local positional drop-off, then blends
-that model signal with ADP rank. If a draft slot is supplied, next-pick
+For the first pick, the board combines standardized VOR and positional drop-off
+with ADP rank. After you record your picks, it ranks candidates by their marginal
+replacement-adjusted lineup utility; the original market blend breaks ties.
+A shared slot-assignment check excludes picks that cannot fit a complete roster. If a draft slot is supplied, next-pick
 availability uses an ADP-centered normal approximation with a minimum standard
 deviation; without a slot, timing is explicitly marked `slot_required`.
 
@@ -140,6 +142,8 @@ The public operator surface is the single `ffbayes dashboard` command. Run
 - [`docs/TECHNICAL_DEEP_DIVE.md`](docs/TECHNICAL_DEEP_DIVE.md): implemented
   pipeline and mathematical details.
 - [`docs/OUTPUT_EXAMPLES.md`](docs/OUTPUT_EXAMPLES.md): generic payload shape.
+- [`docs/EVALUATION_BASELINES.md`](docs/EVALUATION_BASELINES.md): fair,
+  as-of-aware draft baseline evaluation and reproducible command.
 
 ## License
 

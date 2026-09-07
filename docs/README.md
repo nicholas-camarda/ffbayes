@@ -30,3 +30,5 @@ the runtime draft slot and current pick when those values are available.
 If a required source is inaccessible, incomplete, stale, or semantically
 invalid, the pipeline reports the failure and the dashboard stays blocked. It
 does not reuse an older board or invent a neutral value.
+
+- [Baseline evaluation](EVALUATION_BASELINES.md): deterministic policy comparisons and temporal input contracts.

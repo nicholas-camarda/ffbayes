@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 import pandas as pd
@@ -41,6 +42,7 @@ service = HostileDashboardService(
     project_root=Path.cwd(),
     run_root=Path.cwd() / 'runtime' / 'runs' / 'browser-hostile-fixture',
     code_revision='browser-hostile-fixture',
+    checkpoint_root=Path(tempfile.mkdtemp(prefix='ffbayes-hostile-checkpoint-')),
 )
 server = create_http_server(service, 0)
 print(f'PORT={server.server_address[1]}', flush=True)

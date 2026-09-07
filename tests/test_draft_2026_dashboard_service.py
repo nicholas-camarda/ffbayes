@@ -9,6 +9,9 @@ import pytest
 
 from ffbayes.draft_2026 import dashboard_app
 from ffbayes.draft_2026.dashboard_app import (
+    CHECKPOINT_SCHEMA_VERSION,
+    DashboardBlockedError,
+    DashboardPersistenceError,
     DashboardRequestError,
     DashboardService,
 )
@@ -235,6 +238,156 @@ def test_service_snapshot_is_provenance_bound_and_atomic(service, tmp_path) -> N
     validate_output_provenance(payload)
     assert payload['runtime_state']['queue_ids'] == [1000]
     assert not list(snapshot.parent.glob('*.tmp'))
+
+
+def test_checkpoint_persists_slot_clock_actions_and_queue_across_restart(service) -> None:
+    initial = service.handle_board(
+        {'profile_id': 'bill', 'draft_slot': 4, 'current_pick': 7}
+    )
+    first_id = int(initial['decision_table'][0]['espn_id'])
+    second_id = int(initial['decision_table'][1]['espn_id'])
+    service.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'mine'}}
+    )
+    service.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'queue', 'player_id': second_id}}
+    )
+
+    checkpoint = service.checkpoint_root / '2026-bill.json'
+    saved = json.loads(checkpoint.read_text(encoding='utf-8'))
+    assert saved['schema_version'] == CHECKPOINT_SCHEMA_VERSION
+    assert saved['runtime_state']['draft_slot'] == 4
+    assert saved['runtime_state']['current_pick'] == 8
+    assert saved['runtime_state']['queue_ids'] == [second_id]
+    assert checkpoint.parent != service.run_root
+
+    restarted = DashboardService(
+        service.fresh_inputs,
+        list(service.profiles.values()),
+        project_root=service.project_root,
+        run_root=service.run_root / 'restarted',
+        code_revision=service.code_revision,
+    )
+    restored = restarted.handle_board({'profile_id': 'bill'})
+    assert restored['runtime_state']['draft_slot'] == 4
+    assert restored['current_pick'] == 8
+    assert restored['runtime_state']['your_ids'] == [first_id]
+    assert restored['runtime_state']['queue_ids'] == [second_id]
+    assert restarted.status_payload()['persistence']['bill']['status'] == 'recovered'
+
+
+def test_checkpoint_rejects_corrupt_and_unresolved_state(service) -> None:
+    service.handle_board({'profile_id': 'bill', 'draft_slot': 2})
+    checkpoint = service.checkpoint_root / '2026-bill.json'
+    checkpoint.write_text('{not-json', encoding='utf-8')
+    restarted = DashboardService(
+        service.fresh_inputs,
+        list(service.profiles.values()),
+        project_root=service.project_root,
+        run_root=service.run_root / 'restarted',
+        code_revision=service.code_revision,
+    )
+    assert restarted.status_payload()['persistence']['bill']['status'] == 'blocked'
+    with pytest.raises(DashboardBlockedError, match='unreadable'):
+        restarted.handle_board({'profile_id': 'bill'})
+    reset = restarted.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'reset', 'confirm': True}}
+    )
+    assert reset['current_pick'] == 1
+    assert restarted.handle_board({'profile_id': 'bill'})['current_pick'] == 1
+
+
+def test_checkpoint_rejects_profile_mismatch_and_unresolved_player(service) -> None:
+    initial = service.handle_board({'profile_id': 'bill', 'draft_slot': 2})
+    first_id = int(initial['decision_table'][0]['espn_id'])
+    service.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'}}
+    )
+    checkpoint = service.checkpoint_root / '2026-bill.json'
+    value = json.loads(checkpoint.read_text(encoding='utf-8'))
+    value['runtime_state']['actions'][0]['player_id'] = 999999
+    checkpoint.write_text(json.dumps(value), encoding='utf-8')
+    restarted = DashboardService(
+        service.fresh_inputs,
+        list(service.profiles.values()),
+        project_root=service.project_root,
+        run_root=service.run_root / 'unresolved',
+        code_revision=service.code_revision,
+    )
+    with pytest.raises(DashboardBlockedError, match='unresolved selection'):
+        restarted.handle_board({'profile_id': 'bill'})
+
+
+def test_checkpoint_rejects_changed_profile_settings(service) -> None:
+    initial = service.handle_board({'profile_id': 'bill', 'draft_slot': 2})
+    first_id = int(initial['decision_table'][0]['espn_id'])
+    service.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'}}
+    )
+    changed = replace(service.profiles['bill'], bench_slots=5)
+    restarted = DashboardService(
+        service.fresh_inputs,
+        [changed, service.profiles['family']],
+        project_root=service.project_root,
+        run_root=service.run_root / 'changed-profile',
+        code_revision=service.code_revision,
+    )
+    with pytest.raises(DashboardBlockedError, match='different league settings'):
+        restarted.handle_board({'profile_id': 'bill'})
+
+
+def test_checkpoint_detects_another_live_session_before_overwrite(service) -> None:
+    initial = service.handle_board({'profile_id': 'bill', 'draft_slot': 2})
+    first_id = int(initial['decision_table'][0]['espn_id'])
+    second = DashboardService(
+        service.fresh_inputs,
+        list(service.profiles.values()),
+        project_root=service.project_root,
+        run_root=service.run_root / 'second',
+        code_revision=service.code_revision,
+    )
+    service.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'}}
+    )
+    with pytest.raises(DashboardPersistenceError, match='another dashboard session'):
+        second.handle_action(
+            {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'}}
+        )
+    assert second.handle_board({'profile_id': 'bill'})['current_pick'] == 1
+
+
+def test_failed_checkpoint_save_does_not_commit_state(service, monkeypatch) -> None:
+    initial = service.handle_board({'profile_id': 'bill'})
+    first_id = int(initial['decision_table'][0]['espn_id'])
+
+    def fail_save(*_args, **_kwargs):
+        raise DashboardPersistenceError('simulated checkpoint failure')
+
+    monkeypatch.setattr(service, '_write_checkpoint', fail_save)
+    with pytest.raises(DashboardPersistenceError, match='simulated'):
+        service.handle_action(
+            {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'taken'}}
+        )
+    unchanged = service.handle_board({'profile_id': 'bill'})
+    assert unchanged['current_pick'] == 1
+    assert unchanged['runtime_state']['actions'] == []
+
+
+def test_start_new_draft_requires_confirmation_and_archives_checkpoint(service) -> None:
+    initial = service.handle_board({'profile_id': 'bill', 'draft_slot': 3})
+    first_id = int(initial['decision_table'][0]['espn_id'])
+    service.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'record', 'player_id': first_id, 'disposition': 'mine'}}
+    )
+    with pytest.raises(DashboardRequestError, match='confirm=true'):
+        service.handle_action({'profile_id': 'bill', 'action': {'type': 'reset'}})
+    reset = service.handle_action(
+        {'profile_id': 'bill', 'action': {'type': 'reset', 'confirm': True}}
+    )
+    assert reset['current_pick'] == 1
+    assert reset['runtime_state']['actions'] == []
+    assert reset['runtime_state']['draft_slot'] == 3
+    assert list((service.checkpoint_root / 'archive').glob('*-2026-bill.json'))
 
 
 def test_blocked_status_preserves_external_source_failure_details(tmp_path) -> None:

@@ -109,7 +109,11 @@ def _build_analytics(
     """Build the rich visual contract from canonical board values only."""
     if any('is_available' not in row for row in decision_table):
         raise OutputProvenanceError('Decision table is missing is_available')
-    available = [row for row in decision_table if row['is_available']]
+    available = [
+        row
+        for row in decision_table
+        if row['is_available'] and row.get('is_draftable', True)
+    ]
     available.sort(key=lambda row: int(row.get('board_rank', 10**9)))
     primary = available[0] if available else None
 
@@ -139,11 +143,16 @@ def _build_analytics(
                 None if probability is None else _required_number(probability, 'availability_next_pick')
             ),
             'expected_regret': max(0.0, primary_projection - projected),
+            'projection_gap': max(0.0, primary_projection - projected),
+            'evidence_semantics': 'projection_gap_and_scarcity_proxy_not_probabilities',
             'position_run_risk': min(
                 1.0,
                 max(0.0, _required_number(row.get('scarcity'), 'scarcity') / 25.0),
             ),
             'recommendation': row.get('recommendation'),
+            'is_draftable': bool(row.get('is_draftable', True)),
+            'marginal_usable_points': row.get('marginal_usable_points'),
+            'roster_value_version': row.get('roster_value_version'),
             'lane': (
                 'pick_now'
                 if row.get('recommendation') == 'draft_now'
@@ -152,7 +161,8 @@ def _build_analytics(
                 else 'unavailable'
             ),
             'rationale': (
-                'Highest available contextual board value.'
+                ('Highest legal marginal roster utility; market rank breaks ties.'
+                 if runtime_state.get('your_ids') else 'Highest available contextual board value.')
                 if primary is row
                 else 'Available alternative ranked by the league-specific board.'
             ),
@@ -309,6 +319,13 @@ def build_dashboard_payload(
         'recommendation',
         'roster_status',
         'is_available',
+        'is_draftable',
+        'marginal_usable_points',
+        'starter_slot_gain',
+        'bench_insurance_value',
+        'replacement_anchor',
+        'roster_feasible',
+        'roster_value_version',
     ]
     decision_table = _records(board[[c for c in table_columns if c in board]])
     if not decision_table or any(row.get('espn_id') is None for row in decision_table):

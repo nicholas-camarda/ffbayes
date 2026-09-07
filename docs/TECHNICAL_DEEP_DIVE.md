@@ -81,7 +81,10 @@ replacement demand. The internal value signal is standardized VOR plus
 board_priority = 0.60 × model_rank + 0.40 × market_rank
 ```
 
-Rows are sorted by ascending `board_priority`, with VOR and ADP as tie-breakers.
+This static rank is retained for the first pick. Once players are owned, rows
+are ordered by draftability, marginal replacement-adjusted roster utility, and
+static rank as a tie-breaker. The exact utility and 5% bench proxy are defined
+in `METRIC_REFERENCE.md`; they are not fitted probabilistic forecasts.
 This is why changing team count, FLEX slots, scoring, or roster depth can
 change replacement levels, scarcity, valuation, and the resulting order.
 

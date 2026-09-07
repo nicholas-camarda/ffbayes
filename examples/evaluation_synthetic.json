@@ -1,0 +1,699 @@
+{
+  "description": "Synthetic mechanics fixture; not historical performance evidence.",
+  "profile": {
+    "profile_id": "example-2026",
+    "league_name": "Example League",
+    "season": 2026,
+    "team_count": 2,
+    "draft_format": "snake",
+    "draft_slot": 1,
+    "scoring_label": "Half PPR",
+    "scoring_items": {
+      "x": 1.0
+    },
+    "scoring_overrides": {},
+    "bonuses": [],
+    "roster_slots": {
+      "QB": 1,
+      "RB": 1,
+      "WR": 1,
+      "TE": 0,
+      "FLEX": 0,
+      "DST": 0,
+      "K": 0
+    },
+    "bench_slots": 1,
+    "ir_slots": 1,
+    "flex_eligible": [
+      "RB",
+      "WR",
+      "TE"
+    ],
+    "waiver_type": "unknown",
+    "waiver_constraints": [],
+    "settings_source": "Portable example configuration; customize before use",
+    "settings_verified_at": "2026-01-01T00:00:00Z"
+  },
+  "players": [
+    {
+      "espn_id": 1,
+      "name": "QB0",
+      "position": "QB",
+      "projected_points": 300.0,
+      "projection_stats": {
+        "x": 300.0
+      },
+      "adp": 1.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 2,
+      "name": "QB1",
+      "position": "QB",
+      "projected_points": 290.0,
+      "projection_stats": {
+        "x": 290.0
+      },
+      "adp": 2.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 3,
+      "name": "QB2",
+      "position": "QB",
+      "projected_points": 280.0,
+      "projection_stats": {
+        "x": 280.0
+      },
+      "adp": 3.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 4,
+      "name": "QB3",
+      "position": "QB",
+      "projected_points": 270.0,
+      "projection_stats": {
+        "x": 270.0
+      },
+      "adp": 4.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 5,
+      "name": "QB4",
+      "position": "QB",
+      "projected_points": 260.0,
+      "projection_stats": {
+        "x": 260.0
+      },
+      "adp": 5.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 6,
+      "name": "QB5",
+      "position": "QB",
+      "projected_points": 250.0,
+      "projection_stats": {
+        "x": 250.0
+      },
+      "adp": 6.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 7,
+      "name": "QB6",
+      "position": "QB",
+      "projected_points": 240.0,
+      "projection_stats": {
+        "x": 240.0
+      },
+      "adp": 7.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 8,
+      "name": "QB7",
+      "position": "QB",
+      "projected_points": 230.0,
+      "projection_stats": {
+        "x": 230.0
+      },
+      "adp": 8.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 9,
+      "name": "QB8",
+      "position": "QB",
+      "projected_points": 220.0,
+      "projection_stats": {
+        "x": 220.0
+      },
+      "adp": 9.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 10,
+      "name": "QB9",
+      "position": "QB",
+      "projected_points": 210.0,
+      "projection_stats": {
+        "x": 210.0
+      },
+      "adp": 10.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 11,
+      "name": "RB0",
+      "position": "RB",
+      "projected_points": 220.0,
+      "projection_stats": {
+        "x": 220.0
+      },
+      "adp": 11.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 12,
+      "name": "RB1",
+      "position": "RB",
+      "projected_points": 210.0,
+      "projection_stats": {
+        "x": 210.0
+      },
+      "adp": 12.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 13,
+      "name": "RB2",
+      "position": "RB",
+      "projected_points": 200.0,
+      "projection_stats": {
+        "x": 200.0
+      },
+      "adp": 13.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 14,
+      "name": "RB3",
+      "position": "RB",
+      "projected_points": 190.0,
+      "projection_stats": {
+        "x": 190.0
+      },
+      "adp": 14.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 15,
+      "name": "RB4",
+      "position": "RB",
+      "projected_points": 180.0,
+      "projection_stats": {
+        "x": 180.0
+      },
+      "adp": 15.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 16,
+      "name": "RB5",
+      "position": "RB",
+      "projected_points": 170.0,
+      "projection_stats": {
+        "x": 170.0
+      },
+      "adp": 16.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 17,
+      "name": "RB6",
+      "position": "RB",
+      "projected_points": 160.0,
+      "projection_stats": {
+        "x": 160.0
+      },
+      "adp": 17.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 18,
+      "name": "RB7",
+      "position": "RB",
+      "projected_points": 150.0,
+      "projection_stats": {
+        "x": 150.0
+      },
+      "adp": 18.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 19,
+      "name": "RB8",
+      "position": "RB",
+      "projected_points": 140.0,
+      "projection_stats": {
+        "x": 140.0
+      },
+      "adp": 19.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 20,
+      "name": "RB9",
+      "position": "RB",
+      "projected_points": 130.0,
+      "projection_stats": {
+        "x": 130.0
+      },
+      "adp": 20.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 21,
+      "name": "WR0",
+      "position": "WR",
+      "projected_points": 210.0,
+      "projection_stats": {
+        "x": 210.0
+      },
+      "adp": 21.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 22,
+      "name": "WR1",
+      "position": "WR",
+      "projected_points": 200.0,
+      "projection_stats": {
+        "x": 200.0
+      },
+      "adp": 22.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 23,
+      "name": "WR2",
+      "position": "WR",
+      "projected_points": 190.0,
+      "projection_stats": {
+        "x": 190.0
+      },
+      "adp": 23.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 24,
+      "name": "WR3",
+      "position": "WR",
+      "projected_points": 180.0,
+      "projection_stats": {
+        "x": 180.0
+      },
+      "adp": 24.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 25,
+      "name": "WR4",
+      "position": "WR",
+      "projected_points": 170.0,
+      "projection_stats": {
+        "x": 170.0
+      },
+      "adp": 25.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 26,
+      "name": "WR5",
+      "position": "WR",
+      "projected_points": 160.0,
+      "projection_stats": {
+        "x": 160.0
+      },
+      "adp": 26.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 27,
+      "name": "WR6",
+      "position": "WR",
+      "projected_points": 150.0,
+      "projection_stats": {
+        "x": 150.0
+      },
+      "adp": 27.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 28,
+      "name": "WR7",
+      "position": "WR",
+      "projected_points": 140.0,
+      "projection_stats": {
+        "x": 140.0
+      },
+      "adp": 28.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 29,
+      "name": "WR8",
+      "position": "WR",
+      "projected_points": 130.0,
+      "projection_stats": {
+        "x": 130.0
+      },
+      "adp": 29.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 30,
+      "name": "WR9",
+      "position": "WR",
+      "projected_points": 120.0,
+      "projection_stats": {
+        "x": 120.0
+      },
+      "adp": 30.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 31,
+      "name": "TE0",
+      "position": "TE",
+      "projected_points": 180.0,
+      "projection_stats": {
+        "x": 180.0
+      },
+      "adp": 31.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 32,
+      "name": "TE1",
+      "position": "TE",
+      "projected_points": 170.0,
+      "projection_stats": {
+        "x": 170.0
+      },
+      "adp": 32.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 33,
+      "name": "TE2",
+      "position": "TE",
+      "projected_points": 160.0,
+      "projection_stats": {
+        "x": 160.0
+      },
+      "adp": 33.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 34,
+      "name": "TE3",
+      "position": "TE",
+      "projected_points": 150.0,
+      "projection_stats": {
+        "x": 150.0
+      },
+      "adp": 34.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 35,
+      "name": "TE4",
+      "position": "TE",
+      "projected_points": 140.0,
+      "projection_stats": {
+        "x": 140.0
+      },
+      "adp": 35.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 36,
+      "name": "TE5",
+      "position": "TE",
+      "projected_points": 130.0,
+      "projection_stats": {
+        "x": 130.0
+      },
+      "adp": 36.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 37,
+      "name": "TE6",
+      "position": "TE",
+      "projected_points": 120.0,
+      "projection_stats": {
+        "x": 120.0
+      },
+      "adp": 37.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 38,
+      "name": "TE7",
+      "position": "TE",
+      "projected_points": 110.0,
+      "projection_stats": {
+        "x": 110.0
+      },
+      "adp": 38.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 39,
+      "name": "TE8",
+      "position": "TE",
+      "projected_points": 100.0,
+      "projection_stats": {
+        "x": 100.0
+      },
+      "adp": 39.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 40,
+      "name": "TE9",
+      "position": "TE",
+      "projected_points": 90.0,
+      "projection_stats": {
+        "x": 90.0
+      },
+      "adp": 40.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 41,
+      "name": "K0",
+      "position": "K",
+      "projected_points": 150.0,
+      "projection_stats": {
+        "x": 150.0
+      },
+      "adp": 41.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 42,
+      "name": "K1",
+      "position": "K",
+      "projected_points": 140.0,
+      "projection_stats": {
+        "x": 140.0
+      },
+      "adp": 42.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 43,
+      "name": "K2",
+      "position": "K",
+      "projected_points": 130.0,
+      "projection_stats": {
+        "x": 130.0
+      },
+      "adp": 43.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 44,
+      "name": "K3",
+      "position": "K",
+      "projected_points": 120.0,
+      "projection_stats": {
+        "x": 120.0
+      },
+      "adp": 44.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 45,
+      "name": "K4",
+      "position": "K",
+      "projected_points": 110.0,
+      "projection_stats": {
+        "x": 110.0
+      },
+      "adp": 45.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 46,
+      "name": "K5",
+      "position": "K",
+      "projected_points": 100.0,
+      "projection_stats": {
+        "x": 100.0
+      },
+      "adp": 46.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 47,
+      "name": "K6",
+      "position": "K",
+      "projected_points": 90.0,
+      "projection_stats": {
+        "x": 90.0
+      },
+      "adp": 47.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 48,
+      "name": "K7",
+      "position": "K",
+      "projected_points": 80.0,
+      "projection_stats": {
+        "x": 80.0
+      },
+      "adp": 48.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 49,
+      "name": "K8",
+      "position": "K",
+      "projected_points": 70.0,
+      "projection_stats": {
+        "x": 70.0
+      },
+      "adp": 49.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 50,
+      "name": "K9",
+      "position": "K",
+      "projected_points": 60.0,
+      "projection_stats": {
+        "x": 60.0
+      },
+      "adp": 50.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 51,
+      "name": "DST0",
+      "position": "DST",
+      "projected_points": 140.0,
+      "projection_stats": {
+        "x": 140.0
+      },
+      "adp": 51.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 52,
+      "name": "DST1",
+      "position": "DST",
+      "projected_points": 130.0,
+      "projection_stats": {
+        "x": 130.0
+      },
+      "adp": 52.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 53,
+      "name": "DST2",
+      "position": "DST",
+      "projected_points": 120.0,
+      "projection_stats": {
+        "x": 120.0
+      },
+      "adp": 53.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 54,
+      "name": "DST3",
+      "position": "DST",
+      "projected_points": 110.0,
+      "projection_stats": {
+        "x": 110.0
+      },
+      "adp": 54.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 55,
+      "name": "DST4",
+      "position": "DST",
+      "projected_points": 100.0,
+      "projection_stats": {
+        "x": 100.0
+      },
+      "adp": 55.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 56,
+      "name": "DST5",
+      "position": "DST",
+      "projected_points": 90.0,
+      "projection_stats": {
+        "x": 90.0
+      },
+      "adp": 56.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 57,
+      "name": "DST6",
+      "position": "DST",
+      "projected_points": 80.0,
+      "projection_stats": {
+        "x": 80.0
+      },
+      "adp": 57.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 58,
+      "name": "DST7",
+      "position": "DST",
+      "projected_points": 70.0,
+      "projection_stats": {
+        "x": 70.0
+      },
+      "adp": 58.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 59,
+      "name": "DST8",
+      "position": "DST",
+      "projected_points": 60.0,
+      "projection_stats": {
+        "x": 60.0
+      },
+      "adp": 59.0,
+      "projection_season": 2026
+    },
+    {
+      "espn_id": 60,
+      "name": "DST9",
+      "position": "DST",
+      "projected_points": 50.0,
+      "projection_stats": {
+        "x": 50.0
+      },
+      "adp": 60.0,
+      "projection_season": 2026
+    }
+  ]
+}
