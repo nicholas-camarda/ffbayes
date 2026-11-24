@@ -33,7 +33,7 @@ logs/
 plots/
 results/
 my_ff_teams/
-runtime/
+/runtime/
 *.tsv
 
 # User-specific league profiles
@@ -41,3 +41,9 @@ config/leagues/*.local.json
 
 # Claude Code session worktrees
 .claude/worktrees/
+
+# Workspace files at the repo root (also in the global ignore)
+/archive/
+/manifest.yaml
+CLAUDE.md
+AGENTS.md
